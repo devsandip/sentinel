@@ -54,9 +54,97 @@ def _write(dataset_id: str, df: pd.DataFrame) -> Path:
     return path
 
 
+# --- Berka (relational): the faithful jlacko mirror, not the Teradata demo ---
+_BERKA_BASE = "https://raw.githubusercontent.com/jlacko/berka-dataset/master"
+_BERKA_TABLES = ["account", "client", "disp", "order", "trans", "loan", "card", "district"]
+_BERKA_DATE_COLS = {"account": ["date"], "trans": ["date"], "loan": ["date"], "card": ["issued"]}
+_BERKA_NUM_COLS = {
+    "trans": ["amount", "balance"],
+    "loan": ["amount", "duration", "payments"],
+    "order": ["amount"],
+}
+
+
+def _yymmdd_to_iso(v: str) -> str:
+    s = str(v).split(".")[0].zfill(6)  # 930101 -> 1993-01-01 (all clients 1900s)
+    return f"19{s[:2]}-{s[2:4]}-{s[4:6]}"
+
+
+def _derive_client(client: pd.DataFrame) -> pd.DataFrame:
+    """Decode birth_number: Czech YYMMDD where women have month + 50."""
+
+    def decode(bn: str) -> tuple[int, str]:
+        s = str(bn).zfill(6)
+        yy, mm = int(s[:2]), int(s[2:4])
+        female = mm > 50
+        return 1900 + yy, ("female" if female else "male")
+
+    decoded = client["birth_number"].map(decode)
+    client = client.copy()
+    client["birth_year"] = [d[0] for d in decoded]
+    client["gender"] = [d[1] for d in decoded]
+    client["age_1999"] = 1999 - client["birth_year"]
+    client["age_band"] = pd.cut(
+        client["age_1999"],
+        bins=[0, 25, 40, 60, 200],
+        labels=["<=25", "26-40", "41-60", "60+"],
+    ).astype(str)
+    return client
+
+
+def onboard_berka(n_accounts: int = 300) -> Path:
+    t = {n: pd.read_csv(f"{_BERKA_BASE}/{n}.asc", sep=";", dtype=str) for n in _BERKA_TABLES}
+
+    # Credit-default target from loan quality (B = finished defaulted, D = in debt).
+    loan = t["loan"]
+    loan["default"] = loan["status"].isin(["B", "D"]).astype(int)
+
+    # Relational sample: keep a subset of loan-holding accounts + all their rows,
+    # so the FK graph and per-account transaction depth stay intact for DFS.
+    loan_accts = loan["account_id"].drop_duplicates()
+    keep = set(loan_accts.sample(n=min(n_accounts, len(loan_accts)), random_state=42))
+
+    t["account"] = t["account"][t["account"]["account_id"].isin(keep)]
+    t["trans"] = t["trans"][t["trans"]["account_id"].isin(keep)]
+    t["order"] = t["order"][t["order"]["account_id"].isin(keep)]
+    t["loan"] = loan[loan["account_id"].isin(keep)]
+    t["disp"] = t["disp"][t["disp"]["account_id"].isin(keep)]
+    keep_disp = set(t["disp"]["disp_id"])
+    keep_clients = set(t["disp"]["client_id"])
+    t["card"] = t["card"][t["card"]["disp_id"].isin(keep_disp)]
+    t["client"] = _derive_client(t["client"][t["client"]["client_id"].isin(keep_clients)])
+    # district is small (77 rows); keep it whole as the demographic lookup.
+
+    # Type-cast dates + numerics so downstream tools get clean columns.
+    for name, cols in _BERKA_DATE_COLS.items():
+        for c in cols:
+            if c in t[name].columns:
+                t[name] = t[name].copy()
+                t[name][c] = t[name][c].map(
+                    lambda v: _yymmdd_to_iso(v) if pd.notna(v) and str(v).strip() else v
+                )
+    for name, cols in _BERKA_NUM_COLS.items():
+        for c in cols:
+            if c in t[name].columns:
+                t[name][c] = pd.to_numeric(t[name][c], errors="coerce")
+
+    out_dir = DATA_DIR / "berka"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    total = 0
+    for name in _BERKA_TABLES:
+        t[name].to_csv(out_dir / f"{name}.csv", index=False)
+        total += len(t[name])
+    print(
+        f"  onboarded berka: {len(keep)} accounts, {total} rows across "
+        f"{len(_BERKA_TABLES)} tables -> berka/"
+    )
+    return out_dir
+
+
 ONBOARDERS = {
     "uci_taiwan_credit": onboard_uci_taiwan,
     "hillstrom": onboard_hillstrom,
+    "berka": onboard_berka,
 }
 
 

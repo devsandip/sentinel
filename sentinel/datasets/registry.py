@@ -18,6 +18,7 @@ from .contracts import (
     CAP_TARGET,
     CAP_TIMESERIES,
     CAP_TREATMENT,
+    ROLE_ENTITY_ID,
     ROLE_PROTECTED,
     ROLE_TARGET,
     ROLE_TIMESTAMP,
@@ -97,14 +98,22 @@ DATASETS: list[DatasetSpec] = [
     DatasetSpec(
         id="berka",
         name="PKDD'99 Financial (Berka, Czech bank)",
-        source_url="https://raw.githubusercontent.com/dnoeth/1999_Czech_financial_dataset_Teradata/master/",
+        source_url="https://raw.githubusercontent.com/jlacko/berka-dataset/master/",
         license="No formal license (research/education)",
         commercial_ok=False,
         rows=1090086,
         tables=8,
-        provides=frozenset({CAP_TABULAR, CAP_RELATIONAL, CAP_TARGET}),
-        notes="Relational backbone: 8 tables + FKs + M:N bridge. Feature-eng "
-        "primary; transactions sampled on onboard.",
+        provides=frozenset({CAP_TABULAR, CAP_RELATIONAL, CAP_TARGET, CAP_PROTECTED}),
+        column_roles={
+            "default": ROLE_TARGET,  # loan.status B/D
+            "gender": ROLE_PROTECTED,  # derived from client.birth_number
+            "age_band": ROLE_PROTECTED,
+            "account_id": ROLE_ENTITY_ID,
+        },
+        notes="Relational backbone: 8 tables + FKs + M:N bridge (jlacko mirror, "
+        "faithful original). Feature-eng primary; onboarded as a sample of "
+        "loan-holding accounts with full transaction depth. gender/age_band "
+        "derived from birth_number.",
     ),
     DatasetSpec(
         id="hillstrom",

@@ -51,9 +51,9 @@ def test_contract_matching():
     ok, reasons = fairness.satisfied_by(set(gc.provides), gc.rows)
     assert ok and not reasons
 
-    # Berka has no protected-attr capability declared -> fairness contract fails.
-    berka = get_dataset("berka")
-    ok2, reasons2 = fairness.satisfied_by(set(berka.provides), berka.rows)
+    # ULB fraud has a target but no protected attribute -> fairness fails.
+    fraud = get_dataset("ulb_fraud")
+    ok2, reasons2 = fairness.satisfied_by(set(fraud.provides), fraud.rows)
     assert not ok2
     assert any("has_protected_attr" in r for r in reasons2)
 
@@ -93,8 +93,26 @@ def test_onboarded_datasets_load_with_declared_roles():
             assert col in df.columns, f"{did}: declared role column {col} missing"
 
 
-def test_load_unonboarded_raises():
+def test_berka_relational_loads_with_fk_integrity():
+    from sentinel.datasets import available, load_tables
+
+    assert available("berka"), "berka not onboarded; run the onboard script"
+    tables = load_tables("berka")
+    assert set(tables) >= {"account", "client", "disp", "trans", "loan", "district"}
+    # The credit target and derived protected attributes are present.
+    assert "default" in tables["loan"].columns
+    assert {"gender", "age_band"}.issubset(tables["client"].columns)
+    # FK integrity: every transaction's account exists in the account table.
+    accts = set(tables["account"]["account_id"])
+    assert set(tables["trans"]["account_id"]).issubset(accts)
+    # Real transaction depth for feature engineering.
+    assert len(tables["trans"]) > 10000
+
+
+def test_relational_load_via_load_frame_is_wrong_path():
     from sentinel.datasets import NotOnboarded, load_frame
 
+    # Single-table loader must not be used for the relational dataset (no
+    # berka.csv exists; its data is a directory of per-table CSVs).
     with pytest.raises(NotOnboarded):
-        load_frame("berka")  # registered, not onboarded
+        load_frame("berka")
