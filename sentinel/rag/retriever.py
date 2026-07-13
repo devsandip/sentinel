@@ -12,7 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from ..harness.audit import AuditLog
-from .store import ScoredChunk, get_store
+from .store import BACKEND_PGVECTOR, ScoredChunk, get_store, local_store
 
 
 @dataclass(frozen=True)
@@ -60,10 +60,21 @@ def _to_citation(sc: ScoredChunk) -> Citation:
 
 def retrieve(query: str, k: int = 3) -> Retrieval:
     store = get_store()
-    results = store.search(query, k=k)
+    try:
+        results = store.search(query, k=k)
+        backend = store.backend
+    except Exception:  # noqa: BLE001
+        # Resilience: if pgvector is unreachable at runtime (RDS down, Bedrock
+        # throttle, network), fall back to the local index so the public link
+        # never breaks. Only the AWS path may fall back; a local failure is a bug.
+        if store.backend != BACKEND_PGVECTOR:
+            raise
+        fallback = local_store()
+        results = fallback.search(query, k=k)
+        backend = "pgvector-unavailable->local"
     return Retrieval(
         query=query,
-        backend=store.backend,
+        backend=backend,
         citations=[_to_citation(r) for r in results],
     )
 

@@ -188,6 +188,14 @@ class PgVectorStore:
 _STORE: LocalVectorStore | None = None
 
 
+def local_store() -> LocalVectorStore:
+    """The process-wide local store singleton (also the runtime fallback)."""
+    global _STORE
+    if _STORE is None:
+        _STORE = LocalVectorStore()
+    return _STORE
+
+
 def get_store():
     """Return the configured store, falling back to local if AWS is not set up."""
     backend = os.getenv("SENTINEL_VECTOR_STORE", BACKEND_LOCAL)
@@ -195,7 +203,4 @@ def get_store():
         if os.getenv("SENTINEL_PGVECTOR_HOST") or os.getenv("SENTINEL_PGVECTOR_DSN"):
             return PgVectorStore()
         # Selected but unconfigured: fall back to local so the demo still works.
-    global _STORE
-    if _STORE is None:
-        _STORE = LocalVectorStore()
-    return _STORE
+    return local_store()

@@ -18,6 +18,24 @@ Parameters:
     Type: String
     Default: t3.small
     AllowedValues: [t3.micro, t3.small, t3.medium]
+  # --- Vector store (RAG) wiring. Defaults point at the provisioned pgvector
+  #     RDS + its RDS-managed secret. Set VectorStore=local to disable. ---
+  VectorStore:
+    Type: String
+    Default: pgvector
+    AllowedValues: [local, pgvector]
+  PgVectorHost:
+    Type: String
+    Default: sentinel-vectordb.cypkmm0qo4yj.us-east-1.rds.amazonaws.com
+  PgVectorSecretArn:
+    Type: String
+    Default: arn:aws:secretsmanager:us-east-1:175110780229:secret:rds!db-25c35a19-5e3b-4831-a839-cc1777c28e5a-wyCVsU
+  PgVectorDbName:
+    Type: String
+    Default: sentinel
+  TitanModelArn:
+    Type: String
+    Default: arn:aws:bedrock:us-east-1::foundation-model/amazon.titan-embed-text-v2:0
 
 Resources:
   # --- IAM: EC2 instance profile the environment's instance runs under ---
@@ -33,6 +51,19 @@ Resources:
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/AWSElasticBeanstalkWebTier
         - arn:aws:iam::aws:policy/AWSElasticBeanstalkWorkerTier
+      # Least-privilege access for the pgvector RAG path: read the RDS-managed
+      # secret and invoke exactly the Titan embedding model. Nothing else.
+      Policies:
+        - PolicyName: sentinel-vectordb-access
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: secretsmanager:GetSecretValue
+                Resource: !Ref PgVectorSecretArn
+              - Effect: Allow
+                Action: bedrock:InvokeModel
+                Resource: !Ref TitanModelArn
 
   InstanceProfile:
     Type: AWS::IAM::InstanceProfile
@@ -105,6 +136,21 @@ Resources:
         - Namespace: aws:elasticbeanstalk:application:environment
           OptionName: ARROW_DEFAULT_MEMORY_POOL
           Value: system
+        # RAG vector store: run the real AWS pgvector path in prod. The app
+        # falls back to the local index at runtime if RDS/Bedrock is unreachable,
+        # so the public link never breaks.
+        - Namespace: aws:elasticbeanstalk:application:environment
+          OptionName: SENTINEL_VECTOR_STORE
+          Value: !Ref VectorStore
+        - Namespace: aws:elasticbeanstalk:application:environment
+          OptionName: SENTINEL_PGVECTOR_HOST
+          Value: !Ref PgVectorHost
+        - Namespace: aws:elasticbeanstalk:application:environment
+          OptionName: SENTINEL_PGVECTOR_SECRET_ARN
+          Value: !Ref PgVectorSecretArn
+        - Namespace: aws:elasticbeanstalk:application:environment
+          OptionName: SENTINEL_PGVECTOR_DBNAME
+          Value: !Ref PgVectorDbName
 
 Outputs:
   EnvironmentURL:
