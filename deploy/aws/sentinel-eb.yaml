@@ -132,7 +132,7 @@ Resources:
           Value: templated
         - Namespace: aws:elasticbeanstalk:application:environment
           OptionName: LIVE_MODE_MONTHLY_CAP
-          Value: "5"
+          Value: "50"
         - Namespace: aws:elasticbeanstalk:application:environment
           OptionName: ARROW_DEFAULT_MEMORY_POOL
           Value: system

@@ -34,6 +34,11 @@ pgvector = [
     "psycopg[binary]>=3.2",
     "boto3>=1.34",
 ]
+# Live-LLM narration through the model gateway (Anthropic). Optional: scripted
+# narration is the default and needs no SDK. Lazily imported in live mode only.
+live = [
+    "anthropic>=0.40",
+]
 
 [tool.ruff]
 line-length = 100
