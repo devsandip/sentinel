@@ -14,6 +14,7 @@ from .base import Agent
 class ProfilerAgent(Agent):
     id = "profiler"
     title = "Data Profiler"
+    template = "data_analysis"
 
     def run(self, state) -> None:  # noqa: ANN001
         ds = self.deps.dataset

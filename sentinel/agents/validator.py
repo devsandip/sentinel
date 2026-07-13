@@ -27,6 +27,7 @@ def assemble_payload(result, fairness, card) -> dict[str, Any]:  # noqa: ANN001
 class ValidatorAgent(Agent):
     id = "validator"
     title = "Validator"
+    template = "validation"
 
     def run(self, state) -> None:  # noqa: ANN001
         ds = self.deps.dataset

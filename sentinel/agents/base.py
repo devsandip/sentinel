@@ -33,6 +33,7 @@ class AgentDeps:
 class Agent:
     id: str = "base"
     title: str = "Agent"
+    template: str | None = None  # the platform template this agent realizes
 
     def __init__(self, deps: AgentDeps) -> None:
         self.deps = deps

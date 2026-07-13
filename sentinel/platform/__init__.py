@@ -13,6 +13,14 @@ from __future__ import annotations
 
 from .patterns import PATTERNS, Pattern, all_patterns, get_pattern
 from .playbooks import Playbook, get_playbook, load_playbooks
+from .templates import (
+    AGENT_LINEAGE,
+    TEMPLATES,
+    AgentTemplate,
+    all_templates,
+    get_template,
+    reuse_metrics,
+)
 
 __all__ = [
     "PATTERNS",
@@ -22,4 +30,10 @@ __all__ = [
     "Playbook",
     "load_playbooks",
     "get_playbook",
+    "TEMPLATES",
+    "AGENT_LINEAGE",
+    "AgentTemplate",
+    "all_templates",
+    "get_template",
+    "reuse_metrics",
 ]

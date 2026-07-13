@@ -20,8 +20,14 @@ from sentinel.orchestrator import (
     STATUS_REJECTED,
     Orchestrator,
 )
-from sentinel.platform import all_patterns, load_playbooks
+from sentinel.platform import (
+    all_patterns,
+    all_templates,
+    load_playbooks,
+    reuse_metrics,
+)
 from sentinel.platform.patterns import AVOIDED, IN_USE, PLANNED
+from sentinel.platform.templates import AVAILABLE, LIVE
 
 st.set_page_config(page_title="Sentinel — Governed Agentic Analysis", layout="wide")
 
@@ -289,15 +295,24 @@ _STATUS_LABEL = {
     AVOIDED: "avoided by design",
     "implemented": "implemented",
     "template": "template",
+    LIVE: "live",
+    AVAILABLE: "available",
+}
+
+# Map every status onto one of the three pill colors.
+_STATUS_CSS = {
+    IN_USE: IN_USE,
+    "implemented": IN_USE,
+    LIVE: IN_USE,
+    AVOIDED: AVOIDED,
+    PLANNED: PLANNED,
+    "template": PLANNED,
+    AVAILABLE: PLANNED,
 }
 
 
 def _pill(status: str) -> str:
-    css = status if status in (IN_USE, PLANNED, AVOIDED) else "planned"
-    if status == "implemented":
-        css = IN_USE
-    elif status == "template":
-        css = PLANNED
+    css = _STATUS_CSS.get(status, PLANNED)
     return f"<span class='pill pill-{css}'>{_STATUS_LABEL.get(status, status)}</span>"
 
 
@@ -341,6 +356,37 @@ def render_platform() -> None:
         file_name="sentinel-playbooks.md",
         mime="text/markdown",
     )
+
+    st.divider()
+    st.markdown("### Reusable agent templates")
+    st.markdown(
+        "<span class='muted'>Parameterized starter agents with the harness "
+        "pre-wired: tool allow-list, RBAC scope, and evals. New agents start from a "
+        "governed blueprint, not a blank file.</span>",
+        unsafe_allow_html=True,
+    )
+    m = reuse_metrics()
+    t1, t2, t3, t4 = st.columns(4)
+    t1.metric("Templates", m["templates_total"], f"{m['templates_live']} live")
+    t2.metric("Agent coverage", f"{m['agents_covered']}/{m['agents_total']}")
+    t3.metric("Coverage rate", f"{int(m['coverage_rate'] * 100)}%")
+    t4.metric("Est. hours saved", m["est_hours_saved"])
+    st.caption(
+        "Coverage = live pipeline agents that realize a template. Hours saved is an "
+        "illustrative estimate of harness wiring avoided per reuse."
+    )
+    for t in all_templates():
+        realized = (
+            f" · realized by: {', '.join(t.realized_by)}" if t.realized_by else ""
+        )
+        st.markdown(
+            f"**{t.name}** {_pill(t.status)}<br>"
+            f"<span class='muted'>{t.purpose}</span><br>"
+            f"<span class='muted'>pattern: {t.pattern} · tools: "
+            f"{', '.join(t.tools)} · RBAC: {t.rbac_scope}{realized}</span>",
+            unsafe_allow_html=True,
+        )
+        st.write("")
 
     st.divider()
     st.markdown("### Agentic architecture pattern catalog")

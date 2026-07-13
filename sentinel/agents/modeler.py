@@ -13,6 +13,7 @@ from .base import Agent
 class ModelerAgent(Agent):
     id = "modeler"
     title = "Modeler"
+    template = "modeling"
 
     def run(self, state) -> None:  # noqa: ANN001
         ds = self.deps.dataset

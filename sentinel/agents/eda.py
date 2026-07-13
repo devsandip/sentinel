@@ -14,6 +14,7 @@ from .base import Agent
 class EDAAgent(Agent):
     id = "eda"
     title = "EDA / Feature"
+    template = "data_analysis"
 
     def run(self, state) -> None:  # noqa: ANN001
         ds = self.deps.dataset
