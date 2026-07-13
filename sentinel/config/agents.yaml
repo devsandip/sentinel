@@ -1,0 +1,23 @@
+# Agent registry: display metadata + the tools each agent may call.
+# Guardrails enforces this allow-list; anything else is blocked and logged.
+
+agents:
+  - id: profiler
+    name: "Data Profiler"
+    role: "Profiles the dataset and flags data-quality and class-balance risks."
+    tools: ["read_columns", "profile_dataset"]
+
+  - id: eda
+    name: "EDA / Feature"
+    role: "Reviews distributions and correlations, proposes feature handling."
+    tools: ["read_columns", "profile_dataset"]
+
+  - id: modeler
+    name: "Modeler"
+    role: "Trains the baseline model, reports metrics, requests approval."
+    tools: ["read_columns", "train_model"]
+
+  - id: validator
+    name: "Validator"
+    role: "Runs fairness review and the eval gate; flags issues."
+    tools: ["read_columns", "compute_fairness", "run_eval_gate"]

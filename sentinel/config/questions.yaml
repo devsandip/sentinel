@@ -1,0 +1,32 @@
+# Preset questions (no free-text box in the public app). Each maps to a
+# dataset + the protected attribute the fairness step should focus on.
+
+datasets:
+  german_credit:
+    label: "UCI German Credit (1,000 loan applicants)"
+    default_protected_attribute: age_band
+
+questions:
+  - id: build_model
+    label: "Build a credit-default risk model for this loan portfolio and report performance."
+    dataset: german_credit
+    protected_attribute: age_band
+    focus: performance
+
+  - id: fairness_age
+    label: "Is the model fair across age groups? Show disparity and how you controlled for it."
+    dataset: german_credit
+    protected_attribute: age_band
+    focus: fairness
+
+  - id: profile_risks
+    label: "Profile this dataset and flag data-quality risks before modeling."
+    dataset: german_credit
+    protected_attribute: age_band
+    focus: profiling
+
+  - id: model_risk_doc
+    label: "Generate the model-risk documentation for this model."
+    dataset: german_credit
+    protected_attribute: age_band
+    focus: model_card
