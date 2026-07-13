@@ -20,6 +20,8 @@ from sentinel.orchestrator import (
     STATUS_REJECTED,
     Orchestrator,
 )
+from sentinel.platform import all_patterns, load_playbooks
+from sentinel.platform.patterns import AVOIDED, IN_USE, PLANNED
 
 st.set_page_config(page_title="Sentinel — Governed Agentic Analysis", layout="wide")
 
@@ -41,6 +43,13 @@ st.markdown(
       .flag {{ color:#b3261e; font-weight:700; }}
       .ok {{ color:#1b7f3b; font-weight:700; }}
       .muted {{ color:#5f6b7a; font-size:0.85rem; }}
+      .pill {{
+        display:inline-block; padding:1px 9px; border-radius:10px;
+        font-size:0.72rem; font-weight:700; margin-left:6px;
+      }}
+      .pill-in_use {{ background:#e3f4e9; color:#1b7f3b; border:1px solid #bfe3cc; }}
+      .pill-planned {{ background:#eef2fb; color:{ACCENT}; border:1px solid #d5e0f5; }}
+      .pill-avoided {{ background:#fdeceb; color:#b3261e; border:1px solid #f3ccc9; }}
     </style>
     """,
     unsafe_allow_html=True,
@@ -272,10 +281,99 @@ def tab_cost(pub: dict) -> None:
 
 
 # --------------------------------------------------------------------------
+# Platform surface (the central asset repository: playbooks, patterns, templates)
+# --------------------------------------------------------------------------
+_STATUS_LABEL = {
+    IN_USE: "in use",
+    PLANNED: "planned",
+    AVOIDED: "avoided by design",
+    "implemented": "implemented",
+    "template": "template",
+}
+
+
+def _pill(status: str) -> str:
+    css = status if status in (IN_USE, PLANNED, AVOIDED) else "planned"
+    if status == "implemented":
+        css = IN_USE
+    elif status == "template":
+        css = PLANNED
+    return f"<span class='pill pill-{css}'>{_STATUS_LABEL.get(status, status)}</span>"
+
+
+def _playbook_pack() -> str:
+    """Concatenate every playbook into one downloadable markdown pack."""
+    parts = ["# Sentinel AI Playbooks\n"]
+    for book in load_playbooks():
+        parts.append(f"\n\n---\n\n{book.body.strip()}\n")
+    return "".join(parts)
+
+
+def render_platform() -> None:
+    st.subheader("Platform assets")
+    st.markdown(
+        "<span class='muted'>The central repository of reusable governance assets, "
+        "packaged with the app. Playbooks encode the happy path, templates pre-wire "
+        "the harness, and the pattern catalog names the architecture in use.</span>",
+        unsafe_allow_html=True,
+    )
+
+    st.markdown("### AI Playbooks")
+    st.markdown(
+        "<span class='muted'>Opinionated, end-to-end guides for a use-case class. "
+        "Follow the happy path and you comply by construction.</span>",
+        unsafe_allow_html=True,
+    )
+    books = load_playbooks()
+    for book in books:
+        with st.expander(book.title, expanded=(book.status == "implemented")):
+            st.markdown(
+                f"{_pill(book.status)} &nbsp; "
+                f"<span class='muted'>pattern: {book.pattern} · "
+                f"{book.implemented_by}</span>",
+                unsafe_allow_html=True,
+            )
+            st.markdown(f"**Job to be done.** {book.jtbd}")
+            st.markdown(book.body)
+    st.download_button(
+        "Download playbook pack (.md)",
+        data=_playbook_pack(),
+        file_name="sentinel-playbooks.md",
+        mime="text/markdown",
+    )
+
+    st.divider()
+    st.markdown("### Agentic architecture pattern catalog")
+    st.markdown(
+        "<span class='muted'>Anchored on Anthropic's Building Effective Agents. "
+        "Each pattern names where Sentinel uses it, or why it is avoided.</span>",
+        unsafe_allow_html=True,
+    )
+    for p in all_patterns():
+        st.markdown(
+            f"**{p.name}** {_pill(p.status)}<br>"
+            f"<span class='muted'>{p.summary}</span><br>{p.where}",
+            unsafe_allow_html=True,
+        )
+        st.write("")
+
+
+# --------------------------------------------------------------------------
 # Layout
 # --------------------------------------------------------------------------
 header()
 st.divider()
+
+section = st.sidebar.radio("Section", ["Run analysis", "Platform"], index=0)
+st.sidebar.caption(
+    "Platform holds the reusable governance assets: playbooks, agent templates, "
+    "and the pattern catalog."
+)
+
+if section == "Platform":
+    render_platform()
+    st.stop()
+
 controls()
 st.divider()
 
