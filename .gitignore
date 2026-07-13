@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+
+# Env / secrets
+.env
+.env.local
+
+# OS
+.DS_Store
+
+# Session artifacts (per ~/Developer/CLAUDE.md)
+/RESUME.md
+/resume/
+
+# Scratch
+/scratch/
+
+# Runtime artifacts (audit JSONL, per-run state)
+/runtime/
