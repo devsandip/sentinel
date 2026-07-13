@@ -39,6 +39,7 @@ from .harness.guardrails import Guardrails
 from .harness.identity import Persona, policy_version
 from .harness.memory import precedents_for, record_precedent, short_term_context
 from .harness.rbac import RBAC
+from .harness.tracing import spans_for
 from .ml.data import load_dataset
 from .platform import registry
 
@@ -154,6 +155,7 @@ class RunState:
                     p.to_dict() for p in precedents_for(self.question_id)
                 ],
             },
+            "traces": spans_for(self.run_id),
         }
 
 
@@ -411,7 +413,9 @@ class Orchestrator:
             audit=audit,
             rbac=RBAC(audit, controls=controls),
             guardrails=Guardrails(audit, controls=controls),
-            gateway=ModelGateway(provider=_provider_for(narration_mode)),
+            gateway=ModelGateway(
+                provider=_provider_for(narration_mode), run_id=run_id
+            ),
             cost=cost,
             controls=controls,
         )

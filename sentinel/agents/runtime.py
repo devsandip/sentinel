@@ -15,6 +15,7 @@ least-privilege sandbox by default instead of god-mode.
 
 from __future__ import annotations
 
+from ..harness.tracing import span
 from ..platform.templates import get_template
 from .base import Agent, AgentDeps
 
@@ -36,7 +37,12 @@ class AgentRuntime:
             action="agent_started",
             output_summary=f"runtime instantiated {agent.title};{scope}",
         )
-        agent.run(state)
+        with span(
+            f"agent.{agent.id}",
+            state.run_id,
+            **{"agent.template": agent.template or "none"},
+        ):
+            agent.run(state)
         deps.audit.record(
             agent=agent.id,
             action="agent_finished",

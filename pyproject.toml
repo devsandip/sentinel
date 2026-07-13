@@ -12,6 +12,7 @@ dependencies = [
     "pyyaml>=6.0.3",
     "streamlit>=1.59.1",
     "langgraph>=1.0",
+    "opentelemetry-sdk>=1.30",
 ]
 
 [project.optional-dependencies]
@@ -23,6 +24,10 @@ dev = [
 # The runnable MCP server is an optional artifact, not part of the deployed app.
 mcp = [
     "mcp>=1.0",
+]
+# Offline eval suites (Ragas). promptfoo is a Node tool, run via npx.
+evals = [
+    "ragas>=0.2",
 ]
 
 [tool.ruff]

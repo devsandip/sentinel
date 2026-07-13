@@ -1,0 +1,49 @@
+# promptfoo eval suite for Sentinel agent narration (ideas.md item 8).
+# Run: npx promptfoo@latest eval -c evals/promptfoo.yaml
+#
+# The provider routes each case through the real model gateway in scripted mode
+# (zero cost). Assertions check that the narration is factual, on-topic, and
+# never leaks PII.
+
+description: "Sentinel agent narration quality"
+
+providers:
+  - id: "python:evals/narration_provider.py"
+    label: "sentinel-gateway (scripted)"
+
+defaultTest:
+  assert:
+    - type: javascript
+      value: "output.length > 20"           # non-empty, substantive
+    - type: not-contains
+      value: "@"                             # no raw email address in narration
+    - type: not-icontains
+      value: "redacted_"                     # redaction happened upstream, not here
+
+tests:
+  - vars:
+      step: profiler
+      context: '{"n_rows": 1000, "n_features": 20, "class_balance": {"good": 700, "default": 300}, "default_rate": 0.3}'
+    assert:
+      - type: contains
+        value: "1000"
+      - type: icontains
+        value: "profil"
+
+  - vars:
+      step: modeler
+      context: '{"n_train": 750, "n_test": 250, "auc": 0.78, "accuracy": 0.75}'
+    assert:
+      - type: contains
+        value: "0.78"
+      - type: icontains
+        value: "approval"
+
+  - vars:
+      step: validator
+      context: '{"protected_attribute": "age_band", "disparity_ratio": 0.57, "threshold": 0.8, "fairness_verdict": "FLAGGED for review", "eval_summary": "promotion allowed"}'
+    assert:
+      - type: contains
+        value: "0.57"
+      - type: icontains
+        value: "fairness"

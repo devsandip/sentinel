@@ -18,6 +18,8 @@ import os
 from dataclasses import dataclass
 from typing import Any
 
+from ..harness.tracing import span
+
 TEMPLATED = "templated"
 ANTHROPIC = "anthropic"
 OPENAI = "openai"
@@ -152,8 +154,10 @@ class ModelGateway:
         model: str | None = None,
         monthly_cap_usd: float | None = None,
         _spent_usd: float = 0.0,
+        run_id: str = "",
     ) -> None:
         self.provider = provider
+        self.run_id = run_id
         self.model = model or _default_model(provider)
         # Hard dollar ceiling for live mode; env override if not passed.
         cap_env = os.getenv("LIVE_MODE_MONTHLY_CAP")
@@ -211,6 +215,12 @@ class ModelGateway:
         )
 
     def narrate(self, step: str, context: dict[str, Any]) -> Generation:
+        if self.run_id:
+            with span(f"gateway.{step}", self.run_id, **{"gateway.provider": self.provider}):
+                return self._narrate(step, context)
+        return self._narrate(step, context)
+
+    def _narrate(self, step: str, context: dict[str, Any]) -> Generation:
         stakes, tier, model = self._route(step)
         key = _cache_key(step, context, f"{self.provider}:{model}")
 

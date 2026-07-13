@@ -406,6 +406,30 @@ def tab_knowledge(pub: dict) -> None:
     st.dataframe(pd.DataFrame(corpus_summary()), width="stretch")
 
 
+def tab_traces(pub: dict) -> None:
+    st.subheader("Traces (OpenTelemetry)")
+    st.caption(
+        "Every agent step and gateway call emits an OpenTelemetry span, the "
+        "recognized tracing standard. An OTLP exporter can ship these to Jaeger, "
+        "Tempo, or Honeycomb without changing the call sites."
+    )
+    traces = pub.get("traces", [])
+    if not traces:
+        st.info("Run an analysis to produce a trace.")
+        return
+    total = round(sum(t["duration_ms"] for t in traces), 2)
+    st.metric("Spans", len(traces), f"{total} ms total")
+    rows = [
+        {
+            "span": t["name"],
+            "duration_ms": t["duration_ms"],
+            **{k: v for k, v in t.get("attributes", {}).items()},
+        }
+        for t in traces
+    ]
+    st.dataframe(pd.DataFrame(rows), width="stretch", height=360)
+
+
 def tab_memory(pub: dict) -> None:
     st.subheader("Memory & retention")
     st.caption(
@@ -774,6 +798,7 @@ else:
             "Gateway",
             "Knowledge",
             "Memory",
+            "Traces",
         ]
     )
     with tabs[0]:
@@ -794,3 +819,5 @@ else:
         tab_knowledge(pub)
     with tabs[8]:
         tab_memory(pub)
+    with tabs[9]:
+        tab_traces(pub)
