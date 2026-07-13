@@ -1,0 +1,114 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  Sentinel — governed agentic data-science demo on Elastic Beanstalk.
+  Single-instance (no load balancer) Python 3.12 environment, HTTP only.
+  Cost-conscious demo target; add an ALB + ACM cert later for HTTPS.
+
+Parameters:
+  SourceBucket:
+    Type: String
+    Description: S3 bucket holding the application source bundle zip.
+  SourceKey:
+    Type: String
+    Description: S3 key of the application source bundle zip.
+  SolutionStackName:
+    Type: String
+    Default: "64bit Amazon Linux 2023 v4.13.3 running Python 3.12"
+  InstanceType:
+    Type: String
+    Default: t3.small
+    AllowedValues: [t3.micro, t3.small, t3.medium]
+
+Resources:
+  # --- IAM: EC2 instance profile the environment's instance runs under ---
+  InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: ec2.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AWSElasticBeanstalkWebTier
+        - arn:aws:iam::aws:policy/AWSElasticBeanstalkWorkerTier
+
+  InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles: [!Ref InstanceRole]
+
+  # --- IAM: EB service role for enhanced health + managed updates ---
+  ServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: elasticbeanstalk.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSElasticBeanstalkEnhancedHealth
+        - arn:aws:iam::aws:policy/AWSElasticBeanstalkManagedUpdatesCustomerRolePolicy
+
+  Application:
+    Type: AWS::ElasticBeanstalk::Application
+    Properties:
+      ApplicationName: sentinel
+
+  ApplicationVersion:
+    Type: AWS::ElasticBeanstalk::ApplicationVersion
+    Properties:
+      ApplicationName: !Ref Application
+      Description: Sentinel demo source bundle.
+      SourceBundle:
+        S3Bucket: !Ref SourceBucket
+        S3Key: !Ref SourceKey
+
+  Environment:
+    Type: AWS::ElasticBeanstalk::Environment
+    Properties:
+      ApplicationName: !Ref Application
+      EnvironmentName: sentinel-prod
+      SolutionStackName: !Ref SolutionStackName
+      VersionLabel: !Ref ApplicationVersion
+      OptionSettings:
+        # Single instance — no load balancer, cheapest footprint.
+        - Namespace: aws:elasticbeanstalk:environment
+          OptionName: EnvironmentType
+          Value: SingleInstance
+        - Namespace: aws:elasticbeanstalk:environment
+          OptionName: ServiceRole
+          Value: !Ref ServiceRole
+        - Namespace: aws:autoscaling:launchconfiguration
+          OptionName: IamInstanceProfile
+          Value: !Ref InstanceProfile
+        - Namespace: aws:ec2:instances
+          OptionName: InstanceTypes
+          Value: !Ref InstanceType
+        # Enhanced health needs the service role above.
+        - Namespace: aws:elasticbeanstalk:healthreporting:system
+          OptionName: SystemType
+          Value: enhanced
+        # nginx proxies port 80 -> app on 8501; Streamlit binds $PORT.
+        - Namespace: aws:elasticbeanstalk:application:environment
+          OptionName: PORT
+          Value: "8501"
+        - Namespace: aws:elasticbeanstalk:application:environment
+          OptionName: MODEL_PROVIDER
+          Value: templated
+        - Namespace: aws:elasticbeanstalk:application:environment
+          OptionName: LIVE_MODE_MONTHLY_CAP
+          Value: "5"
+        - Namespace: aws:elasticbeanstalk:application:environment
+          OptionName: ARROW_DEFAULT_MEMORY_POOL
+          Value: system
+
+Outputs:
+  EnvironmentURL:
+    Description: Public HTTP endpoint for the Sentinel demo.
+    Value: !Sub "http://${Environment.EndpointURL}"
+  EnvironmentName:
+    Value: !Ref Environment
