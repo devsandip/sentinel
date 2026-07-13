@@ -44,13 +44,28 @@ fi
 echo "==> Uploading bundle to s3://$BUCKET/$KEY"
 aws s3 cp "$ZIP" "s3://$BUCKET/$KEY" >/dev/null
 
+# Live-LLM narration key: read from the gitignored .env (or the environment),
+# passed as a NoEcho CFN parameter so it is never committed and never printed.
+# Empty disables live mode (the app falls back to scripted).
+ANTHROPIC_KEY="${ANTHROPIC_API_KEY:-}"
+if [ -z "$ANTHROPIC_KEY" ] && [ -f "$REPO_ROOT/.env" ]; then
+  ANTHROPIC_KEY="$(grep -E '^ANTHROPIC_API_KEY=' "$REPO_ROOT/.env" | head -1 | cut -d= -f2-)"
+fi
+if [ -n "$ANTHROPIC_KEY" ]; then
+  echo "    live-LLM: key present (masked); live narration ENABLED behind the cap"
+else
+  echo "    live-LLM: no key; prod stays scripted-only"
+fi
+
 echo "==> Deploying CloudFormation stack: $STACK"
 aws cloudformation deploy \
   --stack-name "$STACK" \
   --template-file deploy/aws/sentinel-eb.yaml \
   --capabilities CAPABILITY_IAM \
   --region "$REGION" \
-  --parameter-overrides SourceBucket="$BUCKET" SourceKey="$KEY"
+  --no-fail-on-empty-changeset \
+  --parameter-overrides \
+    SourceBucket="$BUCKET" SourceKey="$KEY" AnthropicApiKey="$ANTHROPIC_KEY"
 
 echo "==> Waiting for the environment to go green..."
 aws elasticbeanstalk wait environment-updated \

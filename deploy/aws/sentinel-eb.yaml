@@ -36,6 +36,14 @@ Parameters:
   TitanModelArn:
     Type: String
     Default: arn:aws:bedrock:us-east-1::foundation-model/amazon.titan-embed-text-v2:0
+  # Anthropic key for live-LLM narration. NoEcho so it is masked in the console
+  # and events; passed at deploy time from the local gitignored .env, never
+  # committed. Empty by default (live mode then falls back to scripted).
+  AnthropicApiKey:
+    Type: String
+    NoEcho: true
+    Default: ""
+    Description: Anthropic API key for live-LLM narration (optional; empty disables live).
 
 Resources:
   # --- IAM: EC2 instance profile the environment's instance runs under ---
@@ -133,6 +141,11 @@ Resources:
         - Namespace: aws:elasticbeanstalk:application:environment
           OptionName: LIVE_MODE_MONTHLY_CAP
           Value: "50"
+        # Live-LLM narration key. Default stays scripted (free); a visitor who
+        # picks "Live LLM" gets real narration behind the cumulative $50 cap.
+        - Namespace: aws:elasticbeanstalk:application:environment
+          OptionName: ANTHROPIC_API_KEY
+          Value: !Ref AnthropicApiKey
         - Namespace: aws:elasticbeanstalk:application:environment
           OptionName: ARROW_DEFAULT_MEMORY_POOL
           Value: system

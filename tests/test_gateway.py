@@ -56,6 +56,32 @@ def test_cache_is_process_level_across_gateways():
     assert g2.ledger[0].cache == "hit"
 
 
+def test_cumulative_cap_bounds_total_spend_across_gateways():
+    """The cap is a process-global ceiling, not a per-run budget: once total
+    live spend reaches it, further live calls fall back to scripted."""
+    _fresh_cache()
+    gw.reset_process_live_spend()
+    # Each live call "costs" $0.60; cap at $1.00 allows one, blocks the rest.
+    def fake_call(self, step, context, model):  # noqa: ANN001
+        return ("live text", 100, 0.60)
+
+    g1 = ModelGateway(provider=ANTHROPIC, monthly_cap_usd=1.0)
+    g1._call_live = fake_call.__get__(g1, ModelGateway)
+    first = g1.narrate("profiler", {"n": 1})
+    assert first.live and first.cost_usd == 0.60
+
+    # A brand-new gateway (new run) shares the process-global spend.
+    g2 = ModelGateway(provider=ANTHROPIC, monthly_cap_usd=1.0)
+    g2._call_live = fake_call.__get__(g2, ModelGateway)
+    second = g2.narrate("eda", {"n": 2})  # cumulative 0.60 < 1.0 -> allowed
+    assert second.live
+    third = g2.narrate("modeler", {"n": 3})  # cumulative 1.20 >= 1.0 -> blocked
+    assert not third.live and third.fell_back
+    assert "cap" in third.fallback_reason
+    assert gw.process_live_spent_usd() >= 1.0
+    gw.reset_process_live_spend()
+
+
 def test_ledger_dicts_shape():
     _fresh_cache()
     g = ModelGateway(provider=TEMPLATED)

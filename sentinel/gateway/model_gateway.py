@@ -94,6 +94,29 @@ _TIER_MODELS = {
 # step + context + route) is a cache hit rather than a repeat spend.
 _RESPONSE_CACHE: dict[str, str] = {}
 
+# Process-global cumulative live spend. This makes LIVE_MODE_MONTHLY_CAP a real
+# ceiling on total spend across every run and session in the process, not a
+# per-run budget. It resets when the process restarts (a redeploy), which bounds
+# spend between restarts. On the single-instance deployment that is the whole
+# public app, so one cap governs all public traffic.
+_PROCESS_LIVE_SPENT_USD = 0.0
+
+
+def process_live_spent_usd() -> float:
+    """Total live-mode dollars spent in this process."""
+    return _PROCESS_LIVE_SPENT_USD
+
+
+def reset_process_live_spend() -> None:
+    """Test hook: zero the process-global live spend."""
+    global _PROCESS_LIVE_SPENT_USD
+    _PROCESS_LIVE_SPENT_USD = 0.0
+
+
+def _record_process_spend(usd: float) -> None:
+    global _PROCESS_LIVE_SPENT_USD
+    _PROCESS_LIVE_SPENT_USD = round(_PROCESS_LIVE_SPENT_USD + usd, 6)
+
 
 @dataclass
 class LedgerEntry:
@@ -247,9 +270,11 @@ class ModelGateway:
                 text=text, tokens=0, cost_usd=0.0, provider=TEMPLATED, live=False
             )
 
-        # Live path: enforce the cost-cap policy, then execute with fallback.
-        if self._spent_usd >= self.monthly_cap_usd:
-            gen = self._fallback(step, context, "monthly cost cap reached")
+        # Live path: enforce the cost-cap policy (cumulative across the whole
+        # process, so the cap bounds total spend, not just this run), then
+        # execute with fallback.
+        if process_live_spent_usd() >= self.monthly_cap_usd:
+            gen = self._fallback(step, context, "cost cap reached")
             self._log(
                 step, stakes, tier, model, TEMPLATED, False,
                 tokens=0, cost=0.0, cache="miss",
@@ -267,6 +292,7 @@ class ModelGateway:
             )
             return gen
         self._spent_usd += cost
+        _record_process_spend(cost)
         _RESPONSE_CACHE[key] = text
         self._log(
             step, stakes, tier, model, self.provider, True,
