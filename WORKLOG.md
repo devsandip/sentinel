@@ -152,3 +152,21 @@ Append-only session handoff log. Newest entries at the bottom.
 - RAG default is the local TF-IDF vector store; AWS pgvector is code-ready but unprovisioned, holding the no-spend line.
 - MCP and Ragas are optional extras so the deployed app stays lean.
 - OpenTelemetry is the always-on observability layer (tested); promptfoo/Ragas are runnable offline artifacts (need Node / a key), not in pytest.
+
+## 2026-07-13 (evening, cont.) — AWS pgvector store provisioned
+
+**Did:**
+- Provisioned CloudFormation stack `sentinel-vectordb`: RDS PostgreSQL 16 db.t4g.micro + pgvector, RDS-managed master password in Secrets Manager, SG locked to the operator IP + EB instance SG.
+- Implemented PgVectorStore (search/index) with Bedrock Titan Embed v2 (1024d); ingested the 15 corpus chunks; verified dense retrieval returns the four-fifths rule + Reg B, backend reports pgvector.
+- Kept local store the default fallback; psycopg + boto3 as an optional [pgvector] extra, out of deploy.
+
+**State now:**
+- `sentinel-vectordb` stack live in us-east-1. Endpoint sentinel-vectordb.cypkmm0qo4yj.us-east-1.rds.amazonaws.com, DB `sentinel`, secret in Secrets Manager. ~$13-15/mo.
+- 101 tests pass (default local store), ruff clean. On `main`, ~21 commits ahead of origin, NOT pushed, NOT deployed.
+
+**Next:**
+- Deploy decision still open. To use pgvector in prod: set SENTINEL_* env on EB, add the pgvector extra to the deploy, grant the instance role Bedrock InvokeModel + secretsmanager:GetSecretValue, and confirm the EB SG can reach RDS (SG rule already added).
+
+**Decisions:**
+- RDS-managed master password (Secrets Manager), read at connect time; no plaintext password in config or env.
+- pgvector on RDS over OpenSearch Serverless (cost). Bedrock Titan v2 for dense embeddings.
