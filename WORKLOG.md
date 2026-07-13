@@ -88,3 +88,23 @@ Append-only session handoff log. Newest entries at the bottom.
 - Chose EB over Render/Fly (persistent Python + WebSocket needs a real host) and ruled out Amplify (Hosting only runs JS frontends, not a Python Streamlit server).
 - Single-instance HTTP first for cost; HTTPS + domain deferred as an explicit later step.
 - No custom nginx on EB. The default proxy handles WebSockets; verified with a `101` handshake rather than assumed.
+
+## 2026-07-13 (evening, cont.) — HTTPS on a custom domain
+
+**Did:**
+- Chrome could not open the http-only EB URL (silent https upgrade -> port 443 closed -> ERR_CONNECTION_TIMED_OUT). Diagnosed: HTTP 200 on 80, 443 not open, SG opens only 80.
+- Put HTTPS in front on `sentinel.sandip.dev` via CloudFront (TLS termination + valid ACM cert + WebSocket pass-through) -> EB HTTP origin. Kept EB single-instance; CloudFront is pennies at demo traffic, so still ~$15/mo. Chose this over flipping EB to load-balanced with an ALB.
+- Automated it end to end (all Route 53 native): `deploy/aws/enable-https.sh` requests the ACM cert, writes the DNS validation record, waits for issue, deploys `deploy/aws/sentinel-https.yaml` (CloudFront + Route 53 alias).
+- Verified: valid cert, health `ok`, http->https 301, WebSocket `101` (over HTTP/1.1; HTTP/2 returns 200, a curl artifact), and the full UI renders in a browser.
+
+**State now:**
+- Live at https://sentinel.sandip.dev. `origin/main` = `1818efd`. Tree clean.
+- Stacks: `sentinel-eb` (EB) and `sentinel-https` (CloudFront + cert + Route 53). CloudFront `d2ou568ieunbrr.cloudfront.net`.
+
+**Next:**
+- Demo GIF/Loom now that there is a clean HTTPS link.
+- Optional P8 live-LLM exercise behind the $5 cap. Add the live URL to the README.
+
+**Decisions:**
+- HTTPS via CloudFront + ACM + Route 53, not an ALB. Cheaper and kept EB untouched.
+- Cannot cert the raw elasticbeanstalk.com URL (AWS owns it), so a custom domain was required, not optional.
