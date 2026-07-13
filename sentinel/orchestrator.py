@@ -133,6 +133,12 @@ class RunState:
             "fairness": payload.get("fairness"),
             "model_card": payload.get("model_card"),
             "evals": payload.get("evals"),
+            "citations": payload.get("citations", []),
+            "retrieval": (
+                self.shared["retrieval"].to_dict()
+                if "retrieval" in self.shared
+                else None
+            ),
             "audit": audit.as_dicts() if audit else [],
             "cost": cost.snapshot() if cost else {},
             "gateway_ledger": (

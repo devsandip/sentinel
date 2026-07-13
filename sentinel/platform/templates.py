@@ -83,7 +83,7 @@ TEMPLATES: list[AgentTemplate] = [
             "and block promotion on a failed check."
         ),
         pattern="evaluator_optimizer",
-        tools=["read_columns", "compute_fairness", "run_eval_gate"],
+        tools=["read_columns", "compute_fairness", "run_eval_gate", "retrieve_policy"],
         rbac_scope="adds the protected attribute, for fairness only; cannot train",
         evals=["fairness_section_present", "eval_gate_complete"],
         status=LIVE,

@@ -33,6 +33,7 @@ from sentinel.platform import (
 )
 from sentinel.platform.patterns import AVOIDED, IN_USE, PLANNED
 from sentinel.platform.templates import AVAILABLE, LIVE
+from sentinel.rag import corpus_summary
 
 st.set_page_config(page_title="Sentinel — Governed Agentic Analysis", layout="wide")
 
@@ -368,6 +369,43 @@ def tab_cost(pub: dict) -> None:
         st.dataframe(pd.DataFrame(evals["results"]), width="stretch")
 
 
+def tab_knowledge(pub: dict) -> None:
+    st.subheader("Knowledge & citations")
+    st.caption(
+        "Agents ground compliance claims in the governed corpus and cite the "
+        "passage, instead of asserting it. Retrieval runs on a local vector index "
+        "by default; a real-AWS pgvector store is available behind a config switch."
+    )
+    retrieval = pub.get("retrieval")
+    if not retrieval:
+        st.info("Approve the model to run the fairness review and its retrieval.")
+    else:
+        st.markdown(
+            f"**Retrieval query** (via `{retrieval['backend']}` vector store)"
+        )
+        st.code(retrieval["query"], language="text")
+        st.markdown("**Retrieved passages (cited into the fairness review)**")
+        for c in retrieval["citations"]:
+            tag = "public" if c["provenance"] == "public" else "synthetic"
+            cls = "pill-in_use" if c["provenance"] == "public" else "pill-planned"
+            st.markdown(
+                f"<span class='pill {cls}'>{tag}</span> "
+                f"**{c['citation']}** &nbsp;<span class='muted'>score "
+                f"{c['score']}</span>",
+                unsafe_allow_html=True,
+            )
+            st.markdown(f"<span class='muted'>{c['text']}</span>", unsafe_allow_html=True)
+            st.write("")
+
+    st.divider()
+    st.markdown("**Corpus**")
+    st.caption(
+        "Real public regulation plus synthetic internal standards, labeled by "
+        "provenance. No confidential bank documents are used."
+    )
+    st.dataframe(pd.DataFrame(corpus_summary()), width="stretch")
+
+
 def tab_gateway(pub: dict) -> None:
     st.subheader("Model gateway ledger")
     st.caption(
@@ -692,6 +730,7 @@ else:
             "Model Card",
             "Cost & KPIs",
             "Gateway",
+            "Knowledge",
         ]
     )
     with tabs[0]:
@@ -708,3 +747,5 @@ else:
         tab_cost(pub)
     with tabs[6]:
         tab_gateway(pub)
+    with tabs[7]:
+        tab_knowledge(pub)

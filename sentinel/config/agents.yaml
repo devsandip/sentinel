@@ -20,4 +20,4 @@ agents:
   - id: validator
     name: "Validator"
     role: "Runs fairness review and the eval gate; flags issues."
-    tools: ["read_columns", "compute_fairness", "run_eval_gate"]
+    tools: ["read_columns", "compute_fairness", "run_eval_gate", "retrieve_policy"]

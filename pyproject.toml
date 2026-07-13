@@ -34,4 +34,4 @@ testpaths = ["tests"]
 include = ["sentinel*"]
 
 [tool.setuptools.package-data]
-sentinel = ["config/*.yaml", "platform/playbooks/*.md"]
+sentinel = ["config/*.yaml", "platform/playbooks/*.md", "rag/corpus/*.md"]

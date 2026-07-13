@@ -14,14 +14,16 @@ from ..harness.controls import CONTROL_EVAL_GATE
 from ..harness.eval_gate import EvalReport, run_eval_gate
 from ..harness.model_card import build_model_card
 from ..ml.fairness import compute_fairness
+from ..rag.retriever import retrieve_policy
 from .base import Agent
 
 
-def assemble_payload(result, fairness, card) -> dict[str, Any]:  # noqa: ANN001
+def assemble_payload(result, fairness, card, citations=None) -> dict[str, Any]:  # noqa: ANN001
     return {
         "model": result.to_dict(),
         "fairness": fairness.to_dict(),
         "model_card": card.to_dict(),
+        "citations": citations or [],
     }
 
 
@@ -41,13 +43,27 @@ class ValidatorAgent(Agent):
             seed=state.seed,
             dataset=ds,
         )
+
+        # Ground the fairness finding in policy: retrieve and cite the governing
+        # passages instead of asserting the four-fifths rule from a constant.
+        verdict_word = "adverse impact" if not fairness.passes else "within tolerance"
+        query = (
+            f"four-fifths rule disparate impact fairness {verdict_word} across "
+            f"{ds.protected_attribute} in a credit decision"
+        )
+        retrieval = self.use_tool(
+            "retrieve_policy", retrieve_policy, query, self.deps.audit, self.id
+        )
+        citations = [c.to_dict() for c in retrieval.citations]
+        state.shared["retrieval"] = retrieval
+
         card = build_model_card(
             result,
             fairness,
             question=state.question_label,
             generated_at=datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC"),
         )
-        payload = assemble_payload(result, fairness, card)
+        payload = assemble_payload(result, fairness, card, citations)
         if self.deps.controls.is_enabled(CONTROL_EVAL_GATE):
             eval_report = self.use_tool(
                 "run_eval_gate", run_eval_gate, payload, self.deps.audit, self.id
