@@ -18,7 +18,6 @@ from .contracts import (
     CAP_TARGET,
     CAP_TIMESERIES,
     CAP_TREATMENT,
-    ROLE_PII,
     ROLE_PROTECTED,
     ROLE_TARGET,
     ROLE_TIMESTAMP,
@@ -69,14 +68,15 @@ DATASETS: list[DatasetSpec] = [
         tables=1,
         provides=frozenset({CAP_TABULAR, CAP_TARGET, CAP_PROTECTED}),
         column_roles={
-            "y": ROLE_TARGET,
-            "age_band": ROLE_PROTECTED,
-            "sex": ROLE_PROTECTED,
-            "applicant_email": ROLE_PII,
-            "applicant_ssn": ROLE_PII,
+            # Raw columns present in german_credit.csv; the modeling loader
+            # derives y/sex/age_band and injects synthetic PII at load time.
+            "credit_risk": ROLE_TARGET,
+            "personal_status_sex": ROLE_PROTECTED,
+            "age_years": ROLE_PROTECTED,
         },
         onboarded=True,
-        notes="The anchor dataset; ships with the repo.",
+        notes="The anchor dataset; ships with the repo. Modeling loader derives "
+        "sex/age_band and injects synthetic PII to demonstrate redaction.",
     ),
     DatasetSpec(
         id="uci_taiwan_credit",

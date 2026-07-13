@@ -74,3 +74,27 @@ def test_min_rows_enforced():
 def test_unknown_capability_rejected():
     with pytest.raises(ValueError):
         contract("not_a_capability")
+
+
+# -- loaders (onboarded data) ------------------------------------------------
+
+
+def test_onboarded_datasets_load_with_declared_roles():
+    from sentinel.datasets import available, load_frame
+
+    # These are onboarded by scripts/onboard_datasets.py and ship in the repo.
+    for did in ("uci_taiwan_credit", "hillstrom", "german_credit"):
+        assert available(did), f"{did} data file missing; run onboard script"
+        df = load_frame(did)
+        assert len(df) > 0
+        # Every declared role column exists in the onboarded frame.
+        spec = get_dataset(did)
+        for col in spec.column_roles:
+            assert col in df.columns, f"{did}: declared role column {col} missing"
+
+
+def test_load_unonboarded_raises():
+    from sentinel.datasets import NotOnboarded, load_frame
+
+    with pytest.raises(NotOnboarded):
+        load_frame("berka")  # registered, not onboarded

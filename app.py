@@ -13,6 +13,7 @@ import pandas as pd
 import streamlit as st
 
 from sentinel.datasets import all_datasets
+from sentinel.datasets import available as dataset_available
 from sentinel.harness.controls import CONTROL_CATALOG, ControlSettings, from_disabled
 from sentinel.harness.identity import all_personas, default_persona, get_persona
 from sentinel.harness.model_card import ModelCard, render_markdown, render_pdf
@@ -700,7 +701,7 @@ def render_datasets() -> None:
                 "tables": d.tables,
                 "license": d.license,
                 "commercial": "yes" if d.commercial_ok else "flagged",
-                "onboarded": "yes" if d.onboarded else "registered",
+                "onboarded": "yes" if dataset_available(d.id) else "registered",
             }
         )
     st.dataframe(pd.DataFrame(rows), width="stretch")

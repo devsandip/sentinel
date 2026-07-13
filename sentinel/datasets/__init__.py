@@ -13,6 +13,7 @@ from .contracts import (
     DataContract,
     contract,
 )
+from .loaders import NotOnboarded, available, load_frame, local_path
 from .registry import (
     DATASETS,
     DatasetSpec,
@@ -31,4 +32,8 @@ __all__ = [
     "all_datasets",
     "get_dataset",
     "onboarded_datasets",
+    "available",
+    "load_frame",
+    "local_path",
+    "NotOnboarded",
 ]
