@@ -1,0 +1,84 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  HTTPS front for the Sentinel EB demo. A CloudFront distribution terminates TLS
+  with an ACM cert for a custom domain and forwards to the single-instance EB
+  environment over HTTP. WebSockets are supported (caching disabled, all viewer
+  headers forwarded). A Route 53 alias points the custom domain at CloudFront.
+
+Parameters:
+  CertificateArn:
+    Type: String
+    Description: ISSUED ACM cert (us-east-1) covering DomainName.
+  OriginDomainName:
+    Type: String
+    Description: The EB environment CNAME (HTTP origin).
+  DomainName:
+    Type: String
+    Description: The custom hostname to serve, e.g. sentinel.sandip.dev.
+  HostedZoneId:
+    Type: String
+    Description: Route 53 hosted zone id for the parent domain.
+
+Resources:
+  Distribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Comment: !Sub "Sentinel HTTPS front for ${DomainName}"
+        Aliases: [!Ref DomainName]
+        HttpVersion: http2and3
+        IPV6Enabled: true
+        PriceClass: PriceClass_100
+        Origins:
+          - Id: eb-origin
+            DomainName: !Ref OriginDomainName
+            CustomOriginConfig:
+              OriginProtocolPolicy: http-only
+              HTTPPort: 80
+              OriginReadTimeout: 60
+              OriginKeepaliveTimeout: 60
+        DefaultCacheBehavior:
+          TargetOriginId: eb-origin
+          ViewerProtocolPolicy: redirect-to-https
+          Compress: false
+          AllowedMethods: [GET, HEAD, OPTIONS, PUT, POST, PATCH, DELETE]
+          CachedMethods: [GET, HEAD]
+          # Managed policies: CachingDisabled + AllViewer. Streamlit is fully
+          # dynamic and needs every header (incl. the WebSocket upgrade) passed
+          # straight through.
+          CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad
+          OriginRequestPolicyId: 216adef6-5c7f-47e4-b989-5492eafa07d3
+        ViewerCertificate:
+          AcmCertificateArn: !Ref CertificateArn
+          SslSupportMethod: sni-only
+          MinimumProtocolVersion: TLSv1.2_2021
+
+  DnsRecordA:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Ref DomainName
+      Type: A
+      AliasTarget:
+        # Z2FDTNDATAQYW2 is CloudFront's fixed alias hosted-zone id.
+        HostedZoneId: Z2FDTNDATAQYW2
+        DNSName: !GetAtt Distribution.DomainName
+        EvaluateTargetHealth: false
+
+  DnsRecordAAAA:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Ref DomainName
+      Type: AAAA
+      AliasTarget:
+        HostedZoneId: Z2FDTNDATAQYW2
+        DNSName: !GetAtt Distribution.DomainName
+        EvaluateTargetHealth: false
+
+Outputs:
+  HttpsUrl:
+    Value: !Sub "https://${DomainName}"
+  CloudFrontDomain:
+    Value: !GetAtt Distribution.DomainName
