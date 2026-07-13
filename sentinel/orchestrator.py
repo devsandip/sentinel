@@ -38,6 +38,7 @@ from .harness.guardrails import Guardrails
 from .harness.identity import Persona, policy_version
 from .harness.rbac import RBAC
 from .ml.data import load_dataset
+from .platform import registry
 
 # The governance controls advertised in the header badge.
 GOVERNANCE_CONTROLS = ["PII", "RBAC", "Audit", "Human Gate", "Eval Gate"]
@@ -320,6 +321,7 @@ class Orchestrator:
                 f"promotion={'allowed' if eval_report.promoted else 'blocked'}"
             ),
         )
+        self._register(rs)
         return {}
 
     def _rejected_node(self, state: GraphState) -> dict:
@@ -334,7 +336,35 @@ class Orchestrator:
             action="run_ended",
             output_summary="Run stopped by human rejection; no promotion.",
         )
+        self._register(rs)
         return {}
+
+    def _register(self, rs: RunState) -> None:
+        """Write the run's model to the registry (the MRM model inventory)."""
+        model = rs.shared.get("model_result")
+        fairness = rs.shared.get("fairness")
+        status = {
+            STATUS_COMPLETED: registry.STATUS_PROMOTED,
+            STATUS_BLOCKED: registry.STATUS_BLOCKED,
+            STATUS_REJECTED: registry.STATUS_REJECTED,
+        }.get(rs.status, rs.status)
+        entry = registry.register_model(
+            run_id=rs.run_id,
+            question_id=rs.question_id,
+            auc=model.metrics["auc"] if model else None,
+            disparity_ratio=fairness.disparity_ratio if fairness else None,
+            fairness_pass=fairness.passes if fairness else None,
+            status=status,
+            ungoverned=rs.controls.any_disabled,
+        )
+        rs.deps.audit.record(
+            agent="orchestrator",
+            action="model_registered",
+            output_summary=(
+                f"Registered model {entry.version} to the inventory "
+                f"(status={status})."
+            ),
+        )
 
     # -- public API (unchanged surface) --------------------------------
 

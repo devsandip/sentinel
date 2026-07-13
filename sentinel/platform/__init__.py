@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from .patterns import PATTERNS, Pattern, all_patterns, get_pattern
 from .playbooks import Playbook, get_playbook, load_playbooks
+from .registry import agent_registry, model_versions, register_model
 from .templates import (
     AGENT_LINEAGE,
     TEMPLATES,
@@ -36,4 +37,7 @@ __all__ = [
     "all_templates",
     "get_template",
     "reuse_metrics",
+    "model_versions",
+    "agent_registry",
+    "register_model",
 ]

@@ -23,9 +23,11 @@ from sentinel.orchestrator import (
     Orchestrator,
 )
 from sentinel.platform import (
+    agent_registry,
     all_patterns,
     all_templates,
     load_playbooks,
+    model_versions,
     reuse_metrics,
 )
 from sentinel.platform.patterns import AVOIDED, IN_USE, PLANNED
@@ -525,6 +527,53 @@ def render_platform() -> None:
         st.write("")
 
 
+def render_registry() -> None:
+    st.subheader("Model & agent registry")
+    st.markdown(
+        "<span class='muted'>The MRM model inventory. Every trained model is "
+        "versioned with its metrics, fairness verdict, and promotion status; every "
+        "agent is versioned with its template lineage and tool scope.</span>",
+        unsafe_allow_html=True,
+    )
+
+    st.markdown("### Models")
+    mv = model_versions()
+    if mv:
+        rows = []
+        for m in mv:
+            d = m.to_dict()
+            d["origin"] = "seeded" if m.seeded else ("ungoverned" if m.ungoverned else "live")
+            rows.append(d)
+        df = pd.DataFrame(rows)[
+            [
+                "version",
+                "question_id",
+                "auc",
+                "disparity_ratio",
+                "fairness_pass",
+                "status",
+                "origin",
+                "created_at",
+            ]
+        ]
+        st.dataframe(df, width="stretch")
+        st.caption(
+            "Status comes from the eval gate and the human decision: promoted, "
+            "blocked, or rejected. 'seeded' rows are labeled demo history; 'live' "
+            "rows accumulate as you complete runs this session."
+        )
+    else:
+        st.info("No models registered yet.")
+
+    st.markdown("### Agents")
+    ar = agent_registry()
+    st.dataframe(pd.DataFrame([a.to_dict() for a in ar]), width="stretch")
+    st.caption(
+        "Each agent is derived from a template and carries its tool scope and RBAC "
+        "scope. This is where new agents built from templates would be inventoried."
+    )
+
+
 # --------------------------------------------------------------------------
 # Layout
 # --------------------------------------------------------------------------
@@ -557,12 +606,18 @@ def persona_picker():
 header()
 st.divider()
 
-section = st.sidebar.radio("Section", ["Run analysis", "Platform"], index=0)
+section = st.sidebar.radio(
+    "Section", ["Run analysis", "Platform", "Registry"], index=0
+)
 st.sidebar.divider()
 persona = persona_picker()
 
 if section == "Platform":
     render_platform()
+    st.stop()
+
+if section == "Registry":
+    render_registry()
     st.stop()
 
 controls(persona)
