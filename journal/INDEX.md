@@ -1,8 +1,8 @@
 # Sentinel — Journal Index
 
-Last refreshed: 2026-07-13 16:50
+Last refreshed: 2026-07-13 17:20
 
-Latest entry: [2026-07-13-1650-git-history-and-aws-eb-deploy.md](entries/2026-07-13-1650-git-history-and-aws-eb-deploy.md)
+Latest entry: [2026-07-13-1720-https-via-cloudfront-custom-domain.md](entries/2026-07-13-1720-https-via-cloudfront-custom-domain.md)
 
 ## Where we are now
 
@@ -29,17 +29,21 @@ Stack: Streamlit (Python only). 36 tests passing, ruff clean. Run locally with
 `./run.sh`.
 
 The build now has a clean per-phase git history and is public at
-https://github.com/devsandip/sentinel (main at cdb60cb). It is live on AWS
-Elastic Beanstalk: a single-instance t3.small, HTTP only, no load balancer,
-about 15 dollars a month. Health is Green and the WebSocket is verified (a raw
-handshake returns 101 through EB's default nginx). Live URL:
-http://sentinel-prod.eba-ik6jervr.us-east-1.elasticbeanstalk.com. Redeploy is
-`AWS_PROFILE=admin ./deploy/aws/deploy.sh`. HTTPS and a custom domain are a
-deliberate later step (add an ALB and ACM cert, flips to load-balanced at about
-28 dollars a month).
+https://github.com/devsandip/sentinel. It is live on AWS with HTTPS on a custom
+domain: https://sentinel.sandip.dev.
+
+The stack is CloudFront in front of a single-instance Elastic Beanstalk env.
+CloudFront terminates TLS with an ACM cert and forwards to the EB instance over
+HTTP, passing the WebSocket through (caching disabled, all viewer headers
+forwarded). EB is a single t3.small, no load balancer, about 15 dollars a month;
+CloudFront adds pennies at demo traffic. Verified end to end: valid cert, health
+ok, http-to-https redirect, WebSocket 101, and the full UI renders in a browser.
+Redeploy the app with `AWS_PROFILE=admin ./deploy/aws/deploy.sh`; the HTTPS front
+is `./deploy/aws/enable-https.sh` (idempotent).
 
 ## Recent entries
 
+- [2026-07-13-1720-https-via-cloudfront-custom-domain.md](entries/2026-07-13-1720-https-via-cloudfront-custom-domain.md) — HTTPS lands on sentinel.sandip.dev via CloudFront (Chrome forced the issue).
 - [2026-07-13-1650-git-history-and-aws-eb-deploy.md](entries/2026-07-13-1650-git-history-and-aws-eb-deploy.md) — clean git history, public repo, and live on AWS Elastic Beanstalk.
 - [2026-07-13-1610-pyarrow-segfault-openmp-cleanup.md](entries/2026-07-13-1610-pyarrow-segfault-openmp-cleanup.md) — the crash was pyarrow all along; OpenMP pinning removed as cruft.
 - [2026-07-12-1145-full-governed-app-lands.md](entries/2026-07-12-1145-full-governed-app-lands.md) — harness, agents, orchestrator, and six-tab UI land end to end.
@@ -57,9 +61,8 @@ None yet. Week 2026-W28 (through Sun 2026-07-12) has entries but no summary.
 
 ## Open questions
 
-- Which custom domain to put in front of the EB env, and when to do the HTTPS step (ALB + ACM cert).
 - Do we exercise live-LLM mode with a real key before the interview, or leave it scripted?
-- Capture a demo GIF/Loom for the README, now that there is a live URL to record.
+- Capture a demo GIF/Loom for the README, now that there is a live HTTPS URL to record.
 
 ## Things ruled out
 
