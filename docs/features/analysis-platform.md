@@ -166,11 +166,30 @@ ydata-profiling (EDA), pandera (quality), featuretools (relational FE),
 statsmodels (power/tests/ITS — already adjacent), tfcausalimpact (causal). Keep
 heavy ones as optional extras where the deployed app does not need them.
 
-## 8. Open decisions
+## 8. Decisions (locked 2026-07-13)
 
-1. Architecture: A / B / **C**?
-2. First slice: as recommended (engine + profiling/quality + feature eng + params),
-   or different?
-3. Does the deployed public app grow to multiple datasets/analyses, or does that
-   stay local while prod keeps the single credit-risk demo? (Affects deploy + the
-   dataset download footprint on EB.)
+1. **Architecture: C** — declarative engine + contracts + registry + dataset
+   onboarding now; pre-built analyses + param editing; defer the build-your-own UI.
+2. **First slice:** the analysis-spec engine + data contracts; convert credit-risk
+   to a spec; onboard UCI Taiwan + Berka + Hillstrom; build the profiling/quality
+   and feature-engineering analyses; add parameter editing.
+3. **Prod grows to the full platform.** The deployed public app will host the
+   multiple datasets/analyses too. Implication: keep dataset footprints lean
+   (sample large tables), make downloads reproducible via a script, and keep heavy
+   analysis deps as optional extras so the EB instance stays manageable.
+
+## 9. First-slice build order
+
+1. **Data-contract vocabulary** — column roles (target, protected, treatment,
+   timestamp, entity_id, feature) + capability flags (relational, has_target, ...).
+   Shared by dataset specs (what a dataset provides) and analysis specs (what an
+   analysis requires).
+2. **Dataset registry + onboarding** — DatasetSpec (source, license, contract,
+   column classification) + a reproducible onboard script that downloads and
+   samples the first datasets and registers metadata.
+3. **Analysis-spec engine** — AnalysisSpec + a spec-interpreter orchestrator;
+   convert the existing credit-risk flow to a spec (prove no regression).
+4. **Governed data connector** — GovernedDataSource feeding tools.
+5. **New analyses** — profiling/quality (ydata-profiling + pandera) and feature
+   engineering (Featuretools on Berka).
+6. **Registry + matrix UI**; **parameter editing** with audited edits.

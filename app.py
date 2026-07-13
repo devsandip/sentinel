@@ -12,6 +12,7 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
+from sentinel.datasets import all_datasets
 from sentinel.harness.controls import CONTROL_CATALOG, ControlSettings, from_disabled
 from sentinel.harness.identity import all_personas, default_persona, get_persona
 from sentinel.harness.model_card import ModelCard, render_markdown, render_pdf
@@ -679,6 +680,37 @@ def render_registry() -> None:
     )
 
 
+def render_datasets() -> None:
+    st.subheader("Dataset registry")
+    st.markdown(
+        "<span class='muted'>The onboarded-dataset inventory. Each dataset carries "
+        "its license (and a commercial-use flag the platform enforces), the "
+        "capabilities it provides, and its provenance. Analyses match against "
+        "these via data contracts.</span>",
+        unsafe_allow_html=True,
+    )
+    rows = []
+    for d in all_datasets():
+        rows.append(
+            {
+                "id": d.id,
+                "name": d.name,
+                "provides": ", ".join(sorted(d.provides)),
+                "rows": d.rows,
+                "tables": d.tables,
+                "license": d.license,
+                "commercial": "yes" if d.commercial_ok else "flagged",
+                "onboarded": "yes" if d.onboarded else "registered",
+            }
+        )
+    st.dataframe(pd.DataFrame(rows), width="stretch")
+    st.caption(
+        "'registered' datasets carry metadata + contract but are not downloaded "
+        "yet; the onboard script flips them to 'onboarded'. 'flagged' commercial "
+        "status means the license restricts commercial use and the platform blocks it."
+    )
+
+
 def render_adoption() -> None:
     st.subheader("Adoption & utilization")
     st.markdown(
@@ -745,13 +777,19 @@ header()
 st.divider()
 
 section = st.sidebar.radio(
-    "Section", ["Run analysis", "Platform", "Registry", "Adoption"], index=0
+    "Section",
+    ["Run analysis", "Platform", "Datasets", "Registry", "Adoption"],
+    index=0,
 )
 st.sidebar.divider()
 persona = persona_picker()
 
 if section == "Platform":
     render_platform()
+    st.stop()
+
+if section == "Datasets":
+    render_datasets()
     st.stop()
 
 if section == "Registry":
