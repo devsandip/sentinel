@@ -1,8 +1,8 @@
 # Sentinel — Journal Index
 
-Last refreshed: 2026-07-13 18:21
+Last refreshed: 2026-07-13 19:03
 
-Latest entry: [2026-07-13-1821-platform-buildout-proposal.md](entries/2026-07-13-1821-platform-buildout-proposal.md)
+Latest entry: [2026-07-13-1903-platform-phases-a-b-shipped.md](entries/2026-07-13-1903-platform-phases-a-b-shipped.md)
 
 ## Where we are now
 
@@ -41,20 +41,32 @@ ok, http-to-https redirect, WebSocket 101, and the full UI renders in a browser.
 Redeploy the app with `AWS_PROFILE=admin ./deploy/aws/deploy.sh`; the HTTPS front
 is `./deploy/aws/enable-https.sh` (idempotent).
 
-The next chapter is the platform buildout. The demo proves one governed analysis;
-the target role is an AI platform PM, so the job now is to make Sentinel the paved
-road that makes any agent governed by default. The proposal is written and
-reviewed at `docs/features/platform-buildout.md`: 13 platform elements folded in
-across four phases, each with a visible surface. Decisions locked: LangGraph for
-orchestration (static graph, interrupt as the human gate, checkpointer as memory);
-real AWS pgvector on RDS for the vector store; OpenTelemetry plus promptfoo plus
-Ragas for observability and evals; a runnable MCP server; per-agent guardrail
-control envelopes with a live on/off toggle (the headline demo device); five
-identity personas with a role-aware gate. Starting Phase A (patterns, playbooks,
-agent templates, the LangGraph DAG) now.
+The platform buildout is well underway. Eight of the thirteen items in the
+proposal (`docs/features/platform-buildout.md`) plus both lead asks are built,
+tested, and on main. Sentinel is now a governed platform demo, not a single
+pipeline: it shows the platform machinery around any analysis.
+
+Shipped this session (test count 36 to 82, ruff clean, all verified end to end
+via AppTest): the orchestrator migrated to LangGraph (interrupt = human gate,
+checkpointer, rendered DAG); a Platform surface with the pattern catalog, three
+playbooks, and five agent templates plus a reuse metric; five identity personas
+with a role-aware approval gate and audit events stamped with actor and policy
+version; the gateway as a control point with routing, caching, and a Gateway
+Ledger; the control on/off toggle (Admin disables a control and the run breaks,
+marked UNGOVERNED, the disabling audited); a model/agent registry; and an
+adoption/utilization view.
+
+Not built yet: RAG plus the AWS vector store (item 2, blocked on the RDS cost
+decision), the MCP server (item 5), memory plus retention (item 6), OpenTelemetry
+plus promptfoo plus Ragas (item 8), and the agent runtime (item 4).
+
+Two constraints held while building unattended: no paid AWS provisioned, and
+nothing pushed or deployed. The live app at sentinel.sandip.dev is still the
+pre-platform version; deploying the platform build is a deliberate next step.
 
 ## Recent entries
 
+- [2026-07-13-1903-platform-phases-a-b-shipped.md](entries/2026-07-13-1903-platform-phases-a-b-shipped.md) — eight of thirteen platform items shipped: LangGraph, personas, gateway ledger, control toggle, registry, adoption.
 - [2026-07-13-1821-platform-buildout-proposal.md](entries/2026-07-13-1821-platform-buildout-proposal.md) — reframe from governed pipeline to governed platform; 13-item proposal reviewed and decisions locked.
 - [2026-07-13-1720-https-via-cloudfront-custom-domain.md](entries/2026-07-13-1720-https-via-cloudfront-custom-domain.md) — HTTPS lands on sentinel.sandip.dev via CloudFront (Chrome forced the issue).
 - [2026-07-13-1650-git-history-and-aws-eb-deploy.md](entries/2026-07-13-1650-git-history-and-aws-eb-deploy.md) — clean git history, public repo, and live on AWS Elastic Beanstalk.

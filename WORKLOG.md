@@ -108,3 +108,25 @@ Append-only session handoff log. Newest entries at the bottom.
 **Decisions:**
 - HTTPS via CloudFront + ACM + Route 53, not an ALB. Cheaper and kept EB untouched.
 - Cannot cert the raw elasticbeanstalk.com URL (AWS owns it), so a custom domain was required, not optional.
+
+## 2026-07-13 (evening, cont.) — Platform buildout: phases A, B, and part of D
+
+**Did:**
+- Wrote and reviewed `docs/features/platform-buildout.md`: where Sentinel is, and how each of the 13 items in `docs/ideas.md` gets addressed. Answered the margin questions (who Sentinel serves, LangGraph, prompt storage, what the vector DB unlocks, why each agent needs a sandbox, agent-specific guardrails + toggle).
+- Shipped 8 of 13 items + both lead asks (10 feature commits, tests 36 -> 82, ruff clean, all verified via AppTest): LangGraph orchestrator + DAG (3); Platform assets — patterns/playbooks/templates + reuse (12, 10, 11); identity personas + role-aware gate + enriched audit (9); gateway routing/caching/ledger (1); control on/off toggle + envelope (7); model/agent registry (13); adoption view (lead ask A).
+- Added the README live URL + AWS Deploy section fix (committed earlier this session).
+
+**State now:**
+- On `main`, tree clean, NOT pushed, NOT deployed. `main` is ~11 commits ahead of `origin/main`. Live app at sentinel.sandip.dev is still the pre-platform version.
+- 82 tests pass, ruff clean. New dep: `langgraph` (in pyproject + requirements.txt).
+- New UI: sidebar nav (Run analysis / Platform / Registry / Adoption), a Gateway tab, the control toggle (Admin), the LangGraph DAG on Pipeline.
+
+**Next:**
+- Decide: push `main` and/or deploy the platform build (deliberate; adds langgraph to the deployed app).
+- Item 2 RAG + AWS vector store — blocked on the RDS cost decision (~$12-15/mo). Recommend pgvector on RDS.
+- Item 5 MCP server, item 6 memory + retention, item 8 OTel + promptfoo + Ragas, item 4 agent runtime.
+
+**Decisions:**
+- Migrated orchestration to LangGraph (reversed the earlier ruled-out). Static graph keeps it inspectable; interrupt = human gate, checkpointer = memory.
+- Held two lines while unattended: no paid AWS provisioned, nothing pushed/deployed.
+- Introduced a sidebar top-level nav instead of growing the tab row, since the buildout adds several always-on surfaces.
