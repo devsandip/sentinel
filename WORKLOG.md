@@ -130,3 +130,25 @@ Append-only session handoff log. Newest entries at the bottom.
 - Migrated orchestration to LangGraph (reversed the earlier ruled-out). Static graph keeps it inspectable; interrupt = human gate, checkpointer = memory.
 - Held two lines while unattended: no paid AWS provisioned, nothing pushed/deployed.
 - Introduced a sidebar top-level nav instead of growing the tab row, since the buildout adds several always-on surfaces.
+
+## 2026-07-13 (evening, cont.) — Platform buildout complete (all 13 items)
+
+**Did:**
+- Finished the remaining 5 items after the phase A/B checkpoint: RAG + citations (item 2, local vector store + AWS pgvector adapter, not provisioned); runnable MCP server (item 5); memory + retention (item 6); agent runtime (item 4); OpenTelemetry tracing + promptfoo/Ragas eval suites (item 8).
+- All 13 items + both lead asks now built. Tests 36 -> 100, ruff clean, every feature verified end to end via AppTest.
+- Regenerated requirements.txt (adds langgraph + opentelemetry-sdk; mcp/ragas kept as optional extras, excluded from deploy).
+
+**State now:**
+- On `main`, tree clean, ~19 commits ahead of `origin/main`, NOT pushed, NOT deployed. Live app at sentinel.sandip.dev is still the pre-platform version.
+- UI: 4 sidebar sections (Run analysis / Platform / Registry / Adoption) + 10 run tabs (Pipeline, Results, Audit, Fairness, Model Card, Cost, Gateway, Knowledge, Memory, Traces).
+- New deps in deploy: langgraph, opentelemetry-sdk. Optional extras (not deployed): mcp, ragas.
+
+**Next:**
+- Decide: provision the real AWS RDS pgvector store for item 2 (~$12-15/mo; runs on local store today), and push/deploy the platform build.
+- If deploying: redeploy via `AWS_PROFILE=admin ./deploy/aws/deploy.sh` and re-verify health + WebSocket 101 (langgraph/otel are new on EB).
+- Optional: demo GIF/Loom of the platform; wire Ragas faithfulness with a key.
+
+**Decisions:**
+- RAG default is the local TF-IDF vector store; AWS pgvector is code-ready but unprovisioned, holding the no-spend line.
+- MCP and Ragas are optional extras so the deployed app stays lean.
+- OpenTelemetry is the always-on observability layer (tested); promptfoo/Ragas are runnable offline artifacts (need Node / a key), not in pytest.

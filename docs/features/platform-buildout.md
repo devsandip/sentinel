@@ -1,25 +1,32 @@
 # Sentinel Platform Buildout — Proposal
 
-**Status:** reviewed; Phases A, B, and part of D built. RAG and MCP remain.
+**Status:** all 13 items + both lead asks built. Two open toggles: provision the
+real AWS vector store (item 2 runs on the local store today), and deploy.
 **Author:** drafted for Sandip, 2026-07-13.
 **Source:** answers the 13 items and two lead asks in [docs/ideas.md](../ideas.md).
 
 ## Build progress (2026-07-13)
 
-Shipped and tested (82 tests, ruff clean; all on `main`, not pushed):
+All shipped and tested (100 tests, ruff clean; all on `main`, NOT pushed, NOT
+deployed):
 
-- **Item 12** pattern catalog, **item 10** playbooks, **item 11** agent templates
-  + reuse metric, all in `sentinel/platform/` with a Platform surface (Phase A).
-- **Item 3** orchestration migrated to LangGraph (interrupt = human gate,
-  checkpointer, rendered DAG).
-- **Item 9** identity personas + role-aware approval gate + enriched audit.
-- **Item 1** gateway as control point: routing, caching, a Gateway Ledger.
-- **Item 7** per-agent control envelopes + the live on/off toggle (headline demo).
-- **Item 13** model/agent registry. **Lead ask A** adoption/utilization view.
+- **12** pattern catalog, **10** playbooks, **11** agent templates + reuse metric
+  (Platform surface).
+- **3** orchestration on LangGraph (interrupt = human gate, checkpointer, DAG).
+- **9** identity personas + role-aware approval gate + enriched audit.
+- **1** gateway as control point: routing, caching, Gateway Ledger.
+- **7** per-agent control envelopes + the live on/off toggle (headline demo).
+- **13** model/agent registry. **Lead ask A** adoption/utilization view.
+- **2** RAG + citations on a local vector store; the AWS pgvector adapter is
+  code-ready but NOT provisioned (awaits the RDS cost decision).
+- **5** runnable MCP server (`python -m sentinel.mcp_server`).
+- **6** memory (short-term context + long-term precedent) with retention labels.
+- **4** agent runtime lifecycle boundary.
+- **8** OpenTelemetry tracing (Traces tab) + promptfoo/Ragas eval suites in
+  `evals/` (runnable with Node / an API key; not wired into pytest).
 
-Not yet built: **item 2** RAG + vector DB (blocked on the AWS RDS cost decision),
-**item 5** MCP server, **item 6** memory + retention, **item 8** OTel + promptfoo
-+ Ragas, **item 4** agent runtime. See phasing in section 4.
+Two remaining toggles, both requiring an explicit decision: provision the real
+AWS RDS pgvector store for item 2, and push/deploy the platform build.
 
 ---
 

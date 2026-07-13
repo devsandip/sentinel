@@ -1,8 +1,8 @@
 # Sentinel — Journal Index
 
-Last refreshed: 2026-07-13 19:03
+Last refreshed: 2026-07-13 19:49
 
-Latest entry: [2026-07-13-1903-platform-phases-a-b-shipped.md](entries/2026-07-13-1903-platform-phases-a-b-shipped.md)
+Latest entry: [2026-07-13-1949-all-thirteen-items-built.md](entries/2026-07-13-1949-all-thirteen-items-built.md)
 
 ## Where we are now
 
@@ -41,31 +41,29 @@ ok, http-to-https redirect, WebSocket 101, and the full UI renders in a browser.
 Redeploy the app with `AWS_PROFILE=admin ./deploy/aws/deploy.sh`; the HTTPS front
 is `./deploy/aws/enable-https.sh` (idempotent).
 
-The platform buildout is well underway. Eight of the thirteen items in the
-proposal (`docs/features/platform-buildout.md`) plus both lead asks are built,
-tested, and on main. Sentinel is now a governed platform demo, not a single
-pipeline: it shows the platform machinery around any analysis.
+The platform buildout is complete. All thirteen items in the proposal
+(`docs/features/platform-buildout.md`) plus both lead asks are built, tested, and
+on main. Sentinel is a governed platform demo end to end: not one governed agent,
+but the platform that makes every agent governed, auditable, and reusable.
 
-Shipped this session (test count 36 to 82, ruff clean, all verified end to end
-via AppTest): the orchestrator migrated to LangGraph (interrupt = human gate,
-checkpointer, rendered DAG); a Platform surface with the pattern catalog, three
-playbooks, and five agent templates plus a reuse metric; five identity personas
-with a role-aware approval gate and audit events stamped with actor and policy
-version; the gateway as a control point with routing, caching, and a Gateway
-Ledger; the control on/off toggle (Admin disables a control and the run breaks,
-marked UNGOVERNED, the disabling audited); a model/agent registry; and an
-adoption/utilization view.
+Built (test count 36 to 100, ruff clean, all verified via AppTest): LangGraph
+orchestrator with a rendered DAG; a Platform surface (pattern catalog, playbooks,
+agent templates, reuse metric); five identity personas with a role-aware gate and
+enriched audit; the gateway as a control point (routing, caching, Gateway Ledger);
+the control on/off toggle; a model/agent registry; adoption metrics; RAG with
+cited compliance on a local vector store; a runnable MCP server; short/long-term
+memory with retention; an agent runtime lifecycle boundary; and OpenTelemetry
+tracing plus promptfoo/Ragas eval suites.
 
-Not built yet: RAG plus the AWS vector store (item 2, blocked on the RDS cost
-decision), the MCP server (item 5), memory plus retention (item 6), OpenTelemetry
-plus promptfoo plus Ragas (item 8), and the agent runtime (item 4).
-
-Two constraints held while building unattended: no paid AWS provisioned, and
-nothing pushed or deployed. The live app at sentinel.sandip.dev is still the
-pre-platform version; deploying the platform build is a deliberate next step.
+Two deliberate toggles remain, both requiring a decision rather than code:
+provision the real AWS RDS pgvector store for the vector DB (item 2 runs on the
+local store today), and push or deploy the platform build. Both lines held the
+whole way: no paid AWS provisioned, nothing pushed or deployed. The live app at
+sentinel.sandip.dev is still the pre-platform version.
 
 ## Recent entries
 
+- [2026-07-13-1949-all-thirteen-items-built.md](entries/2026-07-13-1949-all-thirteen-items-built.md) — all 13 platform items done: RAG citations, MCP server, memory, runtime, OTel traces. 100 tests.
 - [2026-07-13-1903-platform-phases-a-b-shipped.md](entries/2026-07-13-1903-platform-phases-a-b-shipped.md) — eight of thirteen platform items shipped: LangGraph, personas, gateway ledger, control toggle, registry, adoption.
 - [2026-07-13-1821-platform-buildout-proposal.md](entries/2026-07-13-1821-platform-buildout-proposal.md) — reframe from governed pipeline to governed platform; 13-item proposal reviewed and decisions locked.
 - [2026-07-13-1720-https-via-cloudfront-custom-domain.md](entries/2026-07-13-1720-https-via-cloudfront-custom-domain.md) — HTTPS lands on sentinel.sandip.dev via CloudFront (Chrome forced the issue).
