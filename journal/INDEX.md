@@ -1,8 +1,8 @@
 # Sentinel — Journal Index
 
-Last refreshed: 2026-07-13 20:05
+Last refreshed: 2026-07-13 22:37
 
-Latest entry: [2026-07-13-2005-aws-vector-store-provisioned.md](entries/2026-07-13-2005-aws-vector-store-provisioned.md)
+Latest entry: [2026-07-13-2237-analysis-platform-and-pgvector-prod.md](entries/2026-07-13-2237-analysis-platform-and-pgvector-prod.md)
 
 ## Where we are now
 
@@ -55,15 +55,33 @@ cited compliance on a local vector store; a runnable MCP server; short/long-term
 memory with retention; an agent runtime lifecycle boundary; and OpenTelemetry
 tracing plus promptfoo/Ragas eval suites.
 
-The AWS vector store is now provisioned. Sandip approved the cost, so item 2 runs
-on real AWS: RDS PostgreSQL + pgvector, Bedrock Titan embeddings, corpus ingested,
-dense retrieval verified. The local store stays the default fallback, so the demo
-needs no AWS to run. One deliberate step remains: deploy. The live app at
-sentinel.sandip.dev is still the pre-platform version, and nothing has been pushed
-or deployed.
+Sentinel is now a governed analysis platform, not a single pipeline, and the
+whole thing is in prod. An analysis is a declarative spec: a data contract, typed
+editable parameters, and governed steps. A linear engine checks the contract
+against a dataset, then runs each step through the same harness as the hero
+pipeline (guardrails, RBAC, audit, cost, tracing). Two analyses run on it, data
+profiling plus quality triage and relational feature engineering on Berka with a
+pre-decision leakage guard, both exposed in a new Analyses UI with contract-
+matched dataset picking and parameter editing. The credit-risk pipeline is in the
+catalog as a spec but still runs in the LangGraph orchestrator, because it
+promotes a model and keeps the human gate.
+
+The RAG vector store now runs on real AWS in prod: the EB instance role has a
+least-privilege policy (RDS-managed secret + the Titan model only), the store is
+set to pgvector, and retrieval falls back to the local index if RDS or Bedrock is
+unreachable so the public link never breaks. The real pgvector path is verified
+against the same prod RDS. Deployed and verified live: health ok, TLS redirect,
+WebSocket 101, hero pipeline runs to the gate (AUC 0.8018), and the new profiling
+analysis runs to completion on the instance. 126 tests pass, ruff clean.
+Deployed SHA 7f3ccb4.
+
+Deferred to morning by choice: Kaggle-gated datasets, live-LLM narration behind
+the cost cap (the key is available locally in a gitignored .env, never committed;
+prod stays scripted and free), and the Ragas faithfulness run.
 
 ## Recent entries
 
+- [2026-07-13-2237-analysis-platform-and-pgvector-prod.md](entries/2026-07-13-2237-analysis-platform-and-pgvector-prod.md) — analysis-spec engine + profiling & feature-eng analyses; pgvector live in prod. 126 tests.
 - [2026-07-13-2005-aws-vector-store-provisioned.md](entries/2026-07-13-2005-aws-vector-store-provisioned.md) — RAG on real AWS: RDS pgvector + Bedrock embeddings, corpus ingested, dense retrieval verified.
 - [2026-07-13-1949-all-thirteen-items-built.md](entries/2026-07-13-1949-all-thirteen-items-built.md) — all 13 platform items done: RAG citations, MCP server, memory, runtime, OTel traces. 100 tests.
 - [2026-07-13-1903-platform-phases-a-b-shipped.md](entries/2026-07-13-1903-platform-phases-a-b-shipped.md) — eight of thirteen platform items shipped: LangGraph, personas, gateway ledger, control toggle, registry, adoption.
@@ -86,9 +104,10 @@ None yet. Week 2026-W28 (through Sun 2026-07-12) has entries but no summary.
 
 ## Open questions
 
-- Do we exercise live-LLM mode with a real key before the interview, or leave it scripted?
+- Live-LLM: the Anthropic key is available locally (gitignored .env). Exercise it behind the cost cap in the morning, then decide whether the interview demo ever flips off scripted. Prod default stays scripted and free.
 - Capture a demo GIF/Loom for the README, now that there is a live HTTPS URL to record.
-- Platform buildout open items (from the proposal): OK to add the standing ~12-15 dollar/mo RDS pgvector cost, or precompute-and-pause? Final persona set? Final playbook set? Record an external-agent-over-MCP clip?
+- Kaggle-gated datasets (ULB fraud, LendingClub, others): onboard in the morning per Sandip's plan.
+- Analyses platform next: does the credit-risk spec eventually execute through the engine too, or stay routed to the orchestrator? Should linear analysis runs feed the adoption metrics and model registry?
 
 ## Things ruled out
 

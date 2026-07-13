@@ -170,3 +170,25 @@ Append-only session handoff log. Newest entries at the bottom.
 **Decisions:**
 - RDS-managed master password (Secrets Manager), read at connect time; no plaintext password in config or env.
 - pgvector on RDS over OpenSearch Serverless (cost). Bedrock Titan v2 for dense embeddings.
+
+## 2026-07-13 (late evening) — Analysis platform first slice + pgvector in prod
+
+**Did:**
+- Built the analysis-spec engine: an analysis is a declarative `AnalysisSpec` (data contract + typed/bounded params + governed steps). A linear engine checks the contract against a dataset, then runs each step through the same harness as the hero pipeline (guardrail allow-list, RBAC, audit, cost, OTel spans). Blocks cleanly on contract violation, not-onboarded, or an off-list tool.
+- Shipped two analyses on the engine: data profiling + quality triage (dependency-free profiler + declarative expectation suite) and relational feature engineering on Berka (per-account RFM/aggregates with a pre-decision window guard + an independent leakage scan). Added a new Analyses UI section (catalog, contract-matched dataset picker, editable params, governed results).
+- Wired pgvector into prod: least-privilege EB instance-role policy (Secrets Manager GetSecretValue + bedrock:InvokeModel on the Titan model only), SENTINEL_VECTOR_STORE=pgvector env, psycopg+boto3 added to requirements. Added a runtime fallback so retrieval drops to the local index if RDS/Bedrock is unreachable.
+- Deployed to prod and verified: CFN UPDATE_COMPLETE, EB Green, health ok, TLS redirect, WebSocket 101, hero pipeline runs to the gate (AUC 0.8018), and the profiling analysis runs to completion on the live instance. Verified the real pgvector path against prod RDS (Reg B query embeds via Bedrock, vector search returns the right passages, backend=pgvector).
+
+**State now:**
+- On `main`, pushed to origin at 7f3ccb4 (commits 8de91f9 engine, 25eb09f UI, 7f3ccb4 pgvector-prod). Deployed SHA in prod = 7f3ccb4.
+- 126 tests pass (was 111), ruff clean. Live at https://sentinel.sandip.dev.
+- GitHub Project #8: "[Infra] Wire pgvector to PROD" marked Done.
+
+**Next:**
+- Morning: onboard Kaggle-gated datasets (ULB fraud, LendingClub, etc.); exercise live-LLM narration behind the $5 cap using the local .env key; run Ragas faithfulness.
+- Platform: decide whether the credit-risk spec ever executes through the engine, and whether linear analysis runs should feed adoption metrics + the model registry.
+
+**Decisions:**
+- Additive engine, not a rewrite: linear read-only analyses run in the new engine; the credit-risk pipeline keeps its human gate in the LangGraph orchestrator. The catalog is unified via specs; execution is not.
+- Lightweight in-house profiler + quality suite + hand-rolled relational FE, not ydata-profiling/Featuretools (deferred to the backlog) to keep the t3.small deploy lean. No new heavy deps.
+- Anthropic API key handled only via a gitignored local .env, never committed. Prod default stays scripted (free); pgvector-in-prod is the only paid path and it is cost-tiny (query embeddings + an already-running RDS).
