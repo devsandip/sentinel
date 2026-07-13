@@ -1,8 +1,8 @@
 # Sentinel — Journal Index
 
-Last refreshed: 2026-07-13 16:10
+Last refreshed: 2026-07-13 16:50
 
-Latest entry: [2026-07-13-1610-pyarrow-segfault-openmp-cleanup.md](entries/2026-07-13-1610-pyarrow-segfault-openmp-cleanup.md)
+Latest entry: [2026-07-13-1650-git-history-and-aws-eb-deploy.md](entries/2026-07-13-1650-git-history-and-aws-eb-deploy.md)
 
 ## Where we are now
 
@@ -26,10 +26,21 @@ fix is `ARROW_DEFAULT_MEMORY_POOL=system`, set in the launcher. All the earlier
 OpenMP thread-pinning was tested, shown to do nothing, and removed.
 
 Stack: Streamlit (Python only). 36 tests passing, ruff clean. Run locally with
-`./run.sh`. Not committed to git yet, and not deployed yet.
+`./run.sh`.
+
+The build now has a clean per-phase git history and is public at
+https://github.com/devsandip/sentinel (main at cdb60cb). It is live on AWS
+Elastic Beanstalk: a single-instance t3.small, HTTP only, no load balancer,
+about 15 dollars a month. Health is Green and the WebSocket is verified (a raw
+handshake returns 101 through EB's default nginx). Live URL:
+http://sentinel-prod.eba-ik6jervr.us-east-1.elasticbeanstalk.com. Redeploy is
+`AWS_PROFILE=admin ./deploy/aws/deploy.sh`. HTTPS and a custom domain are a
+deliberate later step (add an ALB and ACM cert, flips to load-balanced at about
+28 dollars a month).
 
 ## Recent entries
 
+- [2026-07-13-1650-git-history-and-aws-eb-deploy.md](entries/2026-07-13-1650-git-history-and-aws-eb-deploy.md) — clean git history, public repo, and live on AWS Elastic Beanstalk.
 - [2026-07-13-1610-pyarrow-segfault-openmp-cleanup.md](entries/2026-07-13-1610-pyarrow-segfault-openmp-cleanup.md) — the crash was pyarrow all along; OpenMP pinning removed as cruft.
 - [2026-07-12-1145-full-governed-app-lands.md](entries/2026-07-12-1145-full-governed-app-lands.md) — harness, agents, orchestrator, and six-tab UI land end to end.
 - [2026-07-12-1015-p1-ml-core-lands.md](entries/2026-07-12-1015-p1-ml-core-lands.md) — P1 ML core lands; fairness flags on its own.
@@ -46,9 +57,9 @@ None yet. Week 2026-W28 (through Sun 2026-07-12) has entries but no summary.
 
 ## Open questions
 
-- Which custom domain, and Render vs Fly for the Streamlit host.
+- Which custom domain to put in front of the EB env, and when to do the HTTPS step (ALB + ACM cert).
 - Do we exercise live-LLM mode with a real key before the interview, or leave it scripted?
-- Capture a demo GIF/Loom for the README.
+- Capture a demo GIF/Loom for the README, now that there is a live URL to record.
 
 ## Things ruled out
 
@@ -57,3 +68,6 @@ None yet. Week 2026-W28 (through Sun 2026-07-12) has entries but no summary.
 - LangGraph (plain state machine is fully owned; audit log makes it inspectable).
 - OpenMP/BLAS thread pinning as the crash fix (tested, did nothing, removed). The real fix is the pyarrow memory pool.
 - FRED data (macro time-series does not fit the classification/fairness story).
+- Render and Fly for the host (chose AWS Elastic Beanstalk).
+- AWS Amplify (Hosting only runs JS frontends; it cannot run a persistent Python Streamlit server).
+- A custom nginx override on EB (the default AL2023 nginx already forwards WebSocket upgrade headers).

@@ -65,3 +65,26 @@ Append-only session handoff log. Newest entries at the bottom.
 **Decisions:**
 - Root cause of the crash was pyarrow/mimalloc, not sklearn/OpenMP. The OpenMP pinning was cruft chasing a wrong diagnosis and was removed entirely.
 - Keep exactly one mitigation, `ARROW_DEFAULT_MEMORY_POOL=system`, because it has a crash report proving it is load-bearing. It must be set before pyarrow imports, so it lives in the launcher, not in code.
+
+## 2026-07-13 (evening) — Git history, public repo, and live on AWS EB
+
+**Did:**
+- Turned the uncommitted P1-P7 build into a clean per-phase git history (9 commits: scaffold, P1 ML core, P2 model card, P3 harness, P4 agents/orchestrator, P6 UI, P7 deliverables, the pyarrow fix, process docs). Renamed `master` -> `main`. Nothing secret or generated tracked.
+- Created the public GitHub repo `devsandip/sentinel` and pushed. `main` is at `cdb60cb`.
+- Deployed to AWS Elastic Beanstalk: single-instance `t3.small`, HTTP only, no load balancer (~$15/mo). CloudFormation stack (`deploy/aws/sentinel-eb.yaml`) provisions the EB app + env + IAM roles; `deploy/aws/deploy.sh` bundles, uploads to S3, and ships. Redeploy is one command.
+- First deploy came up Red: my `.platform/nginx/nginx.conf` full override failed `nginx -t`. The app booted fine on 8501; the override was broken and unnecessary. Dropped it (EB's default AL2023 nginx already forwards WebSocket upgrade headers), redeployed Green.
+- Verified live: health `ok`, root 200, raw WebSocket handshake on `/_stcore/stream` returns `101`, and the full UI renders in a browser.
+
+**State now:**
+- Live at http://sentinel-prod.eba-ik6jervr.us-east-1.elasticbeanstalk.com (EB env `sentinel-prod`, region us-east-1, health Green, scripted narration = zero cost).
+- Repo public, `main` = `cdb60cb`, includes all deploy artifacts.
+- Deploy uses the `admin` SSO profile (account 175110780229). SSO tokens expire; `aws sso login --profile admin` to refresh.
+
+**Next:**
+- HTTPS + custom domain: add an ALB + ACM cert to the stack (flips single-instance -> load-balanced, ~$28/mo), point a CNAME at the env.
+- Optional: P8 live-LLM exercise with a real key (behind the $5 cap); capture a demo GIF/Loom now that there is a live URL.
+
+**Decisions:**
+- Chose EB over Render/Fly (persistent Python + WebSocket needs a real host) and ruled out Amplify (Hosting only runs JS frontends, not a Python Streamlit server).
+- Single-instance HTTP first for cost; HTTPS + domain deferred as an explicit later step.
+- No custom nginx on EB. The default proxy handles WebSockets; verified with a `101` handshake rather than assumed.
