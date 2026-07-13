@@ -1,0 +1,23 @@
+# Render deployment for the Sentinel Streamlit app.
+# Single web service; scripted narration by default so the public link is free.
+services:
+  - type: web
+    name: sentinel
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt && pip install -e .
+    startCommand: streamlit run app.py --server.port $PORT --server.address 0.0.0.0 --server.headless true
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.9"
+      - key: MODEL_PROVIDER
+        value: templated
+      # Live LLM mode is opt-in and cost-capped. Leave provider keys unset for
+      # the public demo; set them (and flip the toggle) only for a live run.
+      - key: LIVE_MODE_MONTHLY_CAP
+        value: "5"
+      # Route pyarrow to the system allocator (avoids a mimalloc thread-init
+      # segfault when Streamlit serializes DataFrames to Arrow). Harmless on
+      # Linux; required on macOS.
+      - key: ARROW_DEFAULT_MEMORY_POOL
+        value: system
