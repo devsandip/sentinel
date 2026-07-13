@@ -1,5 +1,7 @@
 # Sentinel
 
+**Live:** https://sentinel.sandip.dev
+
 A public, clickable demo where a visitor picks a preset banking question, hits
 Run, and watches a small team of AI agents perform a **real** data-science
 analysis wrapped in the governance controls a regulated bank demands: an
@@ -93,13 +95,25 @@ narration and records why.
 
 ## Deploy
 
-Single Streamlit web service. `render.yaml` and `Procfile` are included.
+Single Streamlit web service. It is live on AWS; `render.yaml` and `Procfile`
+are also included for a one-click Render deploy.
 
-- Render: point a new Web Service at the repo; it reads `render.yaml`
-  (build `pip install -r requirements.txt && pip install -e .`, start
-  `streamlit run app.py --server.port $PORT --server.address 0.0.0.0`).
-- Add a custom domain in the host's dashboard and set the CNAME at your DNS.
-- Default `MODEL_PROVIDER=templated` keeps the public link free.
+**AWS (current prod at https://sentinel.sandip.dev):** CloudFront terminates TLS
+(valid ACM cert, WebSocket pass-through) in front of a single-instance Elastic
+Beanstalk `t3.small` running over HTTP. Two idempotent scripts under
+`deploy/aws/` own it:
+
+- `AWS_PROFILE=admin ./deploy/aws/deploy.sh` — app code (CFN
+  `deploy/aws/sentinel-eb.yaml` + S3 bundle bucket).
+- `AWS_PROFILE=admin ./deploy/aws/enable-https.sh` — the HTTPS front (CFN
+  `deploy/aws/sentinel-https.yaml`: ACM cert, CloudFront, Route 53 alias).
+
+**Render (alternative):** point a new Web Service at the repo; it reads
+`render.yaml` (build `pip install -r requirements.txt && pip install -e .`,
+start `streamlit run app.py --server.port $PORT --server.address 0.0.0.0`), then
+add a custom domain in the dashboard and set the CNAME at your DNS.
+
+Default `MODEL_PROVIDER=templated` keeps the public link free.
 
 ## Deliverables
 
