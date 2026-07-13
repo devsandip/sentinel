@@ -36,6 +36,7 @@ from .harness.controls import ALL_ENABLED, CONTROL_HUMAN_GATE, ControlSettings
 from .harness.cost import CostTracker
 from .harness.guardrails import Guardrails
 from .harness.identity import Persona, policy_version
+from .harness.memory import precedents_for, record_precedent, short_term_context
 from .harness.rbac import RBAC
 from .ml.data import load_dataset
 from .platform import registry
@@ -146,6 +147,12 @@ class RunState:
             ),
             "controls_disabled": self.controls.disabled_names(),
             "ungoverned": self.controls.any_disabled,
+            "memory": {
+                "short_term": short_term_context(self.shared),
+                "long_term": [
+                    p.to_dict() for p in precedents_for(self.question_id)
+                ],
+            },
         }
 
 
@@ -370,6 +377,12 @@ class Orchestrator:
                 f"Registered model {entry.version} to the inventory "
                 f"(status={status})."
             ),
+        )
+        # Long-term memory: record the outcome as precedent for future runs.
+        record_precedent(
+            rs.question_id,
+            status,
+            fairness.disparity_ratio if fairness else None,
         )
 
     # -- public API (unchanged surface) --------------------------------

@@ -406,6 +406,48 @@ def tab_knowledge(pub: dict) -> None:
     st.dataframe(pd.DataFrame(corpus_summary()), width="stretch")
 
 
+def tab_memory(pub: dict) -> None:
+    st.subheader("Memory & retention")
+    st.caption(
+        "Governed memory is a data-retention control. Short-term working context "
+        "is ephemeral; long-term precedent is retained under policy."
+    )
+    mem = pub.get("memory", {})
+
+    st.markdown("**Short-term (working context)**")
+    st.caption("Held for this run only, then discarded. Retention: ephemeral.")
+    st_keys = mem.get("short_term", [])
+    if st_keys:
+        st.markdown(
+            " ".join(f"<span class='ctrl-chip'>{k}</span>" for k in st_keys),
+            unsafe_allow_html=True,
+        )
+    else:
+        st.caption("No working context yet.")
+
+    st.divider()
+    st.markdown("**Long-term (precedent)**")
+    st.caption(
+        "Prior outcomes for this question, retained to inform future runs. "
+        "Retention: records-retention policy."
+    )
+    lt = mem.get("long_term", [])
+    if lt:
+        rows = []
+        for p in lt:
+            d = dict(p)
+            d["origin"] = "seeded" if p.get("seeded") else "live"
+            rows.append(d)
+        st.dataframe(
+            pd.DataFrame(rows)[
+                ["question_id", "status", "disparity_ratio", "origin", "created_at"]
+            ],
+            width="stretch",
+        )
+    else:
+        st.info("No precedent recorded for this question yet.")
+
+
 def tab_gateway(pub: dict) -> None:
     st.subheader("Model gateway ledger")
     st.caption(
@@ -731,6 +773,7 @@ else:
             "Cost & KPIs",
             "Gateway",
             "Knowledge",
+            "Memory",
         ]
     )
     with tabs[0]:
@@ -749,3 +792,5 @@ else:
         tab_gateway(pub)
     with tabs[7]:
         tab_knowledge(pub)
+    with tabs[8]:
+        tab_memory(pub)
