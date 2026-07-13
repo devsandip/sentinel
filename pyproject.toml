@@ -18,6 +18,11 @@ dependencies = [
 dev = [
     "pytest>=8.0",
     "ruff>=0.6",
+    "mcp>=1.0",
+]
+# The runnable MCP server is an optional artifact, not part of the deployed app.
+mcp = [
+    "mcp>=1.0",
 ]
 
 [tool.ruff]
