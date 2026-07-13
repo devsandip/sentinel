@@ -1,15 +1,28 @@
-"""Orchestrator: sequences the agent graph and manages the approval pause.
+"""Orchestrator: a LangGraph workflow over the agent pipeline.
 
-Plain Python state machine (no LangGraph): Profiler -> EDA -> Modeler, then
-PAUSE for human approval, then Validator -> finalize. Every step emits audit
-events through the shared harness, so the flow is fully inspectable.
+Profiler -> EDA -> Modeler, then an interrupt for human approval, then either
+Validator -> finalize or a rejection. The graph is statically defined (fixed
+nodes and edges), so it stays a workflow, not an autonomous agent: an examiner
+can read the path. LangGraph gives us three things a bespoke state machine did
+not: a named framework, an `interrupt()` primitive that is exactly the human
+gate, and a checkpointer that persists state across the pause.
+
+Design note: the heavy RunState (with its live harness handles) lives in the
+Orchestrator's run store, keyed by run_id. The LangGraph state carries only the
+run_id and the approval decision, so the checkpointer never has to serialize a
+file handle. Nodes look the RunState up and mutate it in place; the graph owns
+sequencing and the gate, the agents own the work.
 """
 
 from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, TypedDict
+
+from langgraph.checkpoint.memory import MemorySaver
+from langgraph.graph import END, START, StateGraph
+from langgraph.types import Command, interrupt
 
 from .agents.base import AgentDeps
 from .agents.eda import EDAAgent
@@ -125,11 +138,24 @@ def _provider_for(mode: str) -> str:
     return ANTHROPIC if mode == "live" else TEMPLATED
 
 
+class GraphState(TypedDict):
+    """LangGraph's own state: intentionally tiny and serializable.
+
+    The RunState (with live harness handles) is kept out of here so the
+    checkpointer never has to serialize a file handle.
+    """
+
+    run_id: str
+    approved: bool | None
+
+
 class Orchestrator:
-    """Owns the in-memory run store and drives the state machine."""
+    """Owns the run store and a compiled LangGraph workflow over the pipeline."""
 
     def __init__(self) -> None:
         self._runs: dict[str, RunState] = {}
+        self._checkpointer = MemorySaver()
+        self._graph = self._build_graph()
 
     # -- lookups -------------------------------------------------------
 
@@ -139,7 +165,152 @@ class Orchestrator:
     def get_run(self, run_id: str) -> RunState | None:
         return self._runs.get(run_id)
 
-    # -- state machine -------------------------------------------------
+    # -- graph definition ----------------------------------------------
+
+    def _build_graph(self):
+        builder = StateGraph(GraphState)
+        builder.add_node("profiler", self._profiler_node)
+        builder.add_node("eda", self._eda_node)
+        builder.add_node("modeler", self._modeler_node)
+        builder.add_node("approval", self._approval_node)
+        builder.add_node("validator", self._validator_node)
+        builder.add_node("rejected", self._rejected_node)
+
+        builder.add_edge(START, "profiler")
+        builder.add_edge("profiler", "eda")
+        builder.add_edge("eda", "modeler")
+        builder.add_edge("modeler", "approval")
+        builder.add_conditional_edges(
+            "approval",
+            self._route_after_approval,
+            {"approved": "validator", "rejected": "rejected"},
+        )
+        builder.add_edge("validator", END)
+        builder.add_edge("rejected", END)
+        return builder.compile(checkpointer=self._checkpointer)
+
+    def graph_dot(self) -> str:
+        """DOT of the actual compiled graph, for the UI. The gate and terminal
+        nodes are highlighted; conditional edges (the approve/reject branch) are
+        dashed. Generated from the real graph so it cannot drift from the code.
+        """
+        g = self._graph.get_graph()
+        label = {"__start__": "START", "__end__": "END"}
+        styles = {
+            "approval": 'label="human gate\\n(interrupt)", fillcolor="#fdeceb", color="#b3261e"',
+            "validator": 'fillcolor="#e3f4e9", color="#1b7f3b"',
+            "rejected": 'fillcolor="#fdeceb", color="#b3261e"',
+            "__start__": 'shape=circle, fillcolor="#ffffff"',
+            "__end__": 'shape=doublecircle, fillcolor="#ffffff"',
+        }
+        lines = [
+            "digraph pipeline {",
+            "  rankdir=LR;",
+            '  node [shape=box, style="rounded,filled", fontname="Helvetica", '
+            'fillcolor="#eef2fb", color="#1e50a0"];',
+        ]
+        for n in g.nodes:
+            attrs = styles.get(n, "")
+            lbl = label.get(n)
+            parts = [p for p in (f'label="{lbl}"' if lbl else "", attrs) if p]
+            suffix = f" [{', '.join(parts)}]" if parts else ""
+            lines.append(f'  "{n}"{suffix};')
+        for e in g.edges:
+            dashed = " [style=dashed]" if getattr(e, "conditional", False) else ""
+            lines.append(f'  "{e.source}" -> "{e.target}"{dashed};')
+        lines.append("}")
+        return "\n".join(lines)
+
+    # -- graph nodes (sequencing only; agents own the work) ------------
+
+    def _profiler_node(self, state: GraphState) -> dict:
+        rs = self._runs[state["run_id"]]
+        ProfilerAgent(rs.deps).run(rs)
+        return {}
+
+    def _eda_node(self, state: GraphState) -> dict:
+        rs = self._runs[state["run_id"]]
+        EDAAgent(rs.deps).run(rs)
+        return {}
+
+    def _modeler_node(self, state: GraphState) -> dict:
+        rs = self._runs[state["run_id"]]
+        ModelerAgent(rs.deps).run(rs)  # sets status -> awaiting_approval
+        return {}
+
+    def _approval_node(self, state: GraphState) -> dict:
+        """The human gate. interrupt() pauses here until approve() resumes."""
+        rs = self._runs[state["run_id"]]
+        decision = interrupt({"gate": "human_approval", "run_id": rs.run_id})
+        approved = bool(decision)
+        rs.deps.cost.record_decision(approved)
+        rs.deps.audit.record(
+            agent="human_reviewer",
+            action="approval_decision",
+            level="gate",
+            output_summary=("APPROVED" if approved else "REJECTED") + " at model gate",
+        )
+        return {"approved": approved}
+
+    def _route_after_approval(self, state: GraphState) -> str:
+        return "approved" if state["approved"] else "rejected"
+
+    def _validator_node(self, state: GraphState) -> dict:
+        rs = self._runs[state["run_id"]]
+        deps = rs.deps
+        for step in rs.steps:
+            if step.status == STATUS_AWAITING:
+                step.status = "approved"
+
+        ValidatorAgent(deps).run(rs)
+        eval_report = rs.shared["eval_report"]
+        rs.status = STATUS_COMPLETED if eval_report.promoted else STATUS_BLOCKED
+
+        # Final summary narration through the gateway.
+        result = rs.shared["model_result"]
+        fairness = rs.shared["fairness"]
+        summary = deps.gateway.narrate(
+            "summary",
+            {
+                "auc": result.metrics["auc"],
+                "fairness_verdict": (
+                    "within tolerance" if fairness.passes else "FLAGGED for review"
+                ),
+                "promotion_state": ("allowed" if eval_report.promoted else "BLOCKED"),
+            },
+        )
+        deps.cost.add_usage(summary.tokens, summary.cost_usd)
+        rs.shared["summary_narration"] = summary.text
+
+        deps.cost.stop()
+        deps.audit.record(
+            agent="orchestrator",
+            action="run_ended",
+            output_summary=(
+                f"status={rs.status}; "
+                f"promotion={'allowed' if eval_report.promoted else 'blocked'}"
+            ),
+        )
+        return {}
+
+    def _rejected_node(self, state: GraphState) -> dict:
+        rs = self._runs[state["run_id"]]
+        for step in rs.steps:
+            if step.status == STATUS_AWAITING:
+                step.status = "rejected"
+        rs.status = STATUS_REJECTED
+        rs.deps.cost.stop()
+        rs.deps.audit.record(
+            agent="orchestrator",
+            action="run_ended",
+            output_summary="Run stopped by human rejection; no promotion.",
+        )
+        return {}
+
+    # -- public API (unchanged surface) --------------------------------
+
+    def _config(self, run_id: str) -> dict:
+        return {"configurable": {"thread_id": run_id}}
 
     def start_run(
         self,
@@ -181,75 +352,17 @@ class Orchestrator:
             output_summary=f"controls active: {', '.join(GOVERNANCE_CONTROLS)}",
         )
 
-        # Pre-approval agents, then pause.
-        ProfilerAgent(deps).run(state)
-        EDAAgent(deps).run(state)
-        ModelerAgent(deps).run(state)  # sets status -> awaiting_approval
+        # Runs profiler -> eda -> modeler, then pauses at the approval interrupt.
+        self._graph.invoke(
+            {"run_id": run_id, "approved": None}, self._config(run_id)
+        )
         return state
 
     def approve(self, run_id: str, approved: bool) -> RunState:
         state = self._runs[run_id]
         assert state.deps is not None
-        deps = state.deps
-
-        deps.cost.record_decision(approved)
-        deps.audit.record(
-            agent="human_reviewer",
-            action="approval_decision",
-            level="gate",
-            output_summary=("APPROVED" if approved else "REJECTED") + " at model gate",
-        )
-
-        if not approved:
-            # Mark the paused Modeler step as rejected.
-            for step in state.steps:
-                if step.status == STATUS_AWAITING:
-                    step.status = "rejected"
-            state.status = STATUS_REJECTED
-            deps.cost.stop()
-            deps.audit.record(
-                agent="orchestrator",
-                action="run_ended",
-                output_summary="Run stopped by human rejection; no promotion.",
-            )
-            return state
-
-        # Approved: mark the gate step done, run validation, finalize.
-        for step in state.steps:
-            if step.status == STATUS_AWAITING:
-                step.status = "approved"
-
-        ValidatorAgent(deps).run(state)
-        eval_report = state.shared["eval_report"]
-        state.status = STATUS_COMPLETED if eval_report.promoted else STATUS_BLOCKED
-
-        # Final summary narration through the gateway.
-        result = state.shared["model_result"]
-        fairness = state.shared["fairness"]
-        summary = deps.gateway.narrate(
-            "summary",
-            {
-                "auc": result.metrics["auc"],
-                "fairness_verdict": (
-                    "within tolerance" if fairness.passes else "FLAGGED for review"
-                ),
-                "promotion_state": (
-                    "allowed" if eval_report.promoted else "BLOCKED"
-                ),
-            },
-        )
-        deps.cost.add_usage(summary.tokens, summary.cost_usd)
-        state.shared["summary_narration"] = summary.text
-
-        deps.cost.stop()
-        deps.audit.record(
-            agent="orchestrator",
-            action="run_ended",
-            output_summary=(
-                f"status={state.status}; "
-                f"promotion={'allowed' if eval_report.promoted else 'blocked'}"
-            ),
-        )
+        # Resume the graph from the approval interrupt with the human decision.
+        self._graph.invoke(Command(resume=approved), self._config(run_id))
         return state
 
     # -- helpers -------------------------------------------------------

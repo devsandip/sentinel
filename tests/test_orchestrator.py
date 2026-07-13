@@ -81,3 +81,14 @@ def test_unknown_question_raises():
     orch = Orchestrator()
     with pytest.raises(ValueError):
         orch.start_run("does_not_exist")
+
+
+def test_graph_dot_reflects_the_real_pipeline():
+    dot = Orchestrator().graph_dot()
+    assert dot.startswith("digraph")
+    # The fixed workflow path and the gate must be present.
+    for node in ("profiler", "eda", "modeler", "approval", "validator", "rejected"):
+        assert node in dot
+    # The approve/reject branch is rendered as conditional (dashed) edges.
+    assert "style=dashed" in dot
+    assert "human gate" in dot

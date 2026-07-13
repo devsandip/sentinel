@@ -131,6 +131,15 @@ def controls() -> None:
 def tab_pipeline(pub: dict, state) -> None:
     st.subheader("Agent pipeline")
     st.caption(f"Narration: {pub['narration_label']}")
+    with st.expander("Orchestration graph (LangGraph)", expanded=False):
+        st.graphviz_chart(orch.graph_dot(), width="stretch")
+        st.caption(
+            "A LangGraph workflow, not an autonomous agent. The graph is static: "
+            "fixed nodes and edges an examiner can read. The human gate is a "
+            "LangGraph interrupt; the approve/reject branch is the dashed edge. "
+            "Dynamic self-decomposition (orchestrator-workers) is deliberately "
+            "avoided so the control flow stays fixed and auditable."
+        )
     for step in pub["steps"]:
         icon = {
             "done": "[done]",
