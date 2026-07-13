@@ -21,3 +21,26 @@ agents:
     name: "Validator"
     role: "Runs fairness review and the eval gate; flags issues."
     tools: ["read_columns", "compute_fairness", "run_eval_gate", "retrieve_policy"]
+
+  # -- Analysis-platform agents (the linear analysis engine) ----------------
+  # Distinct from the credit-risk pipeline agents above so their broader scope
+  # does not loosen that pipeline's tight allow-lists.
+  - id: data_connector
+    name: "Data Connector"
+    role: "Governed data discovery + access: loads a registered dataset under a license check."
+    tools: ["load_dataset_frames"]
+
+  - id: data_profiler
+    name: "Dataset Profiler"
+    role: "Profiles any contract-matching dataset: types, missingness, cardinality, balance."
+    tools: ["read_columns", "profile_dataset"]
+
+  - id: quality_checker
+    name: "Quality Checker"
+    role: "Runs the data-quality expectation suite and gates on blocking failures."
+    tools: ["read_columns", "run_quality_checks"]
+
+  - id: feature_engineer
+    name: "Feature Engineer"
+    role: "Builds relational entity features with a pre-decision leakage guard."
+    tools: ["build_entity_features", "leakage_scan"]

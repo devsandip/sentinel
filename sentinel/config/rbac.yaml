@@ -42,3 +42,16 @@ agents:
   validator:
     # Validator needs the protected attributes to assess fairness.
     allow: ["*"]
+
+  # Analysis-platform agents operate over many registered datasets, so they read
+  # all non-restricted columns. The globally restricted PII columns
+  # (applicant_email, applicant_ssn) stay denied even here, proving the control
+  # holds in the generic engine too.
+  data_connector:
+    allow: ["*"]
+  data_profiler:
+    allow: ["*"]
+  quality_checker:
+    allow: ["*"]
+  feature_engineer:
+    allow: ["*"]
