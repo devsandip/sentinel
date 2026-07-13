@@ -41,13 +41,29 @@ def test_local_store_returns_scored_chunks():
     assert any("SR 11-7" in h.chunk.citation for h in hits)
 
 
-def test_pgvector_not_provisioned_raises():
-    store = PgVectorStore(dsn=None)
+def test_pgvector_unconfigured_raises_before_side_effects(monkeypatch):
+    # No connection env set -> raises cleanly without importing psycopg or
+    # calling Bedrock.
+    for var in (
+        "SENTINEL_PGVECTOR_DSN",
+        "SENTINEL_PGVECTOR_HOST",
+        "SENTINEL_PGVECTOR_SECRET_ARN",
+    ):
+        monkeypatch.delenv(var, raising=False)
     try:
-        store.search("anything")
+        PgVectorStore().search("anything")
         raise AssertionError("expected StoreNotProvisioned")
     except StoreNotProvisioned:
         pass
+
+
+def test_get_store_falls_back_to_local_when_unconfigured(monkeypatch):
+    monkeypatch.setenv("SENTINEL_VECTOR_STORE", "pgvector")
+    monkeypatch.delenv("SENTINEL_PGVECTOR_HOST", raising=False)
+    monkeypatch.delenv("SENTINEL_PGVECTOR_DSN", raising=False)
+    from sentinel.rag.store import get_store
+
+    assert get_store().backend == "local"
 
 
 def test_validator_attaches_citations_and_audits_retrieval():

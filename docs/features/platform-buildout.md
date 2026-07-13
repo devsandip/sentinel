@@ -1,9 +1,26 @@
 # Sentinel Platform Buildout — Proposal
 
-**Status:** all 13 items + both lead asks built. Two open toggles: provision the
-real AWS vector store (item 2 runs on the local store today), and deploy.
+**Status:** all 13 items + both lead asks built. The real AWS vector store is
+provisioned and ingested (item 2). One open toggle: deploy the platform build.
 **Author:** drafted for Sandip, 2026-07-13.
 **Source:** answers the 13 items and two lead asks in [docs/ideas.md](../ideas.md).
+
+## AWS vector store (item 2) — provisioned
+
+Real AWS is live. CloudFormation stack `sentinel-vectordb`
+(`deploy/aws/sentinel-vectordb.yaml`): RDS PostgreSQL 16 `db.t4g.micro` with
+pgvector, master password managed by RDS in Secrets Manager (never handled in
+plaintext), access locked by security group to the operator IP and the EB app
+instance. Embeddings via Bedrock Titan Embed Text v2 (1024 dims). The corpus (15
+chunks) is ingested; dense retrieval returns the four-fifths rule and Reg B for
+the fairness query.
+
+- Enable: `uv sync --extra pgvector`, set `SENTINEL_VECTOR_STORE=pgvector` plus
+  the `SENTINEL_PGVECTOR_*` vars (see `.env.example`). Default stays local, so the
+  app runs with or without it.
+- Re-ingest: `AWS_PROFILE=admin uv run --extra pgvector python scripts/ingest_vectordb.py`.
+- Cost: ~$13-15/mo (db.t4g.micro + 20 GB gp3 + minimal backup); Bedrock embed spend
+  negligible. Teardown: `aws cloudformation delete-stack --stack-name sentinel-vectordb`.
 
 ## Build progress (2026-07-13)
 
@@ -17,16 +34,16 @@ deployed):
 - **1** gateway as control point: routing, caching, Gateway Ledger.
 - **7** per-agent control envelopes + the live on/off toggle (headline demo).
 - **13** model/agent registry. **Lead ask A** adoption/utilization view.
-- **2** RAG + citations on a local vector store; the AWS pgvector adapter is
-  code-ready but NOT provisioned (awaits the RDS cost decision).
+- **2** RAG + citations. Real AWS provisioned: RDS pgvector + Bedrock Titan
+  embeddings, corpus ingested. Local store remains the default fallback.
 - **5** runnable MCP server (`python -m sentinel.mcp_server`).
 - **6** memory (short-term context + long-term precedent) with retention labels.
 - **4** agent runtime lifecycle boundary.
 - **8** OpenTelemetry tracing (Traces tab) + promptfoo/Ragas eval suites in
   `evals/` (runnable with Node / an API key; not wired into pytest).
 
-Two remaining toggles, both requiring an explicit decision: provision the real
-AWS RDS pgvector store for item 2, and push/deploy the platform build.
+One remaining toggle, requiring an explicit decision: push/deploy the platform
+build. (The AWS vector store is provisioned; see the section above.)
 
 ---
 

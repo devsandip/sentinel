@@ -29,6 +29,11 @@ mcp = [
 evals = [
     "ragas>=0.2",
 ]
+# Real-AWS vector store: RDS pgvector + Bedrock Titan embeddings.
+pgvector = [
+    "psycopg[binary]>=3.2",
+    "boto3>=1.34",
+]
 
 [tool.ruff]
 line-length = 100

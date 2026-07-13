@@ -1,0 +1,99 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  Sentinel vector store: RDS PostgreSQL with pgvector for the governed knowledge
+  corpus (ideas.md item 2). Small single-AZ db.t4g.micro. The master password is
+  generated and managed by RDS in Secrets Manager (never handled in plaintext).
+  Access is locked by security group to the ingest IP and the Elastic Beanstalk
+  app instance.
+
+Parameters:
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Default: vpc-0d932645d28c2be7f
+  SubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: At least two subnets across AZs for the DB subnet group.
+  IngestCidr:
+    Type: String
+    Description: CIDR allowed to connect for ingestion (your public IP /32).
+  EbSecurityGroup:
+    Type: String
+    Description: The Elastic Beanstalk instance security group, allowed to query.
+    Default: sg-07ded424020bac52f
+  DBName:
+    Type: String
+    Default: sentinel
+  MasterUsername:
+    Type: String
+    Default: sentinel_admin
+  EngineVersion:
+    Type: String
+    Default: "16.14"
+
+Resources:
+  DBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Sentinel vector DB access (ingest IP + EB instance)
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          CidrIp: !Ref IngestCidr
+          Description: Ingestion from the operator IP
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          SourceSecurityGroupId: !Ref EbSecurityGroup
+          Description: Runtime queries from the Elastic Beanstalk app
+      Tags:
+        - Key: Project
+          Value: sentinel
+
+  DBSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Sentinel vector DB subnet group
+      SubnetIds: !Ref SubnetIds
+      Tags:
+        - Key: Project
+          Value: sentinel
+
+  DBInstance:
+    Type: AWS::RDS::DBInstance
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      DBInstanceIdentifier: sentinel-vectordb
+      Engine: postgres
+      EngineVersion: !Ref EngineVersion
+      DBInstanceClass: db.t4g.micro
+      AllocatedStorage: "20"
+      StorageType: gp3
+      StorageEncrypted: true
+      DBName: !Ref DBName
+      MasterUsername: !Ref MasterUsername
+      ManageMasterUserPassword: true
+      PubliclyAccessible: true
+      MultiAZ: false
+      BackupRetentionPeriod: 1
+      DeletionProtection: false
+      DBSubnetGroupName: !Ref DBSubnetGroup
+      VPCSecurityGroups:
+        - !Ref DBSecurityGroup
+      Tags:
+        - Key: Project
+          Value: sentinel
+
+Outputs:
+  Endpoint:
+    Description: RDS endpoint address
+    Value: !GetAtt DBInstance.Endpoint.Address
+  Port:
+    Value: !GetAtt DBInstance.Endpoint.Port
+  DBName:
+    Value: !Ref DBName
+  MasterUserSecretArn:
+    Description: Secrets Manager ARN holding the master credentials
+    Value: !GetAtt DBInstance.MasterUserSecret.SecretArn
