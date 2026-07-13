@@ -34,3 +34,8 @@ def load_evals() -> dict[str, Any]:
 @cache
 def load_agents() -> dict[str, Any]:
     return _load("agents.yaml")
+
+
+@cache
+def load_personas() -> dict[str, Any]:
+    return _load("personas.yaml")

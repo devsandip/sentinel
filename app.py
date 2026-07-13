@@ -12,6 +12,7 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
+from sentinel.harness.identity import all_personas, default_persona, get_persona
 from sentinel.harness.model_card import ModelCard, render_markdown, render_pdf
 from sentinel.orchestrator import (
     STATUS_AWAITING,
@@ -93,7 +94,7 @@ def header() -> None:
         )
 
 
-def controls() -> None:
+def controls(persona) -> None:
     questions = orch.questions()
     labels = {q["id"]: q["label"] for q in questions}
     c1, c2, c3 = st.columns([4, 2, 1])
@@ -120,9 +121,16 @@ def controls() -> None:
     with c3:
         st.write("")
         st.write("")
-        if st.button("Run", type="primary", width="stretch"):
+        if st.button(
+            "Run", type="primary", width="stretch", disabled=not persona.can_run
+        ):
             state = orch.start_run(qid, narration_mode=mode)
             st.session_state.run_id = state.run_id
+    if not persona.can_run:
+        st.caption(
+            f"Your role ({persona.name}) is read-only and cannot run analyses. "
+            "Switch to an Analyst or MRM Approver to run."
+        )
 
 
 # --------------------------------------------------------------------------
@@ -154,13 +162,25 @@ def tab_pipeline(pub: dict, state) -> None:
             if step["fell_back"]:
                 st.warning(f"Live narration fell back to scripted: {step['fallback_reason']}")
             if step["status"] == "awaiting_approval":
-                st.info("Human-in-the-loop gate: approve to promote this model, or reject.")
+                persona = get_persona(
+                    st.session_state.get("persona_id", default_persona().id)
+                )
+                st.info(
+                    "Human-in-the-loop gate: approve to promote this model, or "
+                    f"reject. Acting as **{persona.name}** — "
+                    + (
+                        "holds promotion authority."
+                        if persona.can_approve
+                        else "does NOT hold promotion authority (segregation of "
+                        "duties); an Approve attempt will be denied and logged."
+                    )
+                )
                 a, r, _ = st.columns([1, 1, 4])
                 if a.button("Approve", type="primary"):
-                    orch.approve(state.run_id, approved=True)
+                    orch.approve(state.run_id, approved=True, actor=persona)
                     st.rerun()
                 if r.button("Reject"):
-                    orch.approve(state.run_id, approved=False)
+                    orch.approve(state.run_id, approved=False, actor=persona)
                     st.rerun()
     if pub.get("summary_narration"):
         st.success(pub["summary_narration"])
@@ -203,17 +223,21 @@ def tab_results(pub: dict) -> None:
 
 def tab_audit(pub: dict) -> None:
     st.subheader("Audit log (append-only)")
-    st.caption("Every agent action, incl. one RBAC denial and one PII redaction.")
+    st.caption(
+        "Every agent action, incl. one RBAC denial and one PII redaction. Each "
+        "event is stamped with the acting identity and the policy version."
+    )
     rows = []
     for e in pub["audit"]:
         rows.append(
             {
                 "seq": e["seq"],
                 "level": e["level"],
-                "agent": e["agent"],
+                "actor": e.get("actor", e["agent"]),
                 "action": e["action"],
                 "summary": e["output_summary"],
                 "data_touched": ", ".join(e["data_touched"]),
+                "policy": e.get("policy_version", ""),
             }
         )
     df = pd.DataFrame(rows)
@@ -416,20 +440,44 @@ def render_platform() -> None:
 # --------------------------------------------------------------------------
 # Layout
 # --------------------------------------------------------------------------
+def persona_picker():
+    """Sidebar identity selector. No real auth; role-aware governance demo."""
+    personas = all_personas()
+    ids = [p.id for p in personas]
+    labels = {p.id: p.name for p in personas}
+    default_id = st.session_state.get("persona_id", default_persona().id)
+    chosen = st.sidebar.selectbox(
+        "Acting as",
+        options=ids,
+        index=ids.index(default_id),
+        format_func=lambda k: labels[k],
+    )
+    st.session_state.persona_id = chosen
+    persona = get_persona(chosen)
+    caps = []
+    caps.append("run" if persona.can_run else "no-run")
+    caps.append("approve" if persona.can_approve else "no-approve")
+    if persona.read_only:
+        caps.append("read-only")
+    if persona.can_toggle_controls:
+        caps.append("toggle-controls")
+    st.sidebar.caption(f"{persona.role} · {', '.join(caps)}")
+    st.sidebar.caption(persona.description)
+    return persona
+
+
 header()
 st.divider()
 
 section = st.sidebar.radio("Section", ["Run analysis", "Platform"], index=0)
-st.sidebar.caption(
-    "Platform holds the reusable governance assets: playbooks, agent templates, "
-    "and the pattern catalog."
-)
+st.sidebar.divider()
+persona = persona_picker()
 
 if section == "Platform":
     render_platform()
     st.stop()
 
-controls()
+controls(persona)
 st.divider()
 
 run_id = st.session_state.get("run_id")

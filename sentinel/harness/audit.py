@@ -36,6 +36,8 @@ class AuditEvent:
     output_summary: str
     tokens: int
     cost: float
+    actor: str = ""  # the acting identity (agent id, or a human role at the gate)
+    policy_version: str = ""  # the governance policy version in effect
     extra: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -45,10 +47,17 @@ class AuditEvent:
 class AuditLog:
     """In-memory + JSONL append-only log for one run."""
 
-    def __init__(self, run_id: str, persist: bool = True, clock=None) -> None:
+    def __init__(
+        self,
+        run_id: str,
+        persist: bool = True,
+        clock=None,
+        policy_version: str = "",
+    ) -> None:
         self.run_id = run_id
         self._events: list[AuditEvent] = []
         self._persist = persist
+        self._policy_version = policy_version
         # Injectable clock so tests are deterministic if needed.
         self._clock = clock or (lambda: datetime.now(UTC))
         if persist:
@@ -68,6 +77,7 @@ class AuditLog:
         output_summary: str = "",
         tokens: int = 0,
         cost: float = 0.0,
+        actor: str = "",
         extra: dict[str, Any] | None = None,
     ) -> AuditEvent:
         event = AuditEvent(
@@ -82,6 +92,8 @@ class AuditLog:
             output_summary=output_summary,
             tokens=tokens,
             cost=round(float(cost), 6),
+            actor=actor or agent,  # default the actor to the acting agent
+            policy_version=self._policy_version,
             extra=dict(extra or {}),
         )
         self._events.append(event)

@@ -34,6 +34,7 @@ from .gateway.model_gateway import ANTHROPIC, TEMPLATED, ModelGateway
 from .harness.audit import AuditLog
 from .harness.cost import CostTracker
 from .harness.guardrails import Guardrails
+from .harness.identity import Persona, policy_version
 from .harness.rbac import RBAC
 from .ml.data import load_dataset
 
@@ -239,15 +240,25 @@ class Orchestrator:
         return {}
 
     def _approval_node(self, state: GraphState) -> dict:
-        """The human gate. interrupt() pauses here until approve() resumes."""
+        """The human gate. interrupt() pauses here until approve() resumes.
+
+        The resume value carries the decision and the acting role label, so the
+        audit event records who approved, under which policy version.
+        """
         rs = self._runs[state["run_id"]]
         decision = interrupt({"gate": "human_approval", "run_id": rs.run_id})
-        approved = bool(decision)
+        if isinstance(decision, dict):
+            approved = bool(decision.get("approved"))
+            actor = str(decision.get("actor") or "human_reviewer")
+        else:  # backward-compatible: a bare bool
+            approved = bool(decision)
+            actor = "human_reviewer"
         rs.deps.cost.record_decision(approved)
         rs.deps.audit.record(
             agent="human_reviewer",
             action="approval_decision",
             level="gate",
+            actor=actor,
             output_summary=("APPROVED" if approved else "REJECTED") + " at model gate",
         )
         return {"approved": approved}
@@ -322,7 +333,7 @@ class Orchestrator:
         protected = question["protected_attribute"]
         run_id = uuid.uuid4().hex[:12]
 
-        audit = AuditLog(run_id=run_id)
+        audit = AuditLog(run_id=run_id, policy_version=policy_version())
         cost = CostTracker(narration_mode=_provider_for(narration_mode))
         deps = AgentDeps(
             dataset=load_dataset(protected),
@@ -358,11 +369,37 @@ class Orchestrator:
         )
         return state
 
-    def approve(self, run_id: str, approved: bool) -> RunState:
+    def approve(
+        self,
+        run_id: str,
+        approved: bool,
+        actor: Persona | None = None,
+    ) -> RunState:
+        """Resume the run with a human decision.
+
+        If an acting persona is given and it lacks promotion authority, the
+        attempt is denied and audited, and the run stays at the gate. This is the
+        role-aware, segregation-of-duties control: only an MRM Approver (or Admin)
+        can promote.
+        """
         state = self._runs[run_id]
         assert state.deps is not None
-        # Resume the graph from the approval interrupt with the human decision.
-        self._graph.invoke(Command(resume=approved), self._config(run_id))
+
+        if actor is not None and approved and not actor.can_approve:
+            state.deps.audit.record(
+                agent="human_reviewer",
+                action="approval_denied",
+                level="blocked",
+                actor=actor.id,
+                output_summary=(
+                    f"Role '{actor.name}' lacks promotion authority; "
+                    "approval refused. Requires the MRM Approver."
+                ),
+            )
+            return state  # still awaiting; no promotion
+
+        resume = {"approved": approved, "actor": actor.id if actor else None}
+        self._graph.invoke(Command(resume=resume), self._config(run_id))
         return state
 
     # -- helpers -------------------------------------------------------

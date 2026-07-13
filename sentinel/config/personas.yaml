@@ -1,0 +1,63 @@
+# Identity personas and their capabilities (ideas.md item 9).
+# No real auth: the UI picks a persona to demonstrate role-aware governance.
+# Least privilege and segregation of duties are the point: only the MRM Approver
+# (and Admin) hold promotion authority at the human gate; the Auditor is
+# read-only; only the Admin may toggle controls in demo mode.
+
+policy_version: "2026.07-rbac-v1"
+
+personas:
+  - id: analyst
+    name: "Data Scientist / Analyst"
+    role: "First line"
+    can_run: true
+    can_approve: false
+    can_toggle_controls: false
+    read_only: false
+    description: >
+      Builds and runs analyses. Cannot promote a model: promotion authority sits
+      with the MRM Approver (segregation of duties).
+
+  - id: model_validator
+    name: "Model Validator"
+    role: "Second line (MRM)"
+    can_run: true
+    can_approve: false
+    can_toggle_controls: false
+    read_only: false
+    description: >
+      Independently reviews fairness and eval results and flags issues. Validates
+      but does not hold the promotion sign-off, which is the MRM Approver's.
+
+  - id: mrm_approver
+    name: "MRM Approver"
+    role: "Second line (MRM), approval authority"
+    can_run: true
+    can_approve: true
+    can_toggle_controls: false
+    read_only: false
+    description: >
+      Holds promotion authority at the human gate. Approves or rejects a proposed
+      model. This is the four-eyes control.
+
+  - id: auditor
+    name: "Internal Auditor"
+    role: "Third line"
+    can_run: false
+    can_approve: false
+    can_toggle_controls: false
+    read_only: true
+    description: >
+      Read-only access to the audit trail, model card, and evidence. Cannot run
+      analyses or approve anything.
+
+  - id: admin
+    name: "Platform Admin"
+    role: "Platform"
+    can_run: true
+    can_approve: true
+    can_toggle_controls: true
+    read_only: false
+    description: >
+      Platform administrator. Can run and approve, and is the only role that may
+      toggle a control off in demo mode (every toggle is itself audited).
