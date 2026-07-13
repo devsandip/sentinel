@@ -28,6 +28,7 @@ from .agents.base import AgentDeps
 from .agents.eda import EDAAgent
 from .agents.modeler import ModelerAgent
 from .agents.profiler import ProfilerAgent
+from .agents.runtime import AgentRuntime
 from .agents.validator import ValidatorAgent
 from .config import load_questions
 from .gateway.model_gateway import ANTHROPIC, TEMPLATED, ModelGateway
@@ -177,6 +178,7 @@ class Orchestrator:
     def __init__(self) -> None:
         self._runs: dict[str, RunState] = {}
         self._checkpointer = MemorySaver()
+        self._runtime = AgentRuntime()
         self._graph = self._build_graph()
 
     # -- lookups -------------------------------------------------------
@@ -247,17 +249,17 @@ class Orchestrator:
 
     def _profiler_node(self, state: GraphState) -> dict:
         rs = self._runs[state["run_id"]]
-        ProfilerAgent(rs.deps).run(rs)
+        self._runtime.run(ProfilerAgent, rs.deps, rs)
         return {}
 
     def _eda_node(self, state: GraphState) -> dict:
         rs = self._runs[state["run_id"]]
-        EDAAgent(rs.deps).run(rs)
+        self._runtime.run(EDAAgent, rs.deps, rs)
         return {}
 
     def _modeler_node(self, state: GraphState) -> dict:
         rs = self._runs[state["run_id"]]
-        ModelerAgent(rs.deps).run(rs)  # sets status -> awaiting_approval
+        self._runtime.run(ModelerAgent, rs.deps, rs)  # sets status -> awaiting_approval
         return {}
 
     def _approval_node(self, state: GraphState) -> dict:
@@ -305,7 +307,7 @@ class Orchestrator:
             if step.status == STATUS_AWAITING:
                 step.status = "approved"
 
-        ValidatorAgent(deps).run(rs)
+        self._runtime.run(ValidatorAgent, deps, rs)
         eval_report = rs.shared["eval_report"]
         rs.status = STATUS_COMPLETED if eval_report.promoted else STATUS_BLOCKED
 
