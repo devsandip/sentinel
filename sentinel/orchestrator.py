@@ -32,6 +32,7 @@ from .agents.validator import ValidatorAgent
 from .config import load_questions
 from .gateway.model_gateway import ANTHROPIC, TEMPLATED, ModelGateway
 from .harness.audit import AuditLog
+from .harness.controls import ALL_ENABLED, CONTROL_HUMAN_GATE, ControlSettings
 from .harness.cost import CostTracker
 from .harness.guardrails import Guardrails
 from .harness.identity import Persona, policy_version
@@ -82,6 +83,7 @@ class RunState:
     status: str = STATUS_RUNNING
     steps: list[StepRecord] = field(default_factory=list)
     shared: dict[str, Any] = field(default_factory=dict)
+    controls: ControlSettings = ALL_ENABLED
     # Harness handles (not serialized).
     deps: AgentDeps | None = field(default=None, repr=False)
 
@@ -135,6 +137,8 @@ class RunState:
             "gateway_ledger": (
                 self.deps.gateway.ledger_dicts() if self.deps else []
             ),
+            "controls_disabled": self.controls.disabled_names(),
+            "ungoverned": self.controls.any_disabled,
         }
 
 
@@ -249,6 +253,17 @@ class Orchestrator:
         audit event records who approved, under which policy version.
         """
         rs = self._runs[state["run_id"]]
+        # Human gate disabled (demo toggle): auto-approve without pausing.
+        if not rs.controls.is_enabled(CONTROL_HUMAN_GATE):
+            rs.deps.cost.record_decision(True)
+            rs.deps.audit.record(
+                agent="human_reviewer",
+                action="approval_auto",
+                level="gate",
+                actor="system (human gate disabled)",
+                output_summary="Human gate DISABLED; auto-approved with no review.",
+            )
+            return {"approved": True}
         decision = interrupt({"gate": "human_approval", "run_id": rs.run_id})
         if isinstance(decision, dict):
             approved = bool(decision.get("approved"))
@@ -331,6 +346,8 @@ class Orchestrator:
         question_id: str,
         narration_mode: str = "scripted",
         seed: int = 42,
+        controls: ControlSettings = ALL_ENABLED,
+        actor: Persona | None = None,
     ) -> RunState:
         question = self._resolve_question(question_id)
         protected = question["protected_attribute"]
@@ -341,10 +358,11 @@ class Orchestrator:
         deps = AgentDeps(
             dataset=load_dataset(protected),
             audit=audit,
-            rbac=RBAC(audit),
-            guardrails=Guardrails(audit),
+            rbac=RBAC(audit, controls=controls),
+            guardrails=Guardrails(audit, controls=controls),
             gateway=ModelGateway(provider=_provider_for(narration_mode)),
             cost=cost,
+            controls=controls,
         )
         state = RunState(
             run_id=run_id,
@@ -354,17 +372,32 @@ class Orchestrator:
             protected_attribute=protected,
             narration_mode=narration_mode,
             seed=seed,
+            controls=controls,
             deps=deps,
         )
         self._runs[run_id] = state
 
         cost.start()
+        active = "all controls active"
+        if controls.any_disabled:
+            active = "UNGOVERNED demo run; disabled: " + ", ".join(
+                controls.disabled_names()
+            )
         audit.record(
             agent="orchestrator",
             action="run_started",
             inputs_summary=f"question={question_id}, mode={narration_mode}",
-            output_summary=f"controls active: {', '.join(GOVERNANCE_CONTROLS)}",
+            output_summary=active,
         )
+        # Disabling a control is itself audited (honesty rule 1).
+        for name in controls.disabled_names():
+            audit.record(
+                agent="orchestrator",
+                action="control_disabled",
+                level="blocked",
+                actor=actor.id if actor else "admin",
+                output_summary=f"Control DISABLED for this run: {name}",
+            )
 
         # Runs profiler -> eda -> modeler, then pauses at the approval interrupt.
         self._graph.invoke(

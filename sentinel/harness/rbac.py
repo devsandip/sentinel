@@ -12,6 +12,7 @@ from dataclasses import dataclass
 
 from ..config import load_rbac
 from .audit import LEVEL_BLOCKED, AuditLog
+from .controls import ALL_ENABLED, CONTROL_RBAC, ControlSettings
 
 
 @dataclass
@@ -23,11 +24,17 @@ class AccessDecision:
 
 
 class RBAC:
-    def __init__(self, audit: AuditLog, policy: dict | None = None) -> None:
+    def __init__(
+        self,
+        audit: AuditLog,
+        policy: dict | None = None,
+        controls: ControlSettings = ALL_ENABLED,
+    ) -> None:
         self._audit = audit
         self._policy = policy or load_rbac()
         self._restricted = set(self._policy.get("restricted_columns", []))
         self._agents = self._policy.get("agents", {})
+        self._controls = controls
 
     def _allowed_for(self, agent: str) -> set[str] | None:
         """Return the allow-set, or None meaning 'all non-restricted'."""
@@ -50,7 +57,13 @@ class RBAC:
         return AccessDecision(agent, list(columns), allowed, denied)
 
     def enforce(self, agent: str, columns: list[str]) -> list[str]:
-        """Log any denials and return the permitted columns."""
+        """Log any denials and return the permitted columns.
+
+        If RBAC is disabled for the run (demo toggle), all requested columns are
+        returned with no denial. The disabling itself is audited at run start.
+        """
+        if not self._controls.is_enabled(CONTROL_RBAC):
+            return list(columns)
         decision = self.check(agent, columns)
         if decision.denied:
             self._audit.record(

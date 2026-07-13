@@ -10,7 +10,8 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
-from ..harness.eval_gate import run_eval_gate
+from ..harness.controls import CONTROL_EVAL_GATE
+from ..harness.eval_gate import EvalReport, run_eval_gate
 from ..harness.model_card import build_model_card
 from ..ml.fairness import compute_fairness
 from .base import Agent
@@ -47,9 +48,19 @@ class ValidatorAgent(Agent):
             generated_at=datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC"),
         )
         payload = assemble_payload(result, fairness, card)
-        eval_report = self.use_tool(
-            "run_eval_gate", run_eval_gate, payload, self.deps.audit, self.id
-        )
+        if self.deps.controls.is_enabled(CONTROL_EVAL_GATE):
+            eval_report = self.use_tool(
+                "run_eval_gate", run_eval_gate, payload, self.deps.audit, self.id
+            )
+        else:
+            # Eval gate disabled (demo toggle): no golden checks run; the model
+            # is allowed to promote unchecked. The disabling is audited at start.
+            eval_report = EvalReport(results=[], passed=0, failed=0, promoted=True)
+            self.log(
+                "eval_gate_skipped",
+                level="gate",
+                output_summary="Eval gate DISABLED; promotion allowed unchecked.",
+            )
 
         payload["evals"] = eval_report.to_dict()
         state.shared["fairness"] = fairness

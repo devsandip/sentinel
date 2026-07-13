@@ -13,6 +13,7 @@ from typing import Any
 
 from ..gateway.model_gateway import Generation, ModelGateway
 from ..harness.audit import AuditLog
+from ..harness.controls import ALL_ENABLED, CONTROL_PII, ControlSettings
 from ..harness.cost import CostTracker
 from ..harness.guardrails import Guardrails
 from ..harness.pii import redact
@@ -28,6 +29,7 @@ class AgentDeps:
     guardrails: Guardrails
     gateway: ModelGateway
     cost: CostTracker
+    controls: ControlSettings = ALL_ENABLED
 
 
 class Agent:
@@ -51,7 +53,12 @@ class Agent:
 
     def redact_text(self, text: str) -> str:
         """Scrub PII before any text would reach an LLM. Logs if it fires."""
-        return redact(text, self.id, self.deps.audit)
+        return redact(
+            text,
+            self.id,
+            self.deps.audit,
+            enabled=self.deps.controls.is_enabled(CONTROL_PII),
+        )
 
     def narrate(self, step: str, context: dict[str, Any]) -> Generation:
         gen = self.deps.gateway.narrate(step, context)

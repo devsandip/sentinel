@@ -12,6 +12,7 @@ from typing import Any
 
 from ..config import load_agents
 from .audit import LEVEL_BLOCKED, AuditLog
+from .controls import ALL_ENABLED, CONTROL_GUARDRAILS, ControlSettings
 
 
 class ToolNotAllowed(Exception):
@@ -19,8 +20,14 @@ class ToolNotAllowed(Exception):
 
 
 class Guardrails:
-    def __init__(self, audit: AuditLog, registry: dict | None = None) -> None:
+    def __init__(
+        self,
+        audit: AuditLog,
+        registry: dict | None = None,
+        controls: ControlSettings = ALL_ENABLED,
+    ) -> None:
         self._audit = audit
+        self._controls = controls
         agents = (registry or load_agents())["agents"]
         self._allowed: dict[str, set[str]] = {
             a["id"]: set(a.get("tools", [])) for a in agents
@@ -32,6 +39,10 @@ class Guardrails:
     def call(
         self, agent: str, tool: str, fn: Callable[..., Any], *args: Any, **kwargs: Any
     ) -> Any:
+        # If guardrails are disabled for the run (demo toggle), skip the
+        # allow-list check. The disabling itself is audited at run start.
+        if not self._controls.is_enabled(CONTROL_GUARDRAILS):
+            return fn(*args, **kwargs)
         if not self.is_allowed(agent, tool):
             self._audit.record(
                 agent=agent,

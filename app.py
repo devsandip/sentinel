@@ -12,6 +12,7 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
+from sentinel.harness.controls import CONTROL_CATALOG, ControlSettings, from_disabled
 from sentinel.harness.identity import all_personas, default_persona, get_persona
 from sentinel.harness.model_card import ModelCard, render_markdown, render_pdf
 from sentinel.orchestrator import (
@@ -121,16 +122,48 @@ def controls(persona) -> None:
     with c3:
         st.write("")
         st.write("")
-        if st.button(
+        run_clicked = st.button(
             "Run", type="primary", width="stretch", disabled=not persona.can_run
-        ):
-            state = orch.start_run(qid, narration_mode=mode)
-            st.session_state.run_id = state.run_id
+        )
     if not persona.can_run:
         st.caption(
             f"Your role ({persona.name}) is read-only and cannot run analyses. "
             "Switch to an Analyst or MRM Approver to run."
         )
+
+    settings = _control_toggles(persona)
+
+    if run_clicked:
+        state = orch.start_run(
+            qid, narration_mode=mode, controls=settings, actor=persona
+        )
+        st.session_state.run_id = state.run_id
+
+
+def _control_toggles(persona) -> ControlSettings:
+    """Admin-only panel to disable a control for the next run (demo device)."""
+    if not persona.can_toggle_controls:
+        return ControlSettings()
+    with st.expander("Controls (Admin) — disable a control to prove it is real"):
+        st.caption(
+            "Turn a control off and re-run to watch the failure it prevents. "
+            "Disabling a control is itself audited, and the run is marked "
+            "UNGOVERNED. Demo only."
+        )
+        disabled = []
+        for cid, name, desc, breaks in CONTROL_CATALOG:
+            off = st.checkbox(
+                f"Disable {name}",
+                key=f"ctrl_off_{cid}",
+                help=f"{desc} If off: {breaks}",
+            )
+            if off:
+                disabled.append(cid)
+                st.markdown(
+                    f"<span class='muted'>&nbsp;&nbsp;→ {breaks}</span>",
+                    unsafe_allow_html=True,
+                )
+        return from_disabled(disabled)
 
 
 # --------------------------------------------------------------------------
@@ -148,6 +181,19 @@ def tab_pipeline(pub: dict, state) -> None:
             "Dynamic self-decomposition (orchestrator-workers) is deliberately "
             "avoided so the control flow stays fixed and auditable."
         )
+
+    # Control envelope: the guardrails wrapped around this run, on or off.
+    disabled = set(pub.get("controls_disabled", []))
+    chips = []
+    for _cid, name, _desc, _breaks in CONTROL_CATALOG:
+        on = name not in disabled
+        cls = "pill-in_use" if on else "pill-avoided"
+        chips.append(f"<span class='pill {cls}'>{name}: {'on' if on else 'OFF'}</span>")
+    st.markdown(
+        "<span class='muted'>Control envelope:</span> " + " ".join(chips),
+        unsafe_allow_html=True,
+    )
+
     for step in pub["steps"]:
         icon = {
             "done": "[done]",
@@ -536,6 +582,13 @@ else:
         STATUS_REJECTED: "Rejected by the human reviewer.",
     }.get(pub["status"], pub["status"])
     st.caption(f"Run {pub['run_id']} · {status_note}")
+    if pub.get("ungoverned"):
+        st.error(
+            "UNGOVERNED demo run — controls disabled: "
+            + ", ".join(pub["controls_disabled"])
+            + ". This is not a governed run; the disabling is recorded in the "
+            "audit log. Re-run with controls on for a governed analysis."
+        )
 
     tabs = st.tabs(
         [

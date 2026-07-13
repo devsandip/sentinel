@@ -53,8 +53,14 @@ def scan(text: str) -> RedactionResult:
     )
 
 
-def redact(text: str, agent: str, audit: AuditLog) -> str:
-    """Redact PII and log the event if anything was found."""
+def redact(text: str, agent: str, audit: AuditLog, enabled: bool = True) -> str:
+    """Redact PII and log the event if anything was found.
+
+    If PII redaction is disabled for the run (demo toggle), the text passes
+    through unchanged. The disabling itself is audited at run start.
+    """
+    if not enabled:
+        return text
     result = scan(text)
     if result.total:
         audit.record(
