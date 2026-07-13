@@ -23,6 +23,7 @@ from sentinel.orchestrator import (
     Orchestrator,
 )
 from sentinel.platform import (
+    adoption_metrics,
     agent_registry,
     all_patterns,
     all_templates,
@@ -574,6 +575,39 @@ def render_registry() -> None:
     )
 
 
+def render_adoption() -> None:
+    st.subheader("Adoption & utilization")
+    st.markdown(
+        "<span class='muted'>Who uses what agent, how often, and with what "
+        "outcome. Aggregated over the registry plus seeded weekly history. The "
+        "platform-stage signal: is the platform compounding, not just "
+        "accumulating one-offs.</span>",
+        unsafe_allow_html=True,
+    )
+    m = adoption_metrics()
+    a, b, c, d = st.columns(4)
+    a.metric("Total runs", m["total_runs"], f"{m['live_session_runs']} this session")
+    b.metric("Promotion rate", f"{int(m['promotion_rate'] * 100)}%")
+    c.metric("Human-override rate", f"{int(m['override_rate'] * 100)}%")
+    d.metric("Template coverage", f"{int(m['template_coverage'] * 100)}%")
+
+    st.markdown("**Agent utilization** (invocations across all runs)")
+    st.bar_chart(
+        pd.DataFrame(
+            {"invocations": m["per_agent_invocations"]}
+        )
+    )
+
+    st.markdown("**Runs per week** (seeded demo history)")
+    wk = pd.DataFrame(m["weekly"], columns=["week", "runs"]).set_index("week")
+    st.bar_chart(wk)
+    st.caption(
+        "Seeded weekly history is labeled demo telemetry; the totals above include "
+        "live runs completed this session. Enterprise: this view reads the "
+        "platform's real run store."
+    )
+
+
 # --------------------------------------------------------------------------
 # Layout
 # --------------------------------------------------------------------------
@@ -607,7 +641,7 @@ header()
 st.divider()
 
 section = st.sidebar.radio(
-    "Section", ["Run analysis", "Platform", "Registry"], index=0
+    "Section", ["Run analysis", "Platform", "Registry", "Adoption"], index=0
 )
 st.sidebar.divider()
 persona = persona_picker()
@@ -618,6 +652,10 @@ if section == "Platform":
 
 if section == "Registry":
     render_registry()
+    st.stop()
+
+if section == "Adoption":
+    render_adoption()
     st.stop()
 
 controls(persona)

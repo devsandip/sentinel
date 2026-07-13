@@ -11,6 +11,7 @@ with the app, rendered in the Platform surface, and downloadable as a pack.
 
 from __future__ import annotations
 
+from .adoption import adoption_metrics
 from .patterns import PATTERNS, Pattern, all_patterns, get_pattern
 from .playbooks import Playbook, get_playbook, load_playbooks
 from .registry import agent_registry, model_versions, register_model
@@ -40,4 +41,5 @@ __all__ = [
     "model_versions",
     "agent_registry",
     "register_model",
+    "adoption_metrics",
 ]
