@@ -1,0 +1,44 @@
+# Eval-as-CI-gate: golden checks the final run payload must satisfy before a
+# model can be promoted. Each check names a type the eval_gate knows how to
+# evaluate against the assembled payload. A failing check blocks promotion.
+
+checks:
+  - id: auc_computed
+    description: "AUC is present and above a minimum floor."
+    type: metric_min
+    path: "model.metrics.auc"
+    min: 0.6
+
+  - id: accuracy_present
+    description: "Accuracy metric is present."
+    type: metric_present
+    path: "model.metrics.accuracy"
+
+  - id: confusion_complete
+    description: "Confusion matrix has all four cells."
+    type: keys_present
+    path: "model.confusion"
+    keys: ["tn", "fp", "fn", "tp"]
+
+  - id: fairness_section_present
+    description: "A fairness assessment with a disparity ratio is present."
+    type: metric_present
+    path: "fairness.disparity_ratio"
+
+  - id: protected_excluded
+    description: "The protected attribute was excluded from model features."
+    type: non_empty
+    path: "model.excluded_features"
+
+  - id: model_card_sections
+    description: "The model card contains all required sections."
+    type: keys_present
+    path: "model_card"
+    keys:
+      - purpose
+      - data_lineage
+      - methodology
+      - performance
+      - fairness
+      - limitations
+      - governance

@@ -1,0 +1,44 @@
+# Role-based access control: which columns each agent may read.
+# Anything not listed is denied and logged. The synthetic PII columns
+# (applicant_email, applicant_ssn) are restricted from every agent to
+# demonstrate a denied access in the audit log.
+
+restricted_columns:
+  - applicant_email
+  - applicant_ssn
+
+agents:
+  profiler:
+    # Profiler sees structural columns to assess data quality, but NOT
+    # the raw personal_status_sex field (a proxy for a protected attribute).
+    allow:
+      - checking_status
+      - duration_months
+      - credit_history
+      - purpose
+      - credit_amount
+      - savings_status
+      - employment_since
+      - installment_rate
+      - other_debtors
+      - residence_since
+      - property_type
+      - age_years
+      - other_installment_plans
+      - housing
+      - existing_credits
+      - job
+      - num_dependents
+      - telephone
+      - foreign_worker
+      - credit_risk
+
+  eda:
+    allow: ["*"]  # EDA may read all non-restricted columns
+
+  modeler:
+    allow: ["*"]
+
+  validator:
+    # Validator needs the protected attributes to assess fairness.
+    allow: ["*"]
