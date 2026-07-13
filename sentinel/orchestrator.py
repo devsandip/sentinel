@@ -132,6 +132,9 @@ class RunState:
             "evals": payload.get("evals"),
             "audit": audit.as_dicts() if audit else [],
             "cost": cost.snapshot() if cost else {},
+            "gateway_ledger": (
+                self.deps.gateway.ledger_dicts() if self.deps else []
+            ),
         }
 
 

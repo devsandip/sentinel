@@ -319,6 +319,48 @@ def tab_cost(pub: dict) -> None:
         st.dataframe(pd.DataFrame(evals["results"]), width="stretch")
 
 
+def tab_gateway(pub: dict) -> None:
+    st.subheader("Model gateway ledger")
+    st.caption(
+        "The central control point for model access. Every call is classified, "
+        "routed to a model tier, checked against the cache, and cost-capped. In "
+        "scripted mode calls execute as templates (zero cost); the routing "
+        "decision is still recorded so you can see how live calls would be routed."
+    )
+    ledger = pub.get("gateway_ledger", [])
+    if not ledger:
+        st.info("Run an analysis to populate the gateway ledger.")
+        return
+    total_cost = sum(e["cost_usd"] for e in ledger)
+    hits = sum(1 for e in ledger if e["cache"] == "hit")
+    elevated = sum(1 for e in ledger if e["stakes"] == "elevated")
+    a, b, c, d = st.columns(4)
+    a.metric("Calls", len(ledger))
+    b.metric("Elevated-stakes", elevated)
+    c.metric("Cache hits", hits)
+    d.metric("Cost (USD)", f"${round(total_cost, 6)}")
+    df = pd.DataFrame(ledger)[
+        [
+            "seq",
+            "call_kind",
+            "stakes",
+            "routed_tier",
+            "routed_model",
+            "provider",
+            "cache",
+            "tokens",
+            "cost_usd",
+            "policy",
+        ]
+    ]
+    st.dataframe(df, width="stretch", height=360)
+    st.caption(
+        "Routing: elevated-stakes narration (model performance, promotion) routes "
+        "to a capable model; routine narration to a cheap one. Re-run the same "
+        "question to see cache hits."
+    )
+
+
 # --------------------------------------------------------------------------
 # Platform surface (the central asset repository: playbooks, patterns, templates)
 # --------------------------------------------------------------------------
@@ -496,7 +538,15 @@ else:
     st.caption(f"Run {pub['run_id']} · {status_note}")
 
     tabs = st.tabs(
-        ["Pipeline", "Results", "Audit Log", "Fairness", "Model Card", "Cost & KPIs"]
+        [
+            "Pipeline",
+            "Results",
+            "Audit Log",
+            "Fairness",
+            "Model Card",
+            "Cost & KPIs",
+            "Gateway",
+        ]
     )
     with tabs[0]:
         tab_pipeline(pub, state)
@@ -510,3 +560,5 @@ else:
         tab_model_card(pub)
     with tabs[5]:
         tab_cost(pub)
+    with tabs[6]:
+        tab_gateway(pub)
