@@ -236,3 +236,30 @@ Append-only session handoff log. Newest entries at the bottom.
 - Faithfulness on the Anthropic SDK, not the ragas package: the package is broken here and a hand-rolled, prompt-visible judge is more auditable, which fits the governance thesis. Same metric definition.
 - Faithfulness scoped to the RAG-grounded policy claim, not the model's computed numbers. Those are the eval gate's job. This is the correct Ragas definition, not score inflation.
 - ULB sampled to keep the real fraud imbalance and rounded to stay lean; LendingClub kept wide and messy because messiness is the triage target.
+
+## 2026-07-14 — HM-readiness assessment, cold-open fixes, isolated sentinel2 stack
+
+**Did:**
+- Ran a structured hiring-manager-POV assessment of Sentinel as a cold, unaccompanied interview artifact for the Citi SVP AI PM role: 7 evaluation lenses + a full HM role-play + an adversarial critic. Verdict lean-yes (it earns the next conversation; kills the "doesn't know fintech/governance" doubt). Wrote the findings up as a self-contained HTML deck at repo root (`sentinel-hm-assessment.html`, untracked).
+- Identified four cold-open leaks: no on-screen "so what" (strategy stuck in PRODUCT_BRIEF.md), the persona-gate dead-end (default Analyst can't approve, so a cold Approve looked broken and hid the model card), 16-destination sprawl, and the deliberately-simple ML reading as thin with no on-screen rationale.
+- Implemented the top fixes on branch `claude/sentinel-citi-assessment-521368` (destined for a separate site, not prod): UI starts as MRM Approver so a cold Run->Approve completes end to end; inline segregation-of-duties recovery when acting as a non-approver; a governance-is-the-product thesis line + a 60-second guided path on the landing; a "what to notice" strip after a run; post-run tabs reordered to lead with Fairness/Model Card/Audit Log; a "baseline by design" line on Results; a sidebar primacy caption; and hid the Streamlit toolbar/Deploy/hamburger chrome.
+- Verified live in a browser: the cold Run->Approve now completes ("Completed and promoted") and unlocks the payoff tabs; the real fairness flag (disparity 0.569) and the SR 11-7 model card render. Confirmed the Deploy button is 0x0/not rendered. 127 tests pass, ruff clean. Committed 638d4c1 and pushed.
+- Built an isolated second deployment path under `deploy/aws/sentinel2/`: its own CFN stacks (sentinel2-eb, sentinel2-https), EB app/env (sentinel2 / sentinel2-prod), S3 bundle bucket, IAM roles, ACM cert, and CloudFront distribution; local TF-IDF vector store (no shared RDS); add-only Route 53 record for sentinel2.sandip.dev. Plus deploy.sh, enable-https.sh, teardown.sh, README. Confirmed via git that prod's deploy files are byte-for-byte unchanged.
+
+**State now:**
+- Branch `claude/sentinel-citi-assessment-521368` pushed to origin, green (127 tests, ruff clean). This branch is the improved "sentinel2" build, deliberately divergent from main/prod.
+- sentinel.sandip.dev (prod) untouched, still main (last deployed SHA 9dcd20b).
+- sentinel2.sandip.dev: code + deploy scripts ready, NOT provisioned. A second always-on t3.small, ~$15/mo when up. Awaiting Sandip's go on the cost.
+- The whole improved build runs locally with `./run.sh` on the exact code + vector store sentinel2 will serve.
+
+**Next:**
+- Decide whether to provision sentinel2 (run deploy/aws/sentinel2/deploy.sh then enable-https.sh under AWS_PROFILE=admin) or keep testing locally.
+- If provisioned: verify sentinel2.sandip.dev end to end (cert, health, WebSocket 101, cold Run->Approve) and send the HM the URL + the note drafted on deck slide 11.
+- Decide long-term: does the improved build also become prod, or does sentinel2 stay the interview-only variant.
+
+**Decisions:**
+- Ship the improved build to a SEPARATE sentinel2.sandip.dev; leave sentinel.sandip.dev untouched. Sandip's call.
+- Default UI persona = MRM Approver so the cold path completes; segregation of duties stays demonstrable by switching to Analyst. The gate dead-end was the single worst cold-open leak (read as "broken").
+- Subtract in the app, put the strategy (vision/roadmap/adoption) in the accompanying note. The critic's line: you cannot fix an altitude problem caused by too much surface by adding more surface.
+- sentinel2 uses the local TF-IDF vector store, not pgvector, for full isolation from prod's RDS.
+- Hold GBM challenger / calibration / AIR fairness / new strategy tabs as verbal talking points; do not ship them before the interview (regression risk, low skim payoff, and a GBM undercuts the deliberately-simple thesis).

@@ -1,10 +1,28 @@
 # Sentinel — Journal Index
 
-Last refreshed: 2026-07-14 08:54
+Last refreshed: 2026-07-14 13:14
 
-Latest entry: [2026-07-14-0854-datasets-onboarded-and-ragas-faithfulness.md](entries/2026-07-14-0854-datasets-onboarded-and-ragas-faithfulness.md)
+Latest entry: [2026-07-14-1314-hm-assessment-and-sentinel2-build.md](entries/2026-07-14-1314-hm-assessment-and-sentinel2-build.md)
 
 ## Where we are now
+
+The build is feature-complete. The active question shifted from "what else can
+it do" to "does it land with the Citi hiring manager in a cold two-minute open."
+A structured HM-POV assessment (7 lenses, a role-play, an adversarial critic)
+returned lean-yes: the artifact earns the next conversation, but the cold open
+leaked (no on-screen "so what", a human-gate dead-end, 16-destination sprawl,
+thin-looking ML). The findings live in an HTML deck at the repo root
+(`sentinel-hm-assessment.html`, gitignored-agnostic, untracked).
+
+The top fixes are implemented and verified on branch
+`claude/sentinel-citi-assessment-521368`, which is deliberately kept separate
+from prod: the UI now starts as the MRM Approver so a cold Run then Approve
+completes, a thesis line and a 60-second guided path frame the landing, the
+payoff tabs lead, and the Streamlit chrome is hidden. This improved build is
+destined for a NEW second site, sentinel2.sandip.dev, on a fully parallel AWS
+stack (own CFN stacks, EB app/env, bucket, IAM, cert, CloudFront; local vector
+store; add-only Route 53). sentinel.sandip.dev stays untouched. sentinel2 is not
+provisioned yet (a second t3.small, about 15 dollars a month, awaiting a go).
 
 Sentinel is a governed agentic data-science demo, built as an interview
 credibility artifact for an SVP AI Product Management role at a bank. The thesis:
@@ -103,6 +121,7 @@ out).
 
 ## Recent entries
 
+- [2026-07-14-1314-hm-assessment-and-sentinel2-build.md](entries/2026-07-14-1314-hm-assessment-and-sentinel2-build.md) — cold HM-POV assessment (lean-yes); fixed the cold open (completing gate, thesis line, guided path, reordered tabs, hidden chrome); built an isolated sentinel2.sandip.dev deploy path. 127 tests.
 - [2026-07-14-0854-datasets-onboarded-and-ragas-faithfulness.md](entries/2026-07-14-0854-datasets-onboarded-and-ragas-faithfulness.md) — ULB fraud + LendingClub onboarded via no-account sources; Ragas faithfulness wired on the Anthropic SDK and run, stable 1.0. 127 tests.
 - [2026-07-14-0646-live-llm-narration-in-prod.md](entries/2026-07-14-0646-live-llm-narration-in-prod.md) — live-LLM narration was silently broken (SDK never installed); fixed + enabled in prod behind a cumulative $50 cap. Verified live.
 - [2026-07-13-2237-analysis-platform-and-pgvector-prod.md](entries/2026-07-13-2237-analysis-platform-and-pgvector-prod.md) — analysis-spec engine + profiling & feature-eng analyses; pgvector live in prod. 126 tests.
@@ -128,12 +147,16 @@ None yet. Week 2026-W28 (through Sun 2026-07-12) has entries but no summary.
 
 ## Open questions
 
+- Provision sentinel2.sandip.dev now (about 15 dollars a month) or keep testing locally first? Decision pending with Sandip.
+- Whether the improved build should also become prod later, or sentinel2 stays the interview-only variant while sentinel.sandip.dev keeps the original.
 - Should linear analysis runs feed the adoption metrics and model registry? (The execution-routing half of this is now decided; see ruled out.)
 - Retrieval ranking: the SR 11-7 query ranks the internal modeling standard above the SR 11-7 document itself (SR 11-7 chunks still return at ranks 2-3). Worth a later look at chunking or reranking.
 - Demo GIF/Loom for the README: dropped for now per Sandip (2026-07-14).
 
 ## Things ruled out
 
+- Shipping a GBM challenger, calibration curves, or a reference-group AIR fairness recompute before the interview (2026-07-14). Regression risk to a live artifact, low payoff on a two-minute skim, and a GBM undercuts the deliberately-simple thesis. Held as verbal talking points instead.
+- Adding roadmap / use-case-pipeline / KRA-mapping tabs to the app (2026-07-14). The sprawl was itself a finding; the strategy layer goes in the accompanying note, not new surface.
 - Next.js + FastAPI split (chose Streamlit for speed).
 - fairlearn dependency (implemented metrics directly for auditability).
 - ~~LangGraph~~ — reversed 2026-07-13. Adopting LangGraph for the platform buildout. Its graph is static (fixed nodes/edges), so it stays an inspectable workflow, and its interrupt/checkpointer primitives map onto the human gate and memory. The plain state machine was right for the single-pipeline demo, wrong for the platform.
