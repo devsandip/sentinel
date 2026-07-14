@@ -1,0 +1,128 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  Sentinel 2 — a fully independent copy of the Sentinel demo on Elastic
+  Beanstalk, for sentinel2.sandip.dev. Distinct application/environment names,
+  its own S3 bundle bucket and IAM roles, and a local (bundled) vector store so
+  it shares NO mutable resources with the sentinel.sandip.dev prod stack. The
+  only thing in common with prod is the Route 53 hosted zone, where the HTTPS
+  stack only ADDS a new record for sentinel2.sandip.dev.
+
+Parameters:
+  SourceBucket:
+    Type: String
+    Description: S3 bucket holding the application source bundle zip.
+  SourceKey:
+    Type: String
+    Description: S3 key of the application source bundle zip.
+  SolutionStackName:
+    Type: String
+    Default: "64bit Amazon Linux 2023 v4.13.3 running Python 3.12"
+  InstanceType:
+    Type: String
+    Default: t3.small
+    AllowedValues: [t3.micro, t3.small, t3.medium]
+  # Anthropic key for live-LLM narration. NoEcho so it is masked. Empty by
+  # default: sentinel2 stays scripted-only (free, reliable for a public link).
+  AnthropicApiKey:
+    Type: String
+    NoEcho: true
+    Default: ""
+    Description: Anthropic API key for live-LLM narration (optional; empty disables live).
+
+Resources:
+  # --- IAM: EC2 instance profile. Web/worker tiers only. No secrets or Bedrock
+  #     access, because sentinel2 runs the local vector store, not pgvector. ---
+  InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: ec2.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AWSElasticBeanstalkWebTier
+        - arn:aws:iam::aws:policy/AWSElasticBeanstalkWorkerTier
+
+  InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles: [!Ref InstanceRole]
+
+  ServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: elasticbeanstalk.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSElasticBeanstalkEnhancedHealth
+        - arn:aws:iam::aws:policy/AWSElasticBeanstalkManagedUpdatesCustomerRolePolicy
+
+  Application:
+    Type: AWS::ElasticBeanstalk::Application
+    Properties:
+      ApplicationName: sentinel2
+
+  ApplicationVersion:
+    Type: AWS::ElasticBeanstalk::ApplicationVersion
+    Properties:
+      ApplicationName: !Ref Application
+      Description: Sentinel 2 demo source bundle.
+      SourceBundle:
+        S3Bucket: !Ref SourceBucket
+        S3Key: !Ref SourceKey
+
+  Environment:
+    Type: AWS::ElasticBeanstalk::Environment
+    Properties:
+      ApplicationName: !Ref Application
+      EnvironmentName: sentinel2-prod
+      SolutionStackName: !Ref SolutionStackName
+      VersionLabel: !Ref ApplicationVersion
+      OptionSettings:
+        - Namespace: aws:elasticbeanstalk:environment
+          OptionName: EnvironmentType
+          Value: SingleInstance
+        - Namespace: aws:elasticbeanstalk:environment
+          OptionName: ServiceRole
+          Value: !Ref ServiceRole
+        - Namespace: aws:autoscaling:launchconfiguration
+          OptionName: IamInstanceProfile
+          Value: !Ref InstanceProfile
+        - Namespace: aws:ec2:instances
+          OptionName: InstanceTypes
+          Value: !Ref InstanceType
+        - Namespace: aws:elasticbeanstalk:healthreporting:system
+          OptionName: SystemType
+          Value: enhanced
+        - Namespace: aws:elasticbeanstalk:application:environment
+          OptionName: PORT
+          Value: "8501"
+        - Namespace: aws:elasticbeanstalk:application:environment
+          OptionName: MODEL_PROVIDER
+          Value: templated
+        - Namespace: aws:elasticbeanstalk:application:environment
+          OptionName: LIVE_MODE_MONTHLY_CAP
+          Value: "50"
+        - Namespace: aws:elasticbeanstalk:application:environment
+          OptionName: ANTHROPIC_API_KEY
+          Value: !Ref AnthropicApiKey
+        - Namespace: aws:elasticbeanstalk:application:environment
+          OptionName: ARROW_DEFAULT_MEMORY_POOL
+          Value: system
+        # Local (bundled) vector store: no RDS, no Bedrock, no shared prod state.
+        - Namespace: aws:elasticbeanstalk:application:environment
+          OptionName: SENTINEL_VECTOR_STORE
+          Value: local
+
+Outputs:
+  EnvironmentURL:
+    Description: Public HTTP endpoint for the Sentinel 2 demo.
+    Value: !Sub "http://${Environment.EndpointURL}"
+  EnvironmentName:
+    Value: !Ref Environment

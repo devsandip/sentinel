@@ -59,8 +59,23 @@ def get_persona(persona_id: str) -> Persona | None:
 
 
 def default_persona() -> Persona:
-    """The persona the UI starts on: the first that can run (the Analyst)."""
+    """The first-line persona: the first that can run (the Analyst)."""
     for p in all_personas():
         if p.can_run and not p.read_only:
             return p
     return all_personas()[0]
+
+
+def ui_start_persona() -> Persona:
+    """The persona the public UI starts on.
+
+    A first-time visitor starts on an approver-capable role so a naive
+    Run -> Approve completes end to end and reaches the model card, instead of
+    dead-ending at the segregation-of-duties denial. The four-eyes control is
+    still demonstrable: switch to the Data Scientist / Analyst and try to
+    approve, and the denial fires and is logged.
+    """
+    for p in all_personas():
+        if p.can_run and p.can_approve and not p.read_only:
+            return p
+    return default_persona()

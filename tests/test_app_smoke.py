@@ -23,8 +23,8 @@ APP = os.path.join(os.path.dirname(os.path.dirname(__file__)), "app.py")
 def test_run_analysis_section_renders():
     at = AppTest(script_path=APP, default_timeout=60).run()
     assert not at.exception
-    # Pre-run, the analysis section prompts the user to start a run.
-    assert any("click Run" in i.value for i in at.info)
+    # Pre-run, the analysis section prompts the user with the guided run path.
+    assert any("60-second path" in m.value for m in at.markdown)
 
 
 def test_platform_section_renders():

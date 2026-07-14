@@ -24,7 +24,7 @@ from sentinel.analyses.spec import (
 from sentinel.datasets import all_datasets
 from sentinel.datasets import available as dataset_available
 from sentinel.harness.controls import CONTROL_CATALOG, ControlSettings, from_disabled
-from sentinel.harness.identity import all_personas, default_persona, get_persona
+from sentinel.harness.identity import all_personas, get_persona, ui_start_persona
 from sentinel.harness.model_card import ModelCard, render_markdown, render_pdf
 from sentinel.orchestrator import (
     STATUS_AWAITING,
@@ -46,7 +46,19 @@ from sentinel.platform.patterns import AVOIDED, IN_USE, PLANNED
 from sentinel.platform.templates import AVAILABLE, LIVE
 from sentinel.rag import corpus_summary
 
-st.set_page_config(page_title="Sentinel — Governed Agentic Analysis", layout="wide")
+st.set_page_config(
+    page_title="Sentinel — Governed Agentic Analysis",
+    layout="wide",
+    menu_items={
+        "About": (
+            "Sentinel — a governed agentic data-science prototype. The analysis is "
+            "real; governance is the product. This is a deliberately scoped prototype "
+            "harness; the enterprise path is described in the product brief."
+        ),
+        "Get help": None,
+        "Report a bug": None,
+    },
+)
 
 ACCENT = "#1e50a0"
 
@@ -73,6 +85,18 @@ st.markdown(
       .pill-in_use {{ background:#e3f4e9; color:#1b7f3b; border:1px solid #bfe3cc; }}
       .pill-planned {{ background:#eef2fb; color:{ACCENT}; border:1px solid #d5e0f5; }}
       .pill-avoided {{ background:#fdeceb; color:#b3261e; border:1px solid #f3ccc9; }}
+      [data-testid="stToolbar"], .stDeployButton, #MainMenu, footer {{
+        display:none !important;
+      }}
+      .thesis {{
+        color:#33415c; font-size:0.9rem; margin-top:8px; line-height:1.5;
+        max-width:66ch;
+      }}
+      .notice {{
+        background:#eef7f0; border:1px solid #cfe8d6; color:#155e2e;
+        padding:9px 13px; border-radius:8px; font-size:0.86rem;
+        margin:8px 0 2px; line-height:1.5;
+      }}
     </style>
     """,
     unsafe_allow_html=True,
@@ -100,6 +124,14 @@ def header() -> None:
             "<span class='muted'>Governed agentic data science for a regulated "
             "bank. Pick a question, run a real analysis, watch the controls "
             "fire.</span>",
+            unsafe_allow_html=True,
+        )
+        st.markdown(
+            "<div class='thesis'>The same run that trains the model also produces the "
+            "audit trail, the fairness verdict, and an SR 11-7 model-risk document: "
+            "the evidence a bank needs before it can trust a model in production. "
+            "Governance is the product; the ML is a deliberately simple, swappable "
+            "baseline. Nothing here is staged.</div>",
             unsafe_allow_html=True,
         )
     with right:
@@ -229,25 +261,48 @@ def tab_pipeline(pub: dict, state) -> None:
                 st.warning(f"Live narration fell back to scripted: {step['fallback_reason']}")
             if step["status"] == "awaiting_approval":
                 persona = get_persona(
-                    st.session_state.get("persona_id", default_persona().id)
+                    st.session_state.get("persona_id", ui_start_persona().id)
                 )
-                st.info(
-                    "Human-in-the-loop gate: approve to promote this model, or "
-                    f"reject. Acting as **{persona.name}** — "
-                    + (
-                        "holds promotion authority."
-                        if persona.can_approve
-                        else "does NOT hold promotion authority (segregation of "
-                        "duties); an Approve attempt will be denied and logged."
+                if persona.can_approve:
+                    st.info(
+                        f"Human-in-the-loop gate. Acting as **{persona.name}**, who "
+                        "holds promotion authority. This is the four-eyes control: a "
+                        "different role than the analyst who built the model signs "
+                        "off. Approve to promote, or reject."
                     )
-                )
-                a, r, _ = st.columns([1, 1, 4])
-                if a.button("Approve", type="primary"):
-                    orch.approve(state.run_id, approved=True, actor=persona)
-                    st.rerun()
-                if r.button("Reject"):
-                    orch.approve(state.run_id, approved=False, actor=persona)
-                    st.rerun()
+                    a, r, _ = st.columns([1, 1, 4])
+                    if a.button("Approve", type="primary"):
+                        orch.approve(state.run_id, approved=True, actor=persona)
+                        st.rerun()
+                    if r.button("Reject"):
+                        orch.approve(state.run_id, approved=False, actor=persona)
+                        st.rerun()
+                    st.caption(
+                        "To watch the control block a maker from signing off, switch "
+                        "Acting as to Data Scientist / Analyst (left) and try to "
+                        "approve."
+                    )
+                else:
+                    if any(e.get("action") == "approval_denied" for e in pub["audit"]):
+                        st.error(
+                            "Approval denied and logged (see the Audit Log). "
+                            "Segregation of duties working: a maker cannot promote "
+                            "their own model."
+                        )
+                    st.warning(
+                        f"Segregation of duties: acting as **{persona.name}**, you do "
+                        "not hold promotion authority. Promotion sits with the MRM "
+                        "Approver (the four-eyes control)."
+                    )
+                    c1, c2, _ = st.columns([2, 2, 2])
+                    if c1.button("Try to approve (denied + logged)"):
+                        orch.approve(state.run_id, approved=True, actor=persona)
+                        st.rerun()
+                    if c2.button("Switch to MRM Approver and approve", type="primary"):
+                        approver = ui_start_persona()
+                        st.session_state["persona_id"] = approver.id
+                        orch.approve(state.run_id, approved=True, actor=approver)
+                        st.rerun()
     if pub.get("summary_narration"):
         st.success(pub["summary_narration"])
     if pub["status"] == STATUS_REJECTED:
@@ -259,6 +314,11 @@ def tab_results(pub: dict) -> None:
     if not model:
         st.info("Run a model to see results.")
         return
+    st.caption(
+        "Baseline by design: logistic regression is chosen for interpretability and "
+        "adverse-action explainability in a governed credit decision. The platform "
+        "treats the model as swappable; the evidence chain is the product."
+    )
     m = model["metrics"]
     cols = st.columns(5)
     for col, (k, v) in zip(cols, m.items(), strict=True):
@@ -1024,7 +1084,7 @@ def persona_picker():
     personas = all_personas()
     ids = [p.id for p in personas]
     labels = {p.id: p.name for p in personas}
-    default_id = st.session_state.get("persona_id", default_persona().id)
+    default_id = st.session_state.get("persona_id", ui_start_persona().id)
     chosen = st.sidebar.selectbox(
         "Acting as",
         options=ids,
@@ -1052,6 +1112,10 @@ section = st.sidebar.radio(
     "Section",
     ["Run analysis", "Analyses", "Platform", "Datasets", "Registry", "Adoption"],
     index=0,
+)
+st.sidebar.caption(
+    "Start with Run analysis. Analyses, Platform, Datasets, Registry, and Adoption "
+    "show platform depth after the run."
 )
 st.sidebar.divider()
 persona = persona_picker()
@@ -1083,7 +1147,14 @@ run_id = st.session_state.get("run_id")
 state = orch.get_run(run_id) if run_id else None
 
 if state is None:
-    st.info("Choose a preset question and click Run to start a governed analysis.")
+    st.markdown(
+        "<div class='notice'><b>60-second path:</b> keep the default question and "
+        "click <b>Run</b>. A real credit model trains and pauses at a human approval "
+        "gate; approve it, then open <b>Fairness</b>, <b>Model Card</b>, and "
+        "<b>Audit Log</b>. On every run two controls fire (an RBAC denial and a PII "
+        "redaction) and a live fairness check flags a real disparity.</div>",
+        unsafe_allow_html=True,
+    )
 else:
     pub = state.to_public_dict()
     status_note = {
@@ -1101,13 +1172,22 @@ else:
             "audit log. Re-run with controls on for a governed analysis."
         )
 
+    if pub["status"] in (STATUS_COMPLETED, STATUS_BLOCKED):
+        st.markdown(
+            "<div class='notice'><b>What to notice:</b> <b>Fairness</b> flags a real "
+            "age-band disparity, <b>Model Card</b> is a downloadable SR 11-7 "
+            "document, and <b>Audit Log</b> records every step (including an RBAC "
+            "denial and a PII redaction). The remaining tabs show platform depth.</div>",
+            unsafe_allow_html=True,
+        )
+
     tabs = st.tabs(
         [
             "Pipeline",
-            "Results",
-            "Audit Log",
             "Fairness",
             "Model Card",
+            "Audit Log",
+            "Results",
             "Cost & KPIs",
             "Gateway",
             "Knowledge",
@@ -1118,13 +1198,13 @@ else:
     with tabs[0]:
         tab_pipeline(pub, state)
     with tabs[1]:
-        tab_results(pub)
-    with tabs[2]:
-        tab_audit(pub)
-    with tabs[3]:
         tab_fairness(pub)
-    with tabs[4]:
+    with tabs[2]:
         tab_model_card(pub)
+    with tabs[3]:
+        tab_audit(pub)
+    with tabs[4]:
+        tab_results(pub)
     with tabs[5]:
         tab_cost(pub)
     with tabs[6]:
