@@ -27,15 +27,28 @@ raw PII.
 
 ## Ragas (RAG groundedness)
 
-Needs Python and an LLM judge (an API key) for the faithfulness metric:
+Needs Python and an LLM judge (an `ANTHROPIC_API_KEY`) for the faithfulness
+metric:
 
 ```bash
-uv run --extra evals python evals/ragas_eval.py
+uv run --extra live python evals/ragas_eval.py
 ```
 
-Without a key the script computes the retrieval-only signals it can (context
-relevance over the local corpus) and skips the LLM-judged metrics, printing what
-it skipped. It never fabricates a score.
+Two layers. Layer 1 (retrieval signals) always runs, no key: for each governing
+question it checks whether a relevant, correctly-attributed passage was
+retrieved. Layer 2 (faithfulness) needs the key: it decomposes the policy claim
+each agent grounds into atomic claims and judges each against the retrieved
+contexts, scoring supported/total (the Ragas faithfulness definition). It
+averages over 3 passes and reports the spread, since an LLM-judge score is noisy
+per draw. Faithfulness is scoped to the policy claim RAG grounds (the rule and
+threshold), not the run-specific numbers the model computes; those are the eval
+gate's job, not RAG's.
+
+Implemented directly on the Anthropic SDK rather than the `ragas` pip package,
+whose pinned `langchain-community` import is broken in this env. The metric is
+the same and the judge prompts are in `ragas_eval.py`, so the score is
+auditable. Without a key, layer 2 is skipped with a clear note. It never
+fabricates a score.
 
 ## Note
 

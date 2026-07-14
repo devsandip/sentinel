@@ -119,7 +119,9 @@ def test_engine_blocks_on_contract_violation():
 
 def test_engine_blocks_when_not_onboarded():
     eng = AnalysisEngine()
-    run = eng.run(get_analysis("data_profiling"), "ulb_fraud")
+    # uci_bank_marketing is registered (satisfies the tabular contract) but has no
+    # onboarder, so it stays un-onboarded and must be blocked before execution.
+    run = eng.run(get_analysis("data_profiling"), "uci_bank_marketing")
     assert run.status == STATUS_BLOCKED
     assert any("onboard" in r for r in run.contract["reasons"])
 

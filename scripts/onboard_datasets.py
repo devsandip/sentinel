@@ -46,6 +46,53 @@ def onboard_hillstrom(sample: int = 20000) -> Path:
     return _write("hillstrom", df)
 
 
+def onboard_ulb_fraud(nonfraud_sample: int = 19508) -> Path:
+    """ULB credit-card fraud via OpenML 1597 (no account, DbCL 1.0, not Kaggle).
+
+    284,807 rows at 0.17% fraud is too big and too skewed to ship whole. Keep
+    every fraud row (the rare positive class is the whole point) and sample the
+    negatives, so the local file stays lean but the imbalance stays real.
+    """
+    from sklearn.datasets import fetch_openml
+
+    d = fetch_openml(data_id=1597, as_frame=True, parser="auto")
+    df = d.frame
+    if "Class" not in df.columns and d.target is not None:
+        df = df.copy()
+        df["Class"] = d.target
+    df["Class"] = df["Class"].astype(int)
+    fraud = df[df["Class"] == 1]
+    legit = df[df["Class"] == 0].sample(
+        n=min(nonfraud_sample, (df["Class"] == 0).sum()), random_state=42
+    )
+    out = (
+        pd.concat([fraud, legit])
+        .sample(frac=1.0, random_state=42)  # shuffle so fraud is not clustered
+        .reset_index(drop=True)
+    )
+    # The V1..V28 PCA components ship at full float precision (~10 MB); round the
+    # floats to 5 decimals to roughly halve the repo file with no visible loss.
+    float_cols = out.select_dtypes("float").columns
+    out[float_cols] = out[float_cols].round(5)
+    return _write("ulb_fraud", out)
+
+
+def onboard_lendingclub(sample: int = 20000) -> Path:
+    """LendingClub messy loan table via the DePaul econdata mirror (no account).
+
+    The canonical messy-finance table: many columns, mixed types, missingness.
+    Data-quality triage is the point, so keep the columns intact and only
+    subsample rows for repo leanness.
+    """
+    url = (
+        "https://bigblue.depaul.edu/jlee141/econdata/LendingClub_LoanData/"
+        "LC_Loan_sample_2016.csv"
+    )
+    df = pd.read_csv(url, low_memory=False)
+    df = df.sample(n=min(sample, len(df)), random_state=42).reset_index(drop=True)
+    return _write("lendingclub", df)
+
+
 def _write(dataset_id: str, df: pd.DataFrame) -> Path:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     path = DATA_DIR / f"{dataset_id}.csv"
@@ -145,6 +192,8 @@ ONBOARDERS = {
     "uci_taiwan_credit": onboard_uci_taiwan,
     "hillstrom": onboard_hillstrom,
     "berka": onboard_berka,
+    "ulb_fraud": onboard_ulb_fraud,
+    "lendingclub": onboard_lendingclub,
 }
 
 

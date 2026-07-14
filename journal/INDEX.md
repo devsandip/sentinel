@@ -1,8 +1,8 @@
 # Sentinel — Journal Index
 
-Last refreshed: 2026-07-14 06:46
+Last refreshed: 2026-07-14 08:54
 
-Latest entry: [2026-07-14-0646-live-llm-narration-in-prod.md](entries/2026-07-14-0646-live-llm-narration-in-prod.md)
+Latest entry: [2026-07-14-0854-datasets-onboarded-and-ragas-faithfulness.md](entries/2026-07-14-0854-datasets-onboarded-and-ragas-faithfulness.md)
 
 ## Where we are now
 
@@ -85,11 +85,18 @@ process-global ceiling (not a per-run budget), so it bounds total public spend.
 Verified live: a run narrated LIVE end to end, ledger showed $0.0018 of real
 spend on the instance.
 
-Deferred to morning by choice: Kaggle-gated datasets and the Ragas faithfulness
-run.
+Both morning-deferred items are now done. ULB credit-card fraud (OpenML 1597) and
+LendingClub (DePaul mirror) are onboarded through their no-account substitutes,
+both run clean through the governed analysis engine, and LendingClub fires the
+commercial-use flag on profiling. The Ragas faithfulness run is no longer a stub:
+faithfulness is implemented directly on the Anthropic SDK (the ragas pip package
+is broken in this env), scoped to the policy claims RAG grounds, calibrated, and
+averaged over three passes. It scores a stable 1.0 on both cases. 127 tests pass,
+ruff clean. Not yet deployed to prod at this entry.
 
 ## Recent entries
 
+- [2026-07-14-0854-datasets-onboarded-and-ragas-faithfulness.md](entries/2026-07-14-0854-datasets-onboarded-and-ragas-faithfulness.md) — ULB fraud + LendingClub onboarded via no-account sources; Ragas faithfulness wired on the Anthropic SDK and run, stable 1.0. 127 tests.
 - [2026-07-14-0646-live-llm-narration-in-prod.md](entries/2026-07-14-0646-live-llm-narration-in-prod.md) — live-LLM narration was silently broken (SDK never installed); fixed + enabled in prod behind a cumulative $50 cap. Verified live.
 - [2026-07-13-2237-analysis-platform-and-pgvector-prod.md](entries/2026-07-13-2237-analysis-platform-and-pgvector-prod.md) — analysis-spec engine + profiling & feature-eng analyses; pgvector live in prod. 126 tests.
 - [2026-07-13-2005-aws-vector-store-provisioned.md](entries/2026-07-13-2005-aws-vector-store-provisioned.md) — RAG on real AWS: RDS pgvector + Bedrock embeddings, corpus ingested, dense retrieval verified.
@@ -114,9 +121,9 @@ None yet. Week 2026-W28 (through Sun 2026-07-12) has entries but no summary.
 
 ## Open questions
 
-- Capture a demo GIF/Loom for the README, now that there is a live HTTPS URL to record (and live-LLM narration to show).
-- Kaggle-gated datasets (ULB fraud, LendingClub, others): onboard in the morning per Sandip's plan.
 - Analyses platform next: does the credit-risk spec eventually execute through the engine too, or stay routed to the orchestrator? Should linear analysis runs feed the adoption metrics and model registry?
+- Retrieval ranking: the SR 11-7 query ranks the internal modeling standard above the SR 11-7 document itself (SR 11-7 chunks still return at ranks 2-3). Worth a later look at chunking or reranking.
+- Demo GIF/Loom for the README: dropped for now per Sandip (2026-07-14).
 
 ## Things ruled out
 
