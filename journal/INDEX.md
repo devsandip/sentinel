@@ -85,14 +85,21 @@ process-global ceiling (not a per-run budget), so it bounds total public spend.
 Verified live: a run narrated LIVE end to end, ledger showed $0.0018 of real
 spend on the instance.
 
-Both morning-deferred items are now done. ULB credit-card fraud (OpenML 1597) and
-LendingClub (DePaul mirror) are onboarded through their no-account substitutes,
-both run clean through the governed analysis engine, and LendingClub fires the
-commercial-use flag on profiling. The Ragas faithfulness run is no longer a stub:
-faithfulness is implemented directly on the Anthropic SDK (the ragas pip package
-is broken in this env), scoped to the policy claims RAG grounds, calibrated, and
-averaged over three passes. It scores a stable 1.0 on both cases. 127 tests pass,
-ruff clean. Not yet deployed to prod at this entry.
+Both morning-deferred items are now done and in prod. ULB credit-card fraud
+(OpenML 1597) and LendingClub (DePaul mirror) are onboarded through their
+no-account substitutes, both run clean through the governed analysis engine, and
+LendingClub fires the commercial-use flag on profiling. The Ragas faithfulness run
+is no longer a stub: faithfulness is implemented directly on the Anthropic SDK
+(the ragas pip package is broken in this env), scoped to the policy claims RAG
+grounds, calibrated, and averaged over three passes. It scores a stable 1.0 on
+both cases. 127 tests pass, ruff clean.
+
+Deployed to prod (SHA 9dcd20b): CFN UPDATE_COMPLETE, EB green, the new bundle
+ships both CSVs, and the live Dataset registry at https://sentinel.sandip.dev
+lists ulb_fraud and lendingclub. Live-LLM stayed enabled (key sourced from the
+main-repo .env at deploy time, since the worktree has none). The credit-risk-spec
+routing question is decided: it stays in the LangGraph orchestrator (see ruled
+out).
 
 ## Recent entries
 
