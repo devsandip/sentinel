@@ -121,7 +121,7 @@ None yet. Week 2026-W28 (through Sun 2026-07-12) has entries but no summary.
 
 ## Open questions
 
-- Analyses platform next: does the credit-risk spec eventually execute through the engine too, or stay routed to the orchestrator? Should linear analysis runs feed the adoption metrics and model registry?
+- Should linear analysis runs feed the adoption metrics and model registry? (The execution-routing half of this is now decided; see ruled out.)
 - Retrieval ranking: the SR 11-7 query ranks the internal modeling standard above the SR 11-7 document itself (SR 11-7 chunks still return at ranks 2-3). Worth a later look at chunking or reranking.
 - Demo GIF/Loom for the README: dropped for now per Sandip (2026-07-14).
 
@@ -135,3 +135,4 @@ None yet. Week 2026-W28 (through Sun 2026-07-12) has entries but no summary.
 - Render and Fly for the host (chose AWS Elastic Beanstalk).
 - AWS Amplify (Hosting only runs JS frontends; it cannot run a persistent Python Streamlit server).
 - A custom nginx override on EB (the default AL2023 nginx already forwards WebSocket upgrade headers).
+- Executing the credit-risk spec through the linear analysis engine (decided 2026-07-14: it stays in the LangGraph orchestrator). The pipeline promotes a model and holds a human approval gate; the linear engine is for read-only analyses. Unifying execution would mean rebuilding LangGraph's interrupt/checkpointer primitives in the engine and risking the hero pipeline's gate. The catalog already unifies the two as specs; only execution differs, by design.
