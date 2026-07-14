@@ -18,11 +18,11 @@ The top fixes are implemented and verified on branch
 `claude/sentinel-citi-assessment-521368`, which is deliberately kept separate
 from prod: the UI now starts as the MRM Approver so a cold Run then Approve
 completes, a thesis line and a 60-second guided path frame the landing, the
-payoff tabs lead, and the Streamlit chrome is hidden. This improved build is
-destined for a NEW second site, sentinel2.sandip.dev, on a fully parallel AWS
-stack (own CFN stacks, EB app/env, bucket, IAM, cert, CloudFront; local vector
-store; add-only Route 53). sentinel.sandip.dev stays untouched. sentinel2 is not
-provisioned yet (a second t3.small, about 15 dollars a month, awaiting a go).
+payoff tabs lead, and the Streamlit chrome is hidden. A deploy path for a
+second site, sentinel2.sandip.dev, is written and ready under
+deploy/aws/sentinel2/ (fully parallel AWS stack, local vector store, add-only
+Route 53, prod untouched). Decision 2026-07-14: keep it local for now, run with
+`./run.sh`. sentinel2 is not provisioned; the path stays ready if we want it.
 
 Sentinel is a governed agentic data-science demo, built as an interview
 credibility artifact for an SVP AI Product Management role at a bank. The thesis:
@@ -147,7 +147,6 @@ None yet. Week 2026-W28 (through Sun 2026-07-12) has entries but no summary.
 
 ## Open questions
 
-- Provision sentinel2.sandip.dev now (about 15 dollars a month) or keep testing locally first? Decision pending with Sandip.
 - Whether the improved build should also become prod later, or sentinel2 stays the interview-only variant while sentinel.sandip.dev keeps the original.
 - Should linear analysis runs feed the adoption metrics and model registry? (The execution-routing half of this is now decided; see ruled out.)
 - Retrieval ranking: the SR 11-7 query ranks the internal modeling standard above the SR 11-7 document itself (SR 11-7 chunks still return at ranks 2-3). Worth a later look at chunking or reranking.
@@ -155,6 +154,7 @@ None yet. Week 2026-W28 (through Sun 2026-07-12) has entries but no summary.
 
 ## Things ruled out
 
+- Provisioning sentinel2.sandip.dev for now (2026-07-14). Keeping the improved build local (`./run.sh`); the deploy path stays ready under deploy/aws/sentinel2/ if we want it later. No AWS resources stood up; prod untouched.
 - Shipping a GBM challenger, calibration curves, or a reference-group AIR fairness recompute before the interview (2026-07-14). Regression risk to a live artifact, low payoff on a two-minute skim, and a GBM undercuts the deliberately-simple thesis. Held as verbal talking points instead.
 - Adding roadmap / use-case-pipeline / KRA-mapping tabs to the app (2026-07-14). The sprawl was itself a finding; the strategy layer goes in the accompanying note, not new surface.
 - Next.js + FastAPI split (chose Streamlit for speed).
