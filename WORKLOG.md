@@ -192,3 +192,24 @@ Append-only session handoff log. Newest entries at the bottom.
 - Additive engine, not a rewrite: linear read-only analyses run in the new engine; the credit-risk pipeline keeps its human gate in the LangGraph orchestrator. The catalog is unified via specs; execution is not.
 - Lightweight in-house profiler + quality suite + hand-rolled relational FE, not ydata-profiling/Featuretools (deferred to the backlog) to keep the t3.small deploy lean. No new heavy deps.
 - Anthropic API key handled only via a gitignored local .env, never committed. Prod default stays scripted (free); pgvector-in-prod is the only paid path and it is cost-tiny (query embeddings + an already-running RDS).
+
+## 2026-07-14 (early morning) — Live-LLM narration fixed + enabled in prod
+
+**Did:**
+- Root-caused why live narration never ran: the anthropic SDK was never installed or declared, so the gateway's lazy import raised ModuleNotFoundError and the try/except silently fell back to scripted every time. Added an optional `live` extra (anthropic).
+- Validated live end to end locally: full credit-risk run narrates live with correct tiering (Haiku for routine steps, Sonnet for elevated), grounded in real facts, ~$0.003/run.
+- Made LIVE_MODE_MONTHLY_CAP a real ceiling: changed it from a per-gateway-instance value (which reset per run) to a process-global cumulative spend, so $50 bounds total public spend. Raised the cap 5 -> 50. New test covers it.
+- Enabled live in prod (Sandip approved): NoEcho AnthropicApiKey CFN param, read from the gitignored .env by deploy.sh at deploy time and passed through (never committed, never printed); added anthropic to the prod requirements bundle. Default stays scripted/free; "Live LLM" selectable per run.
+- Deployed and verified on the live URL: fresh session, scripted still default, picked Live LLM, ran it. All three pre-gate steps marked LIVE with real model text; gateway ledger showed 3 calls, 1 elevated-stakes, $0.001772 real spend on the instance. Health 200, WebSocket 101.
+
+**State now:**
+- On `main`, pushed at 55edb37. Prod on the new bundle (ANTHROPIC_API_KEY set in EB env, 108 chars; LIVE_MODE_MONTHLY_CAP=50). 127 tests pass, ruff clean. Live at https://sentinel.sandip.dev.
+- GitHub Project #8: "[Ops] Exercise live-LLM narration" marked Done (3 Done total).
+
+**Next:**
+- Kaggle-gated datasets + Ragas faithfulness (still deferred).
+- Optional: rename LIVE_MODE_MONTHLY_CAP to reflect the cumulative-per-process semantics; capture a demo GIF now that live-LLM works on the URL.
+
+**Decisions:**
+- Cumulative process-global cap over per-run, because a public link with a per-run budget is not capped at all. Resets on restart; on a single instance that is the whole app.
+- Key into prod via a NoEcho CFN param sourced from .env at deploy time, not committed anywhere. Prod default stays scripted (free); live is opt-in per run behind the cap.

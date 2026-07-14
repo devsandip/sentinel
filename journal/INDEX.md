@@ -1,8 +1,8 @@
 # Sentinel — Journal Index
 
-Last refreshed: 2026-07-13 22:37
+Last refreshed: 2026-07-14 06:46
 
-Latest entry: [2026-07-13-2237-analysis-platform-and-pgvector-prod.md](entries/2026-07-13-2237-analysis-platform-and-pgvector-prod.md)
+Latest entry: [2026-07-14-0646-live-llm-narration-in-prod.md](entries/2026-07-14-0646-live-llm-narration-in-prod.md)
 
 ## Where we are now
 
@@ -75,12 +75,22 @@ WebSocket 101, hero pipeline runs to the gate (AUC 0.8018), and the new profilin
 analysis runs to completion on the instance. 126 tests pass, ruff clean.
 Deployed SHA 7f3ccb4.
 
-Deferred to morning by choice: Kaggle-gated datasets, live-LLM narration behind
-the cost cap (the key is available locally in a gitignored .env, never committed;
-prod stays scripted and free), and the Ragas faithfulness run.
+Live-LLM narration works and is on the public link. It never actually ran before
+(the anthropic SDK was never installed, so the gateway's fallback silently served
+scripted text). Fixed via an optional `live` extra. Sandip approved enabling it
+in prod: the key rides in via a NoEcho CloudFormation parameter read from the
+gitignored .env at deploy time (never committed), the default stays scripted and
+free, and "Live LLM" is selectable per run. The $50 cap is now a cumulative
+process-global ceiling (not a per-run budget), so it bounds total public spend.
+Verified live: a run narrated LIVE end to end, ledger showed $0.0018 of real
+spend on the instance.
+
+Deferred to morning by choice: Kaggle-gated datasets and the Ragas faithfulness
+run.
 
 ## Recent entries
 
+- [2026-07-14-0646-live-llm-narration-in-prod.md](entries/2026-07-14-0646-live-llm-narration-in-prod.md) — live-LLM narration was silently broken (SDK never installed); fixed + enabled in prod behind a cumulative $50 cap. Verified live.
 - [2026-07-13-2237-analysis-platform-and-pgvector-prod.md](entries/2026-07-13-2237-analysis-platform-and-pgvector-prod.md) — analysis-spec engine + profiling & feature-eng analyses; pgvector live in prod. 126 tests.
 - [2026-07-13-2005-aws-vector-store-provisioned.md](entries/2026-07-13-2005-aws-vector-store-provisioned.md) — RAG on real AWS: RDS pgvector + Bedrock embeddings, corpus ingested, dense retrieval verified.
 - [2026-07-13-1949-all-thirteen-items-built.md](entries/2026-07-13-1949-all-thirteen-items-built.md) — all 13 platform items done: RAG citations, MCP server, memory, runtime, OTel traces. 100 tests.
@@ -104,8 +114,7 @@ None yet. Week 2026-W28 (through Sun 2026-07-12) has entries but no summary.
 
 ## Open questions
 
-- Live-LLM: the Anthropic key is available locally (gitignored .env). Exercise it behind the cost cap in the morning, then decide whether the interview demo ever flips off scripted. Prod default stays scripted and free.
-- Capture a demo GIF/Loom for the README, now that there is a live HTTPS URL to record.
+- Capture a demo GIF/Loom for the README, now that there is a live HTTPS URL to record (and live-LLM narration to show).
 - Kaggle-gated datasets (ULB fraud, LendingClub, others): onboard in the morning per Sandip's plan.
 - Analyses platform next: does the credit-risk spec eventually execute through the engine too, or stay routed to the orchestrator? Should linear analysis runs feed the adoption metrics and model registry?
 
