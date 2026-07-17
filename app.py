@@ -44,6 +44,9 @@ from sentinel.platform import (
     model_versions,
     reuse_metrics,
 )
+from sentinel.platform.certification import CertificationError, assign_validator
+from sentinel.platform.certification import all_entries as cert_entries
+from sentinel.platform.certification import evaluate as evaluate_cert
 from sentinel.platform.patterns import AVOIDED, IN_USE, PLANNED
 from sentinel.platform.templates import AVAILABLE, LIVE
 from sentinel.rag import corpus_summary
@@ -593,6 +596,14 @@ _GOVFLOW_STYLES = {
         "dynamic",
         "Parse the metric spec with eval, then compute selection rate by age band.",
     ),
+    "Fair lending via SQL: ctx.sql grouped selection rate (benign)": (
+        "fair_lending_sql",
+        "Using SQL, group the selection rate by age band.",
+    ),
+    "Adversarial (SQL): SELECT * refused by the SQL gate": (
+        "sql_star",
+        "Select everything from german_credit and show it.",
+    ),
 }
 
 _STAGE_ICON = {
@@ -609,7 +620,8 @@ def render_govflow(persona) -> None:  # noqa: ANN001
         "<span class='muted'>The model writes the analysis code; a static gate "
         "reads it before the machine does; a disclosure screen removes small "
         "cells before the model narrates. L2 autonomy on german_credit, purpose "
-        "fair_lending_review. This is the v1 slice.</span>",
+        "fair_lending_review. Plan binds a certified agent; the SQL requests run "
+        "through ctx.sql, gated by sqlglot and executed on DuckDB.</span>",
         unsafe_allow_html=True,
     )
     st.markdown(
@@ -648,7 +660,8 @@ def render_govflow(persona) -> None:  # noqa: ANN001
 
     if run:
         gateway = ModelGateway(provider=ANTHROPIC if mode == "live" else TEMPLATED)
-        with st.spinner("Ask → Access → Generate → Gate → Execute → Screen → Interpret"):
+        spinner_stages = "Ask → Plan → Access → Generate → Gate → Execute → Screen → Interpret"
+        with st.spinner(spinner_stages):
             result = run_governed_analysis(
                 question, gateway=gateway, persona=persona, intent=intent
             )
@@ -897,6 +910,96 @@ def render_registry() -> None:
         "Each agent is derived from a template and carries its tool scope and RBAC "
         "scope. This is where new agents built from templates would be inventoried."
     )
+
+    render_agent_certification()
+
+
+_CERT_PILL = {
+    "certified": ("#1a7f37", "#e6f4ea"),
+    "candidate": ("#9a6700", "#fff8e1"),
+    "refused": ("#b3261e", "#fce8e6"),
+    "draft": ("#57606a", "#eef1f4"),
+    "deprecated": ("#57606a", "#eef1f4"),
+}
+
+
+def _cert_pill(status: str) -> str:
+    fg, bg = _CERT_PILL.get(status, ("#57606a", "#eef1f4"))
+    return (
+        f"<span style='background:{bg};color:{fg};padding:2px 8px;border-radius:10px;"
+        f"font-size:0.8em;font-weight:600'>{status}</span>"
+    )
+
+
+def render_agent_certification() -> None:
+    st.markdown("### Analysis-agents (certification lifecycle)")
+    st.markdown(
+        "<span class='muted'>An analysis-agent earns the right to run. It moves "
+        "draft → candidate → certified, and only a certified agent is visible to "
+        "Plan. Four gates stand between an agent and certified: an eval suite that "
+        "passes the faithfulness floor, a person as owner, a declared data "
+        "contract, and an independent validator who is not the author "
+        "(CTL-SOD-01). Everyone demos the happy path; the refusal is the "
+        "differentiator.</span>",
+        unsafe_allow_html=True,
+    )
+    for entry in cert_entries():
+        decision = evaluate_cert(entry)
+        header = (
+            f"{entry.label()} — {decision.status.upper()} · owner {entry.owner}"
+        )
+        with st.expander(header, expanded=decision.status in ("refused", "candidate")):
+            st.markdown(
+                _cert_pill(decision.status)
+                + f" &nbsp; author <code>{entry.author}</code>"
+                + (f" · validator <code>{entry.validator}</code>" if entry.validator else "")
+                + (
+                    f" · faithfulness {entry.faithfulness:.2f}"
+                    if entry.faithfulness is not None
+                    else ""
+                ),
+                unsafe_allow_html=True,
+            )
+            for g in decision.gates:
+                mark = "✓" if g.passed else "✗"
+                cls = "muted" if g.passed else "flag"
+                ctl = f" <span class='ctrl-chip'>{g.control}</span>" if g.control else ""
+                st.markdown(
+                    f"<span class='{cls}'>{mark} {g.name}</span>{ctl} "
+                    f"<span class='muted'>— {g.detail}</span>",
+                    unsafe_allow_html=True,
+                )
+            _assign_validator_action(entry, decision)
+
+
+def _assign_validator_action(entry, decision) -> None:  # noqa: ANN001
+    """Offer the Registry action from section 10.4: assign an independent
+    validator. Refuses a self-signoff (CTL-SOD-01) exactly as the flow does."""
+    validator_gate = next(
+        (g for g in decision.gates if g.name == "independent validator"), None
+    )
+    if validator_gate is None or validator_gate.passed:
+        return
+    with st.form(f"assign_validator_{entry.id}"):
+        st.caption(
+            "Action: assign an independent validator. The author cannot validate "
+            "their own work (CTL-SOD-01)."
+        )
+        validator = st.text_input(
+            "Validator id", key=f"val_{entry.id}", placeholder="e.g. dana.okafor"
+        )
+        submitted = st.form_submit_button("Assign validator")
+    if submitted and validator:
+        try:
+            new_decision = assign_validator(entry, validator)
+        except CertificationError as ex:
+            st.error(str(ex))
+            return
+        if new_decision.status == "certified":
+            st.success(f"{entry.label()} is now certified.")
+        else:
+            st.warning(new_decision.summary())
+        st.rerun()
 
 
 def render_datasets() -> None:

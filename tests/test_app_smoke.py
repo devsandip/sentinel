@@ -46,3 +46,13 @@ def test_governed_codegen_section_renders():
     assert any(s.value == "Governed code generation" for s in at.subheader)
     # Pre-run, the console prompts the user to run.
     assert any("click Run" in i.value for i in at.info)
+
+
+def test_registry_section_shows_certification_lifecycle():
+    at = AppTest(script_path=APP, default_timeout=60).run()
+    assert not at.exception
+    at.sidebar.radio[0].set_value("Registry").run()
+    assert not at.exception
+    # The certification lifecycle section and its visible refusal both render.
+    assert any("certification lifecycle" in m.value for m in at.markdown)
+    assert any("cohort-retention" in e.label for e in at.expander)
