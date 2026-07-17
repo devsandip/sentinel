@@ -728,25 +728,27 @@
 
 <!-- 01 ============================================================ -->
 <section class="slide title-slide" id="s1">
-  <span class="num">01 / 13</span>
+  <span class="num"></span>
   <div class="inner">
     <div class="eyebrow">Sentinel &middot; Architecture Rethink</div>
     <h1>You built a governed<br>pipeline. Citi is asking<br>for a governed <span class="cool">model</span>.</h1>
     <div class="rule-heavy"></div>
     <p class="lede">A critique of the current design, a reshaped control flow, an off-the-shelf toolkit, and the screens worth building. Nothing here is built yet.</p>
     <div class="toc">
-      <a href="#s2"><span class="tn">02</span><span>The verdict</span></a>
-      <a href="#s3"><span class="tn">03</span><span>Where the LLM sits</span></a>
-      <a href="#s4"><span class="tn">04</span><span>The platform has nowhere to live</span></a>
-      <a href="#s5"><span class="tn">05</span><span>The four layers</span></a>
-      <a href="#s6"><span class="tn">06</span><span>The reshaped control flow</span></a>
-      <a href="#s7"><span class="tn">07</span><span>Inline, not wrapped</span></a>
-      <a href="#s8"><span class="tn">08</span><span>Six things missing</span></a>
-      <a href="#s9"><span class="tn">09</span><span>Tool or model?</span></a>
-      <a href="#s10"><span class="tn">10</span><span>The toolkit</span></a>
-      <a href="#s11"><span class="tn">11</span><span>Have vs. build</span></a>
-      <a href="#s12"><span class="tn">12</span><span>Screens: the analyst</span></a>
-      <a href="#s13"><span class="tn">13</span><span>Screens: oversight</span></a>
+      <a href="#s2"><span class="tn"></span><span>The verdict</span></a>
+      <a href="#s3"><span class="tn"></span><span>Where the LLM sits</span></a>
+      <a href="#s4"><span class="tn"></span><span>The platform has nowhere to live</span></a>
+      <a href="#s5"><span class="tn"></span><span>The four layers</span></a>
+      <a href="#s6"><span class="tn"></span><span>The reshaped control flow</span></a>
+      <a href="#s7"><span class="tn"></span><span>Inline, not wrapped</span></a>
+      <a href="#s8"><span class="tn"></span><span>Six things missing</span></a>
+      <a href="#sproxy"><span class="tn"></span><span>Proxy discrimination</span></a>
+      <a href="#s9"><span class="tn"></span><span>Tool or model?</span></a>
+      <a href="#s10"><span class="tn"></span><span>The toolkit</span></a>
+      <a href="#s11"><span class="tn"></span><span>Have vs. build</span></a>
+      <a href="#s12"><span class="tn"></span><span>Screens: the analyst</span></a>
+      <a href="#s13"><span class="tn"></span><span>Screens: oversight</span></a>
+      <a href="#slimits"><span class="tn"></span><span>What it cannot prove</span></a>
     </div>
     <div class="meta-row">
       <span>Prepared 2026-07-17</span>
@@ -758,7 +760,7 @@
 
 <!-- 02 ============================================================ -->
 <section class="slide" id="s2">
-  <span class="num">02 / 13</span>
+  <span class="num"></span>
   <div class="inner">
     <div class="eyebrow">The verdict</div>
     <p class="verdict">Your governance layer isn't governing the LLM. It's governing <span class="strike">scikit-learn</span>.</p>
@@ -780,7 +782,7 @@
 
 <!-- 03 ============================================================ -->
 <section class="slide" id="s3">
-  <span class="num">03 / 13</span>
+  <span class="num"></span>
   <div class="inner">
     <div class="eyebrow">Problem one</div>
     <h2>Where the LLM sits is the whole design</h2>
@@ -819,7 +821,7 @@
 
 <!-- 04 ============================================================ -->
 <section class="slide" id="s4">
-  <span class="num">04 / 13</span>
+  <span class="num"></span>
   <div class="inner">
     <div class="eyebrow">Problem two</div>
     <h2>The platform story has nowhere to live</h2>
@@ -858,7 +860,7 @@
 
 <!-- 05 ============================================================ -->
 <section class="slide" id="s5">
-  <span class="num">05 / 13</span>
+  <span class="num"></span>
   <div class="inner">
     <div class="eyebrow brass">The idea to build around</div>
     <h2>Four layers of leash</h2>
@@ -915,7 +917,7 @@
 
 <!-- 06 ============================================================ -->
 <section class="slide" id="s6">
-  <span class="num">06 / 13</span>
+  <span class="num"></span>
   <div class="inner">
     <div class="eyebrow">The reshaped control flow</div>
     <h2>Nine stages, and the control that fires at each</h2>
@@ -956,7 +958,7 @@
 
 <!-- 07 ============================================================ -->
 <section class="slide" id="s7">
-  <span class="num">07 / 13</span>
+  <span class="num"></span>
   <div class="inner">
     <div class="eyebrow">A framing correction</div>
     <h2>Controls are inline and differentiated, not a box you draw around the outside</h2>
@@ -999,7 +1001,7 @@
 
 <!-- 08 ============================================================ -->
 <section class="slide" id="s8">
-  <span class="num">08 / 13</span>
+  <span class="num"></span>
   <div class="inner">
     <div class="eyebrow brass">Gaps</div>
     <h2>Six things your structure is missing entirely</h2>
@@ -1024,7 +1026,7 @@
           <span class="gi">03</span>
           <div>
             <h3>Fair lending, called by its real name</h3>
-            <p>Your fairness check is currently an ethics exercise. In a US bank it is ECOA and Reg B, with named protected classes and a specific legal test: disparate treatment versus disparate impact. Using the regulatory vocabulary is a large credibility delta for Citi specifically.</p>
+            <p>Your fairness check is currently an ethics exercise. In a US bank it is ECOA and Reg B, with named protected classes and a specific legal test: disparate treatment versus disparate impact. Using the regulatory vocabulary is a large credibility delta for Citi specifically. The substance behind that test is <a href="#sproxy" style="color:var(--brass);">proxy discrimination</a>, which is big enough to get its own slide next.</p>
           </div>
         </div>
       </div>
@@ -1062,9 +1064,67 @@
   </div>
 </section>
 
-<!-- 09 ============================================================ -->
+<!-- proxy ============================================================ -->
+<section class="slide" id="sproxy">
+  <span class="num"></span>
+  <div class="inner">
+    <div class="eyebrow brass">The gap the column grant cannot close</div>
+    <h2>Your fairness check can pass while the model redlines</h2>
+
+    <div class="grid-2" style="gap:2.25rem; align-items:start;">
+      <div style="display:flex; flex-direction:column; gap:0.9rem;">
+        <p><span class="mono">CTL-COL-01</span> asks <strong>"is this column permitted."</strong> It cannot ask <strong>"does this permitted column reconstruct a protected one."</strong></p>
+
+        <div class="panel">
+          <span class="panel-t">Every one of these is a granted column</span>
+          <div class="lineage" style="margin-top:0.2rem;">
+            <div class="lrow"><span class="ll">zip_code</span><span class="lv">stands in for race</span></div>
+            <div class="lrow"><span class="ll">first_name</span><span class="lv">stands in for gender, ethnicity</span></div>
+            <div class="lrow"><span class="ll">purchase_hist</span><span class="lv">stands in for pregnancy</span></div>
+            <div class="lrow"><span class="ll">branch_id</span><span class="lv">stands in for neighbourhood</span></div>
+          </div>
+        </div>
+
+        <p class="body-sm">A model built <em>entirely</em> from permitted columns can still be redlining, and every control in this deck would pass it. That is not an edge case. Proxy discrimination is <strong>the</strong> problem in fair lending, and it is precisely why disparate impact exists as a legal test separate from disparate treatment.</p>
+
+        <div class="callout">
+          A fair lending demo with no answer to <strong>"what about zip code"</strong> is claiming something it has not built. It is the first question a reviewer asks.
+        </div>
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:0.9rem;">
+        <div class="wrongbox">
+          <span class="tag">The intuitive fix, and the wrong one</span>
+          <p class="body-sm" style="color:var(--ink-2);">Screen the <em>prompt</em> for bad intent before generating.</p>
+          <div class="verdict-list">
+            <div class="vrow fail"><span class="vi">&times;</span><span class="vt">Intent is easy to disguise</span><span class="vs">evadable</span></div>
+            <div class="vrow fail"><span class="vi">&times;</span><span class="vt">The analyst's intent is usually innocent</span><span class="vs">misses</span></div>
+            <div class="vrow fail"><span class="vi">&times;</span><span class="vt">Output discriminates regardless of the ask</span><span class="vs">wrong layer</span></div>
+            <div class="vrow fail"><span class="vi">&times;</span><span class="vt">Gives false comfort</span><span class="vs">worse than none</span></div>
+          </div>
+        </div>
+
+        <div class="rightbox">
+          <span class="tag">Empirical, post-execution, at Screen</span>
+<pre class="code"><span class="k">for</span> f <span class="k">in</span> granted_features_used:
+    a = association(f, protected_attr)
+    <span class="k">if</span> a &gt; threshold <span class="k">and</span> f <span class="k">is not</span> protected_attr:
+        flag(<span class="s">"CTL-PROXY-01"</span>, f, a)</pre>
+          <p class="body-sm">Cramer's V for categoricals, correlation ratio for mixed. Roughly <strong>twenty lines</strong> over the scoped table.</p>
+        </div>
+
+        <div class="panel" style="border-color:var(--brass);">
+          <span class="panel-t" style="color:var(--brass);">It flags. It does not refuse.</span>
+          <p class="body-sm">A proxy may survive a business-necessity defence, and that call is Legal's, not the platform's. The job is to make the proxy <em>visible</em> in the evidence pack rather than buried in a coefficient. Same posture as "what this does not say": state the limit, route the judgment to whoever owns it.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- sr 11-7 ============================================================ -->
 <section class="slide" id="s9">
-  <span class="num">09 / 13</span>
+  <span class="num"></span>
   <div class="inner">
     <div class="eyebrow">The POV worth having</div>
     <h2>Is the LLM a "model" under SR 11-7?</h2>
@@ -1096,7 +1156,7 @@
 
 <!-- 10 ============================================================ -->
 <section class="slide" id="s10">
-  <span class="num">10 / 13</span>
+  <span class="num"></span>
   <div class="inner">
     <div class="eyebrow">The toolkit</div>
     <h2>Buy the maths. Build the governance.</h2>
@@ -1191,7 +1251,7 @@
 
 <!-- 11 ============================================================ -->
 <section class="slide" id="s11">
-  <span class="num">11 / 13</span>
+  <span class="num"></span>
   <div class="inner">
     <div class="eyebrow">Have vs. build</div>
     <h2>Less demolition than it sounds</h2>
@@ -1256,7 +1316,7 @@
 
 <!-- 12 ============================================================ -->
 <section class="slide" id="s12">
-  <span class="num">12 / 13</span>
+  <span class="num"></span>
   <div class="inner">
     <div class="eyebrow brass">Screens &middot; the analyst</div>
     <h2>What a data scientist sees</h2>
@@ -1340,7 +1400,7 @@ m  = flm.MetricFrame(
 
 <!-- 13 ============================================================ -->
 <section class="slide" id="s13">
-  <span class="num">13 / 13</span>
+  <span class="num"></span>
   <div class="inner">
     <div class="eyebrow brass">Screens &middot; oversight</div>
     <h2>What everyone else sees</h2>
@@ -1447,10 +1507,73 @@ m  = flm.MetricFrame(
   </div>
 </section>
 
+<!-- limits ============================================================ -->
+<section class="slide" id="slimits">
+  <span class="num"></span>
+  <div class="inner">
+    <div class="eyebrow">Read this before you walk in</div>
+    <h2>What this artifact cannot prove</h2>
+
+    <div class="grid-2" style="gap:2.25rem; align-items:start;">
+      <div style="display:flex; flex-direction:column; gap:1rem;">
+        <p class="lede" style="max-width:none;">The KRAs are organisational. No amount of building closes that gap.</p>
+        <p>Partner with Risk, Compliance and Technology to land a governance framework. Champion adoption across a large data science population. Those are the job. This artifact speaks to neither.</p>
+        <div class="split-claim" style="gap:1rem;">
+          <div class="claim tool">
+            <span class="chip good">What it proves</span>
+            <p class="body-sm">That you know what such a framework must <em>contain</em>, and that you can make the tradeoffs concrete rather than abstract.</p>
+          </div>
+          <div class="claim model">
+            <span class="chip bad">What it does not</span>
+            <p class="body-sm">That you can get three second-line functions to agree on it, or persuade several thousand analysts to route through a tool that sometimes says no.</p>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:1rem;">
+        <div class="panel" style="border-color:var(--flag);">
+          <span class="panel-t" style="color:var(--flag);">The trap</span>
+          <p class="body-sm">"A working demo is an undeniable hire signal for an SVP." It isn't. SVP roles turn on org influence, stakeholder management, and prioritisation under constraint. A demo proves craft and judgment. It does not prove you can run a programme across a bank of two hundred thousand people.</p>
+        </div>
+
+        <div class="panel">
+          <span class="panel-t">How to hold it</span>
+          <p class="body-sm">As <strong>evidence of judgment</strong>, not as the case itself. It buys the right to a more serious conversation. It does not win it. If the demo does the talking for the whole interview, something has gone wrong.</p>
+        </div>
+
+        <div class="callout">
+          <strong>The question it cannot answer for you.</strong> "How did you get Compliance to sign off when they wanted something stricter and Engineering wanted something looser?"
+          <br><br>
+          That gets answered with an organisational story, not with code. Have it ready separately.
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
 <script>
   (function () {
     var prog = document.getElementById('prog');
     var slides = Array.prototype.slice.call(document.querySelectorAll('.slide'));
+
+    // Number the slides from the DOM. Hardcoding "07 / 13" into every section
+    // means every insertion is a chance to typo a number; deriving it removes
+    // the whole bug class. Runs before paint, and the PDF pass executes JS.
+    var pad = function (n) { return (n < 10 ? '0' : '') + n; };
+    slides.forEach(function (s, i) {
+      var el = s.querySelector('.num');
+      if (el) el.textContent = pad(i + 1) + ' / ' + pad(slides.length);
+    });
+
+    // TOC numbers derive from each target's actual position, so reordering or
+    // inserting a slide can never leave the contents lying about where it is.
+    Array.prototype.forEach.call(document.querySelectorAll('.toc a'), function (a) {
+      var id = (a.getAttribute('href') || '').slice(1);
+      var idx = -1;
+      slides.forEach(function (s, i) { if (s.id === id) idx = i; });
+      var tn = a.querySelector('.tn');
+      if (tn && idx >= 0) tn.textContent = pad(idx + 1);
+    });
 
     function onScroll() {
       var h = document.documentElement.scrollHeight - window.innerHeight;
