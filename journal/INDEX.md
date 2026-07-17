@@ -1,6 +1,6 @@
 # Sentinel — Journal Index
 
-Last refreshed: 2026-07-14 13:14
+Last refreshed: 2026-07-17 17:18
 
 Latest entry: [2026-07-14-1314-hm-assessment-and-sentinel2-build.md](entries/2026-07-14-1314-hm-assessment-and-sentinel2-build.md)
 

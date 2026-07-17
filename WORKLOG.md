@@ -263,3 +263,23 @@ Append-only session handoff log. Newest entries at the bottom.
 - Subtract in the app, put the strategy (vision/roadmap/adoption) in the accompanying note. The critic's line: you cannot fix an altitude problem caused by too much surface by adding more surface.
 - sentinel2 uses the local TF-IDF vector store, not pgvector, for full isolation from prod's RDS.
 - Hold GBM challenger / calibration / AIR fairness / new strategy tabs as verbal talking points; do not ship them before the interview (regression risk, low skim payoff, and a GBM undercuts the deliberately-simple thesis).
+
+## 2026-07-14 (later) — decided: keep sentinel2 local, nothing provisioned
+
+**Did:**
+- Closed the sentinel2 question. Decided not to provision sentinel2.sandip.dev. The improved build stays local, run with `./run.sh`.
+- Updated journal/INDEX.md to record the decision (moved it out of open questions into things-ruled-out) and reflect the final state. Commit bca1fc2.
+
+**State now:**
+- No AWS resources created. sentinel.sandip.dev (prod) untouched and unchanged all session.
+- `deploy/aws/sentinel2/` deploy path written, tested for syntax, and left unused. It is ready if we ever want it (deploy.sh, enable-https.sh, teardown.sh, README).
+- Branch `claude/sentinel-citi-assessment-521368` pushed, green (127 tests, ruff clean), head bca1fc2. Deliberately divergent from main.
+- The improved build runs locally on the same code + local TF-IDF vector store sentinel2 would have served, so local is a faithful preview.
+
+**Next:**
+- Nothing blocking. If the improved build should go in front of the hiring manager, either provision sentinel2 (two commands in deploy/aws/sentinel2/README.md) or decide the improved build becomes prod.
+- Still open from before: does the improved build eventually replace prod, or stay the interview-only variant.
+- Older, still open: SR 11-7 retrieval ranking (internal standard outranks the SR 11-7 doc).
+
+**Decisions:**
+- Keep sentinel2 local for now. No recurring cost, no new public endpoint, zero risk to the live prod link. The deploy path stays ready rather than deleted, so the decision is cheap to reverse.
