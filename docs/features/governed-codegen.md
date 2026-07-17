@@ -874,6 +874,76 @@ $ sentinel new-agent cohort-retention --template read-only-analysis
 The scaffold is the only path to an agent. That is what makes ungoverned agents
 structurally impossible rather than discouraged.
 
+### 10.7 The frontend stack: Streamlit stays, and why not Node
+
+The build is Streamlit today. The question came up whether to move to Node.js,
+with four options on the table: keep Streamlit, go Node entirely, Node plus
+Streamlit, or Node plus a FastAPI service. The answer is keep Streamlit, and the
+reasoning is worth recording because it is a product-judgment decision, not a
+taste one.
+
+**There is one runtime, and it is Python, load-bearingly.** The gate parses
+generated Python with Python's own `ast` module. The sandbox executes Python. The
+allowlist is a list of Python imports. fairlearn, statsmodels, DoWhy, lifelines,
+SHAP, ydata-profiling, sqlglot, and Presidio are Python-only with no credible JS
+equivalents. "Node entirely" would mean reimplementing fairlearn in TypeScript,
+which is the exact thing the thesis says not to do. It is self-refuting and is
+crossed off on those grounds alone.
+
+**"Node plus FastAPI" is the prioritization trap.** It is the textbook
+architecture, and this project already ruled it out on 2026-07-13 for speed
+(recorded in the journal's ruled-out list). The new thesis strengthens that call.
+Nobody hires an SVP AI PM for frontend engineering; a candidate who spends three
+weeks on a React frontend instead of the gate has demonstrated the one thing the
+role screens against, which is bad prioritization. The stack choice is itself the
+product-judgment test, and picking the boring option that lets the control layer
+get built is the passing answer.
+
+**The demo does not have two surfaces that need two app frameworks. It has
+three, and the split is already made.** The design serves three readers, each on
+a surface native to that reader:
+
+| Surface | Tool | Why it fits the reader |
+|---|---|---|
+| Console + Gate | Streamlit | Interactive, DS-native, one language with the runtime |
+| Data-scientist output | marimo | A notebook that is plain `.py`, so it is code-reviewable |
+| Leadership output | Quarto | A reproducible document, same input same output, forwardable and attachable to an audit file |
+
+marimo and Quarto were already chosen (dependency map, section 13). The leadership
+view is a document that gets read once, forwarded, and filed, not an app, so a
+Node app would serve it worse, not better. "Streamlit plus Node" collapses into
+"Streamlit plus Quarto plus marimo," which is the existing plan.
+
+**The positioning argument runs the same way.** The original reason for Streamlit
+was to speak the data-science lingo. The harder version of that argument is that
+Streamlit is a production deployment target on the platforms banks actually run:
+Databricks Apps hosts it natively, and Snowflake has Streamlit in Snowflake. So
+"how would this productionize" has a one-sentence answer, "it already runs on
+Databricks Apps," rather than "we would rewrite the frontend." A Node service has
+a worse story there, because it asks a bank platform team to host a Node runtime
+next to the Python one.
+
+**The honest cost, stated once.** If someone asks whether this ships to 5,000
+analysts as-is, Streamlit's answer is weak: single process, in-memory session
+state, no real auth. The reply is a sentence ("this proves the control model; the
+real thing runs on Databricks Apps"), not three weeks of React. Have the sentence
+ready.
+
+**The real friction is not the framework.** `app.py` is roughly 1,100 lines with
+a hand-rolled sidebar-radio router and no `pages/` directory. Adding Console,
+Gate, and Screen on top of that will hurt, and switching frameworks to relieve it
+would be treating a "nobody refactored" problem with a rewrite. Streamlit's native
+multipage (`st.Page` / `st.navigation`) is the actual fix, roughly an hour of work.
+
+**What could reopen this, and it is not a framework question.** If the gate should
+let the analyst *edit* the generated code before running it (a defensible reading
+of "a qualified human reviews it," and arguably more credible than
+approve-or-regenerate), that wants a real editor. Even then `streamlit-ace`
+covers it, and the honest minimum is a `st.text_area` that re-runs the gate on the
+edited code. The Gate's line-level annotation on the blocked line also exceeds
+`st.code`, but `app.py` already injects custom CSS, so a custom HTML block handles
+it. Both are v2 design questions, not framework decisions. See open question 7.
+
 ---
 
 ## 11. Certification lifecycle
@@ -1154,6 +1224,12 @@ control is costing us the most analyst time, and is it worth it.
    constant, which is itself a small argument for OPA.
 6. **Where does drift monitoring live?** Evidently is on the dependency map but
    has no stage in the lifecycle. Possibly a tenth stage, possibly out of scope.
+7. **Does the analyst edit code at the gate, or only regenerate?** Letting a
+   qualified human edit the generated code before it runs is a defensible, arguably
+   more credible reading of "a human reviews it" than approve-or-regenerate. It
+   would want an editor (`streamlit-ace`, or a `st.text_area` that re-runs the gate
+   on the edit). A v2 design question, not a framework one (10.7). This is the only
+   thing that would reopen the Streamlit decision, and even then it does not.
 
 ---
 
@@ -1167,3 +1243,9 @@ control is costing us the most analyst time, and is it worth it.
   data is confidential. (2026-07-17)
 - **The validator cannot run analyses.** Independence is structural, not
   procedural. (2026-07-17)
+- **The frontend stays Streamlit; no move to Node.** One Python runtime end to
+  end (the gate, the sandbox, the allowlist, every DS library), Streamlit is a
+  real deployment target on Databricks Apps and Snowflake, and the two output
+  surfaces are already marimo and Quarto, not a second app framework. A Node
+  rewrite spends the scarce time the control layer needs and demonstrates the bad
+  prioritization the role screens against. Full reasoning in 10.7. (2026-07-17)

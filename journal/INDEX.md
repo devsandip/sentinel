@@ -1,6 +1,6 @@
 # Sentinel — Journal Index
 
-Last refreshed: 2026-07-17 19:40
+Last refreshed: 2026-07-17 20:20
 
 Latest entry: [2026-07-17-1940-govern-the-llm-not-sklearn.md](entries/2026-07-17-1940-govern-the-llm-not-sklearn.md)
 
@@ -174,7 +174,7 @@ None yet. Week 2026-W28 (through Sun 2026-07-12) has entries but no summary.
 
 ## Things ruled out
 
-- Next.js + FastAPI split (chose Streamlit for speed).
+- Next.js + FastAPI split (chose Streamlit for speed). Revisited 2026-07-17 and reaffirmed, now on stronger grounds than speed. The runtime is Python end to end and load-bearingly so: the gate parses generated Python with `ast`, the sandbox runs Python, the allowlist is a list of Python imports, and every DS library (fairlearn, statsmodels, DoWhy, lifelines, SHAP, ydata-profiling, sqlglot, Presidio) is Python-only. "Node entirely" would mean reimplementing fairlearn in TypeScript, which is the exact thing the thesis says not to do. "Node + FastAPI" is the prioritization trap: nobody hires an SVP AI PM for a React frontend, and spending three weeks there instead of the gate demonstrates the bad prioritization the role screens against. The demo has three surfaces, not two, and the split is already made: Streamlit (Console + Gate), marimo (DS output), Quarto (leadership doc). Streamlit is also a real deploy target (Databricks Apps, Snowflake), so "how would this productionize" is a one-sentence answer. The real friction is `app.py` at ~1,100 lines with a hand-rolled router and no `pages/`; the fix is Streamlit's native multipage, not a framework switch. Full reasoning in PRD 10.7. The one thing that could reopen it (editing code at the gate) is a v2 design question, not a framework one.
 - ~~fairlearn dependency~~ (reversed 2026-07-17). Adopting fairlearn. The original call was to hand-roll the metrics for auditability. Under the new thesis ("I govern off-the-shelf tools") that inverts: hand-rolling the one metric a regulator cares most about undercuts the pitch. Governing fairlearn is more on-message than reimplementing it.
 - **Segregation of duties is not enforced today (confirmed defect, 2026-07-17).** Not a decision, a bug, recorded here so it is not rediscovered. `approve()` checks `actor.can_approve`, which is a role check, not an identity check. `RunState` never stores who started the run, so author and approver cannot be compared. `mrm_approver` holds both `can_run` and `can_approve`, so the same persona can approve its own run; so can `admin`. The docstring calls it "the segregation-of-duties control." It is not one. Fix is v0: persist `started_by`, compare in `approve()`, drop `can_run` from the second line and `can_approve` from admin.
 - Prompt screening as the defence against proxy discrimination (ruled out 2026-07-17). Intent is easy to disguise, the analyst's intent is usually innocent, and the output discriminates regardless of what was asked. It also gives false comfort, which is worse than no control. The control is empirical and post-execution instead: measure association between granted features and the protected attribute at Screen, and flag rather than refuse, because business necessity is Legal's call.
