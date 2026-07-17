@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from typing import Any
 
 import pandas as pd
@@ -27,6 +28,7 @@ from ..evidence import EvidencePack, build_evidence_pack
 from ..gateway.model_gateway import TEMPLATED, ModelGateway
 from ..harness.audit import LEVEL_BLOCKED, LEVEL_GATE, AuditLog
 from ..harness.identity import Persona, default_persona, policy_version
+from ..lineage import run_lineage_events
 from ..platform.certification import (
     CTL_CONTRACT_01,
     evaluate,
@@ -94,6 +96,7 @@ class GovernedRunResult:
     screen: ScreenResult | None = None
     narration: str = ""
     evidence: EvidencePack | None = None
+    lineage: list[dict] = field(default_factory=list)
     controls_fired: list[str] = field(default_factory=list)
     audit: list[dict] = field(default_factory=list)
 
@@ -127,6 +130,7 @@ class GovernedRunResult:
             ),
             "narration": self.narration,
             "evidence": self.evidence.to_public_dict() if self.evidence else None,
+            "lineage": self.lineage,
             "controls_fired": self.controls_fired,
             "audit": self.audit,
         }
@@ -229,6 +233,7 @@ def run_governed_analysis(
             screen=scr,
             narration=narration,
             evidence=evidence,
+            lineage=lineage,
             controls_fired=_dedupe(controls),
             audit=audit.as_dicts(),
         )
@@ -239,6 +244,8 @@ def run_governed_analysis(
     narration = ""
     plan_agent = ""
     evidence: EvidencePack | None = None
+    lineage: list[dict] = []
+    started_at = datetime.now(UTC).isoformat()
 
     # Stage 1: Ask -- bind identity, freeze the tier, classify.
     audit.record(
@@ -526,13 +533,25 @@ def run_governed_analysis(
         proxy_flags=scr.proxy_flags,
         cell_floor=cell_floor,
     )
+    # Emit the provenance chain as OpenLineage events: a START at Access and a
+    # COMPLETE at Attest, the input dataset bound to its contract SHA.
+    lineage = run_lineage_events(
+        run_id=run_id,
+        purpose=PURPOSE,
+        dataset=DATASET_ID,
+        dataset_sha=ds_sha,
+        finding=evidence.finding,
+        started_at=started_at,
+        completed_at=datetime.now(UTC).isoformat(),
+    )
     audit.record(
         agent="attest",
         action="evidence_pack",
         actor=persona.id,
         output_summary=(
             f"evidence pack assembled (pending signoff); "
-            f"{len(evidence.negative_statement)} negative-statement clause(s)"
+            f"{len(evidence.negative_statement)} negative-statement clause(s); "
+            f"{len(lineage)} OpenLineage event(s) emitted"
         ),
     )
     stages.append(

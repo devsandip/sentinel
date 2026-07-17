@@ -11,6 +11,7 @@ dependencies = [
     "fairlearn>=0.10",
     "sqlglot>=25.0",
     "duckdb>=1.0",
+    "openlineage-python>=1.0",
     "fpdf2>=2.8.7",
     "pyyaml>=6.0.3",
     "streamlit>=1.59.1",

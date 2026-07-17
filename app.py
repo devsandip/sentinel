@@ -841,6 +841,17 @@ def _govflow_evidence(pub: dict) -> None:
         mime="text/markdown",
     )
 
+    lineage = pub.get("lineage") or []
+    if lineage:
+        with st.expander(f"OpenLineage events ({len(lineage)}) — provenance as a standards graph"):
+            st.caption(
+                "A START at Access and a COMPLETE at Attest, the input dataset bound "
+                "to its contract SHA. Schema-valid events a Marquez or DataHub can "
+                "ingest; the demo captures them in-process rather than posting to a "
+                "backend."
+            )
+            st.json(lineage)
+
 
 def render_platform() -> None:
     st.subheader("Platform assets")

@@ -1952,6 +1952,22 @@ wheels = [
 ]
 
 [[package]]
+name = "openlineage-python"
+version = "1.51.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "attrs" },
+    { name = "httpx" },
+    { name = "packaging" },
+    { name = "python-dateutil" },
+    { name = "pyyaml" },
+    { name = "requests" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/39/33/ec58ea03fbcb32bc62c4d012e9d2a0710817e423fff41b2880241f9c95f3/openlineage_python-1.51.0-py3-none-any.whl", hash = "sha256:bbf03eeb2271ccb23dc6b7a5f39e9968585d10160fa1d7ac345d07f59b45f568", size = 114334, upload-time = "2026-07-06T11:46:41.801Z" },
+]
+
+[[package]]
 name = "opentelemetry-api"
 version = "1.43.0"
 source = { registry = "https://pypi.org/simple" }
@@ -3382,6 +3398,7 @@ dependencies = [
     { name = "langgraph" },
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
     { name = "numpy", version = "2.5.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
+    { name = "openlineage-python" },
     { name = "opentelemetry-sdk" },
     { name = "pandas" },
     { name = "pyyaml" },
@@ -3421,6 +3438,7 @@ requires-dist = [
     { name = "mcp", marker = "extra == 'dev'", specifier = ">=1.0" },
     { name = "mcp", marker = "extra == 'mcp'", specifier = ">=1.0" },
     { name = "numpy", specifier = ">=1.26" },
+    { name = "openlineage-python", specifier = ">=1.0" },
     { name = "opentelemetry-sdk", specifier = ">=1.30" },
     { name = "pandas", specifier = ">=2.2" },
     { name = "psycopg", extras = ["binary"], marker = "extra == 'pgvector'", specifier = ">=3.2" },
