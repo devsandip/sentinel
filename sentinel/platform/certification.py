@@ -29,6 +29,10 @@ from dataclasses import dataclass, field
 # certification eval floor; CTL-SOD-01 is segregation of duties (v0).
 CTL_EVAL_01 = "CTL-EVAL-01"
 CTL_SOD_01 = "CTL-SOD-01"
+# Data-contract drift (section 5, Stage 3): the dataset changed since the
+# certification was granted, so the certification is evidence about a dataset
+# that no longer exists. Checked at Access; see datasets/fingerprint.py.
+CTL_CONTRACT_01 = "CTL-CONTRACT-01"
 
 # Lifecycle states (section 11).
 STATUS_DRAFT = "draft"
@@ -42,6 +46,72 @@ FAITHFULNESS_FLOOR = 0.90
 
 class CertificationError(Exception):
     """Raised when a certification action is itself refused (e.g. CTL-SOD-01)."""
+
+
+def parse_contract(contract: str | None) -> tuple[str, str | None]:
+    """Split a data contract 'dataset@sha:abc123' into (dataset_id, sha).
+
+    A contract with no SHA returns (dataset_id, None); an empty contract returns
+    ('', None). This is pure string parsing; the SHA is recomputed elsewhere.
+    """
+    if not contract:
+        return "", None
+    dataset, _, rest = contract.partition("@")
+    sha = None
+    if rest.startswith("sha:"):
+        sha = rest[len("sha:"):] or None
+    return dataset, sha
+
+
+@dataclass(frozen=True)
+class ContractCheck:
+    """The data-contract drift verdict for one entry (CTL-CONTRACT-01)."""
+
+    entry_id: str
+    ok: bool
+    drifted: bool
+    certified_sha: str | None
+    current_sha: str | None
+    detail: str
+
+    @property
+    def control(self) -> str:
+        return CTL_CONTRACT_01
+
+
+def check_contract(
+    entry: RegistryEntry, current_sha: str | None, note: str = ""
+) -> ContractCheck:
+    """Compare the entry's certified dataset SHA against the current SHA.
+
+    Drift (a mismatch) fires CTL-CONTRACT-01: flag and require recertification
+    rather than run silently on data the certification never covered. A dataset
+    that cannot be fingerprinted (current_sha is None) is reported as
+    unverifiable, not silently passed.
+    """
+    _, certified = parse_contract(entry.data_contract)
+    if current_sha is None:
+        return ContractCheck(
+            entry.id, ok=False, drifted=False, certified_sha=certified,
+            current_sha=None, detail=note or "dataset SHA could not be recomputed",
+        )
+    if certified is None:
+        return ContractCheck(
+            entry.id, ok=False, drifted=False, certified_sha=None,
+            current_sha=current_sha, detail="no SHA declared in the data contract",
+        )
+    if certified == current_sha:
+        return ContractCheck(
+            entry.id, ok=True, drifted=False, certified_sha=certified,
+            current_sha=current_sha, detail=f"contract SHA {certified} matches current data",
+        )
+    return ContractCheck(
+        entry.id, ok=False, drifted=True, certified_sha=certified, current_sha=current_sha,
+        detail=(
+            f"CTL-CONTRACT-01: dataset drifted since certification "
+            f"(certified {certified}, current {current_sha}); recertification required"
+        ),
+    )
 
 
 @dataclass(frozen=True)
@@ -192,7 +262,10 @@ _REGISTRY: list[RegistryEntry] = [
         owner="Dana Okafor",
         owner_is_person=True,
         validator="sam.mendes",
-        data_contract="german_credit@sha:4f2a1c",
+        # Pinned to the real content SHA of sentinel/data/german_credit.csv, so
+        # the live contract check passes honestly (no drift on static data). If
+        # the CSV ever changes, test_contract's pin test fails loudly.
+        data_contract="german_credit@sha:188808",
         eval_suite_ref="evals/fair_lending.yaml",
         faithfulness=0.94,
         last_evaluated="2026-05-02",
