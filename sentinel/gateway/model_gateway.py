@@ -72,6 +72,25 @@ class Generation:
     fallback_reason: str = ""
 
 
+@dataclass
+class CodeGen:
+    """The gateway's output for a code-generation call (Stage 4).
+
+    Distinct from Generation (narration): the payload is executable code, routed
+    to the capable model tier, and the scripted fallback is supplied by the
+    caller (canned code is domain content the codegen layer owns, not the
+    gateway).
+    """
+
+    code: str
+    tokens: int
+    cost_usd: float
+    provider: str
+    live: bool
+    fell_back: bool = False
+    fallback_reason: str = ""
+
+
 # Routing tiers. The gateway classifies each call by stakes and routes to a tier:
 # elevated-stakes narration (model performance, promotion) to a capable model,
 # routine narration to a cheap model, and in scripted mode to a template. This is
@@ -324,6 +343,68 @@ class ModelGateway:
             return _call_openai(prompt, model)
         raise ValueError(f"unknown provider {self.provider}")
 
+    # -- code generation (Stage 4) -------------------------------------
+    def generate_code(
+        self, system: str, user: str, fallback_code: str, *, call_kind: str = "generate"
+    ) -> CodeGen:
+        """Generate code through the gateway. Scripted mode returns the caller's
+        canned code (zero cost); live mode calls the capable model and falls back
+        to the canned code on cap breach or failure. Every path writes a ledger
+        row, so code generation is governed at the same boundary as narration.
+        """
+        model = _TIER_MODELS.get(self.provider, {}).get(TIER_CAPABLE, self.model)
+
+        if not self.is_live:
+            self._log(
+                call_kind, "elevated", TIER_TEMPLATED, TEMPLATED, TEMPLATED, False,
+                tokens=0, cost=0.0, cache="miss", policy="scripted code (zero cost)",
+            )
+            return CodeGen(
+                code=fallback_code, tokens=0, cost_usd=0.0, provider=TEMPLATED, live=False
+            )
+
+        if process_live_spent_usd() >= self.monthly_cap_usd:
+            self._log(
+                call_kind, "elevated", TIER_CAPABLE, model, TEMPLATED, False,
+                tokens=0, cost=0.0, cache="miss",
+                policy="cost cap reached -> fallback to scripted code",
+            )
+            return CodeGen(
+                code=fallback_code, tokens=0, cost_usd=0.0, provider=TEMPLATED,
+                live=False, fell_back=True, fallback_reason="cost cap reached",
+            )
+
+        try:
+            text, tokens, cost = self._call_code_live(system, user, model)
+        except Exception as exc:  # noqa: BLE001 - any live failure degrades safely
+            self._log(
+                call_kind, "elevated", TIER_CAPABLE, model, TEMPLATED, False,
+                tokens=0, cost=0.0, cache="miss",
+                policy="live code call failed -> fallback to scripted code",
+            )
+            return CodeGen(
+                code=fallback_code, tokens=0, cost_usd=0.0, provider=TEMPLATED,
+                live=False, fell_back=True, fallback_reason=f"live call failed: {exc}",
+            )
+
+        self._spent_usd += cost
+        _record_process_spend(cost)
+        self._log(
+            call_kind, "elevated", TIER_CAPABLE, model, self.provider, True,
+            tokens=tokens, cost=cost, cache="miss", policy="cost cap ok",
+        )
+        return CodeGen(
+            code=_strip_code_fences(text), tokens=tokens, cost_usd=round(cost, 6),
+            provider=self.provider, live=True,
+        )
+
+    def _call_code_live(
+        self, system: str, user: str, model: str
+    ) -> tuple[str, int, float]:
+        if self.provider == ANTHROPIC:
+            return _call_anthropic_code(system, user, model)
+        raise ValueError(f"code generation not supported for provider {self.provider}")
+
 
 def _default_model(provider: str) -> str:
     return {
@@ -371,3 +452,34 @@ def _call_openai(prompt: str, model: str) -> tuple[str, int, float]:
     tokens = (usage.prompt_tokens + usage.completion_tokens) if usage else 0
     cost = (usage.prompt_tokens * 1.5e-7 + usage.completion_tokens * 6e-7) if usage else 0.0
     return text.strip(), tokens, cost
+
+
+def _call_anthropic_code(system: str, user: str, model: str) -> tuple[str, int, float]:
+    import anthropic  # lazy: only imported in live mode
+
+    client = anthropic.Anthropic()
+    msg = client.messages.create(
+        model=model,
+        max_tokens=1024,
+        system=system,
+        messages=[{"role": "user", "content": user}],
+    )
+    text = "".join(b.text for b in msg.content if getattr(b, "type", "") == "text")
+    tokens = msg.usage.input_tokens + msg.usage.output_tokens
+    # Rough Sonnet pricing; exact accounting is not the point of the demo.
+    cost = (msg.usage.input_tokens * 3e-6) + (msg.usage.output_tokens * 1.5e-5)
+    return text.strip(), tokens, cost
+
+
+def _strip_code_fences(text: str) -> str:
+    """Remove a leading ```python / ``` fence and trailing ``` if the model wrapped
+    its output, so the gate parses code, not markdown."""
+    stripped = text.strip()
+    if not stripped.startswith("```"):
+        return stripped
+    lines = stripped.splitlines()
+    if lines and lines[0].startswith("```"):
+        lines = lines[1:]
+    if lines and lines[-1].strip() == "```":
+        lines = lines[:-1]
+    return "\n".join(lines).strip()

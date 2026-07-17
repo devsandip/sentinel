@@ -17,5 +17,19 @@ only (`ctx.table`, `ctx.param`, `ctx.emit`).
 from __future__ import annotations
 
 from .gate import GateResult, Violation, gate_code
+from .generate import (
+    CodeGenRequest,
+    GenerationOutcome,
+    generate,
+    generate_and_gate,
+)
 
-__all__ = ["GateResult", "Violation", "gate_code"]
+__all__ = [
+    "CodeGenRequest",
+    "GateResult",
+    "GenerationOutcome",
+    "Violation",
+    "gate_code",
+    "generate",
+    "generate_and_gate",
+]
