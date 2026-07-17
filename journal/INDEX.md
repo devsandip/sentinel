@@ -1,10 +1,33 @@
 # Sentinel — Journal Index
 
-Last refreshed: 2026-07-17 21:02
+Last refreshed: 2026-07-17 22:03
 
-Latest entry: [2026-07-17-2102-build-greenlit-v0-then-v1.md](entries/2026-07-17-2102-build-greenlit-v0-then-v1.md)
+Latest entry: [2026-07-17-2203-v0-shipped-v1-core-fairlearn-reversed.md](entries/2026-07-17-2203-v0-shipped-v1-core-fairlearn-reversed.md)
 
 ## Where we are now
+
+**The build has started for real. v0 is shipped and the v1 deterministic core is on the branch.**
+
+On `feat/governed-codegen` (one PR, #1): v0 made the segregation-of-duties
+docstring true (`started_by` on `RunState`, `CTL-SOD-01` in `approve()`, the
+second line loses `can_run` and admin loses `can_approve`). Then the v1 core, the
+deterministic half first because it is the demonstrable half and needs no model:
+the `ast` gate that refuses generated code before execution (a webhook caught as
+`CTL-EGRESS-01`, the first half of the done-when), the Screen that removes an n=3
+cell before the narration model sees it (`CTL-DISC-02`, the second half) with
+`CTL-PROXY-01` riding along, and the subprocess sandbox with a wall-clock cap
+(`CTL-TIME-01`). The fairlearn reversal landed too: `ml/fairness.py` now governs a
+`MetricFrame` instead of hand-rolling the metric, which is the on-message move
+under the platform thesis. 164 tests green, ruff clean, prod untouched.
+
+Still to come in v1: the live code-generation step and the gateway repoint, the
+orchestrator rewiring into Ask to Interpret, the two Streamlit screens (Console and
+Gate), and the seeded adversarial prompt set with the section 16 metrics tests.
+
+Everything below is the prior state: the rethink accepted, and the platform as it
+stands in prod.
+
+---
 
 **The build is stable and in prod. The rethink is accepted, and the build has started.**
 
@@ -138,6 +161,7 @@ out).
 
 ## Recent entries
 
+- [2026-07-17-2203-v0-shipped-v1-core-fairlearn-reversed.md](entries/2026-07-17-2203-v0-shipped-v1-core-fairlearn-reversed.md) : first code since the rethink. v0 (CTL-SOD-01) shipped; v1 deterministic core built (the ast gate, the Screen with CTL-DISC-02 + CTL-PROXY-01, the sandbox with CTL-TIME-01); fairlearn reinstated in ml/fairness.py. 164 tests, all on PR #1. Prod untouched.
 - [2026-07-17-2102-build-greenlit-v0-then-v1.md](entries/2026-07-17-2102-build-greenlit-v0-then-v1.md) : the rethink is accepted; building starts. A clarification pass on the PRD changed nothing. Model card survives as the Attest evidence pack. Order locked: v0 (SoD fix) then v1 (the vertical slice). Live LLM from the start, feature branch per slice. Branch created, no code yet.
 - [2026-07-17-1940-govern-the-llm-not-sklearn.md](entries/2026-07-17-1940-govern-the-llm-not-sklearn.md) : the rethink. The harness audits scikit-learn, not the LLM. Autonomy ladder, proxy discrimination, a confirmed SoD defect, fairlearn back in. Docs only, no code.
 - [2026-07-14-0854-datasets-onboarded-and-ragas-faithfulness.md](entries/2026-07-14-0854-datasets-onboarded-and-ragas-faithfulness.md) — ULB fraud + LendingClub onboarded via no-account sources; Ragas faithfulness wired on the Anthropic SDK and run, stable 1.0. 127 tests.
@@ -169,7 +193,7 @@ None yet. Week 2026-W28 (through Sun 2026-07-12) has entries but no summary.
 ## Open questions
 
 - Which comes first, `ctx.sql` or `ctx.table`? Resolved for v1: `ctx.table`, because v1's done-when (a webhook caught at the gate, an n=3 cell suppressed) needs no SQL. `ctx.sql` plus the sqlglot row-filter rewrite is the more recognisable governance demo and lands in v2, where `CTL-COMPLEX-01` and `CTL-CONTRACT-01` also live.
-- Is `n < 10` the right small-cell floor? It is the common default, but a real bank sets it per data domain. Probably a policy value rather than a constant, which is itself a small argument for OPA.
+- Is `n < 10` the right small-cell floor? It is the common default, but a real bank sets it per data domain. Now a `floor` parameter on the Screen (default 10) rather than a hardcoded constant, which is the right shape; making it a per-domain policy value is the OPA argument, still open.
 - Where does drift monitoring live? Evidently is on the dependency map with no stage in the lifecycle.
 - Should linear analysis runs feed the adoption metrics and model registry? (The execution-routing half of this is decided; see ruled out.)
 - Retrieval ranking: the SR 11-7 query ranks the internal modeling standard above the SR 11-7 document itself (SR 11-7 chunks still return at ranks 2-3). Worth a later look at chunking or reranking.
@@ -181,8 +205,8 @@ None yet. Week 2026-W28 (through Sun 2026-07-12) has entries but no summary.
 - Next.js + FastAPI split (chose Streamlit for speed). Revisited 2026-07-17 and reaffirmed, now on stronger grounds than speed. The runtime is Python end to end and load-bearingly so: the gate parses generated Python with `ast`, the sandbox runs Python, the allowlist is a list of Python imports, and every DS library (fairlearn, statsmodels, DoWhy, lifelines, SHAP, ydata-profiling, sqlglot, Presidio) is Python-only. "Node entirely" would mean reimplementing fairlearn in TypeScript, which is the exact thing the thesis says not to do. "Node + FastAPI" is the prioritization trap: nobody hires an SVP AI PM for a React frontend, and spending three weeks there instead of the gate demonstrates the bad prioritization the role screens against. The demo has three surfaces, not two, and the split is already made: Streamlit (Console + Gate), marimo (DS output), Quarto (leadership doc). Streamlit is also a real deploy target (Databricks Apps, Snowflake), so "how would this productionize" is a one-sentence answer. The real friction is `app.py` at ~1,100 lines with a hand-rolled router and no `pages/`; the fix is Streamlit's native multipage, not a framework switch. Full reasoning in PRD 10.7. The one thing that could reopen it (editing code at the gate) is a v2 design question, not a framework one.
 - Mocked codegen during development (chose live from the start, 2026-07-17). The code-generation step calls the real model throughout dev, with the cumulative spend cap as the backstop. Fixtures would harden the gate against code I wrote, not against code the model writes, which is the wrong target.
 - Direct-to-main for the build (chose a feature branch, 2026-07-17). Work goes on `feat/governed-codegen` with a PR per slice. A clean reviewable history is worth more on a credibility artifact than a fast one.
-- ~~fairlearn dependency~~ (reversed 2026-07-17). Adopting fairlearn. The original call was to hand-roll the metrics for auditability. Under the new thesis ("I govern off-the-shelf tools") that inverts: hand-rolling the one metric a regulator cares most about undercuts the pitch. Governing fairlearn is more on-message than reimplementing it.
-- **Segregation of duties is not enforced today (confirmed defect, 2026-07-17).** Not a decision, a bug, recorded here so it is not rediscovered. `approve()` checks `actor.can_approve`, which is a role check, not an identity check. `RunState` never stores who started the run, so author and approver cannot be compared. `mrm_approver` holds both `can_run` and `can_approve`, so the same persona can approve its own run; so can `admin`. The docstring calls it "the segregation-of-duties control." It is not one. Fix is v0: persist `started_by`, compare in `approve()`, drop `can_run` from the second line and `can_approve` from admin.
+- ~~fairlearn dependency~~ (reversed 2026-07-17, now wired). Adopting fairlearn. The original call was to hand-roll the metrics for auditability. Under the new thesis ("I govern off-the-shelf tools") that inverts: hand-rolling the one metric a regulator cares most about undercuts the pitch. Governing fairlearn is more on-message than reimplementing it. Done: `ml/fairness.py` now governs a `MetricFrame`, `fairlearn` is a base dependency, all fairness tests still green.
+- **Segregation of duties is not enforced today (confirmed defect, 2026-07-17; fixed in v0 the same day).** Not a decision, a bug, recorded here so it is not rediscovered. `approve()` checked `actor.can_approve`, which is a role check, not an identity check. `RunState` never stored who started the run, so author and approver could not be compared. `mrm_approver` held both `can_run` and `can_approve`, so the same persona could approve its own run; so could `admin`. The docstring called it "the segregation-of-duties control." It was not one. v0 fixed it: `started_by` on `RunState`, `CTL-SOD-01` in `approve()`, and the second line lost `can_run` while admin lost `can_approve`. Shipped on PR #1.
 - Prompt screening as the defence against proxy discrimination (ruled out 2026-07-17). Intent is easy to disguise, the analyst's intent is usually innocent, and the output discriminates regardless of what was asked. It also gives false comfort, which is worse than no control. The control is empirical and post-execution instead: measure association between granted features and the protected attribute at Screen, and flag rather than refuse, because business necessity is Legal's call.
 - Thumbs up/down on generated code as adoption telemetry (ruled out 2026-07-17). In a governance product a thumbs-down usually means "the gate blocked me," which may be the system working. The instrument cannot separate "this is bad" from "this correctly stopped me," and optimising a control layer for satisfaction points one way: loosen the controls. Measure abandonment-after-block by control ID instead.
 - ~~LangGraph~~ — reversed 2026-07-13. Adopting LangGraph for the platform buildout. Its graph is static (fixed nodes/edges), so it stays an inspectable workflow, and its interrupt/checkpointer primitives map onto the human gate and memory. The plain state machine was right for the single-pipeline demo, wrong for the platform.
