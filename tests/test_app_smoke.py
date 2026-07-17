@@ -36,3 +36,13 @@ def test_platform_section_renders():
     # Three playbooks, each in an expander, plus the download pack button.
     assert len(at.expander) == 3
     assert any("playbook pack" in b.label for b in at.download_button)
+
+
+def test_governed_codegen_section_renders():
+    at = AppTest(script_path=APP, default_timeout=60).run()
+    assert not at.exception
+    at.sidebar.radio[0].set_value("Governed codegen").run()
+    assert not at.exception
+    assert any(s.value == "Governed code generation" for s in at.subheader)
+    # Pre-run, the console prompts the user to run.
+    assert any("click Run" in i.value for i in at.info)
