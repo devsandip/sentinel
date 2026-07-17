@@ -1,10 +1,41 @@
 # Sentinel — Journal Index
 
-Last refreshed: 2026-07-14 08:54
+Last refreshed: 2026-07-17 19:40
 
-Latest entry: [2026-07-14-0854-datasets-onboarded-and-ragas-faithfulness.md](entries/2026-07-14-0854-datasets-onboarded-and-ragas-faithfulness.md)
+Latest entry: [2026-07-17-1940-govern-the-llm-not-sklearn.md](entries/2026-07-17-1940-govern-the-llm-not-sklearn.md)
 
 ## Where we are now
+
+**The build is stable and in prod. The thesis is under revision.**
+
+On 2026-07-17 I stopped building and rethought the whole thing. The finding: the
+governance layer is not governing the language model, it is governing
+scikit-learn. Every control fires on a logistic regression, and turning the LLM
+off leaves all of them passing. The model narrates at the end of the pipeline and
+never touches anything, so nothing ever governs it. Meanwhile the question being
+asked is whether I can deploy LLMs to help data scientists, and the honest answer
+to how LLMs help data scientists is that they write the code.
+
+The proposal moves the model upstream of execution so it writes the analysis
+code, and puts a static-analysis gate between generation and execution.
+Governance stops being a perimeter and becomes differentiated controls at each
+transition: RBAC and purpose at Access, code safety at Gate, disclosure at Screen,
+SR 11-7 at Attest. The organising idea is an autonomy ladder (L0 explains, L1
+chooses, L2 writes inside a fence, L3 improvises) where the tier is computed from
+role times data classification rather than chosen. Maths is bought off the shelf.
+The governance is the product.
+
+Nothing from the proposal is built. The PRD is at
+`docs/features/governed-codegen.md`, with the 15-slide argument beside it as HTML
+and PDF. **v0** is a confirmed defect worth fixing regardless of whether the
+reframe lands: segregation of duties is not actually enforced (see Things ruled
+out). **v1** is one vertical slice, Generate to Gate to Execute to Screen at L2 on
+`german_credit`, with fairlearn doing the maths.
+
+Everything below describes the build as it stands. It is accurate and deployed.
+It is also what the proposal would reframe.
+
+---
 
 Sentinel is a governed agentic data-science demo, built as an interview
 credibility artifact for an SVP AI Product Management role at a bank. The thesis:
@@ -103,6 +134,7 @@ out).
 
 ## Recent entries
 
+- [2026-07-17-1940-govern-the-llm-not-sklearn.md](entries/2026-07-17-1940-govern-the-llm-not-sklearn.md) : the rethink. The harness audits scikit-learn, not the LLM. Autonomy ladder, proxy discrimination, a confirmed SoD defect, fairlearn back in. Docs only, no code.
 - [2026-07-14-0854-datasets-onboarded-and-ragas-faithfulness.md](entries/2026-07-14-0854-datasets-onboarded-and-ragas-faithfulness.md) — ULB fraud + LendingClub onboarded via no-account sources; Ragas faithfulness wired on the Anthropic SDK and run, stable 1.0. 127 tests.
 - [2026-07-14-0646-live-llm-narration-in-prod.md](entries/2026-07-14-0646-live-llm-narration-in-prod.md) — live-LLM narration was silently broken (SDK never installed); fixed + enabled in prod behind a cumulative $50 cap. Verified live.
 - [2026-07-13-2237-analysis-platform-and-pgvector-prod.md](entries/2026-07-13-2237-analysis-platform-and-pgvector-prod.md) — analysis-spec engine + profiling & feature-eng analyses; pgvector live in prod. 126 tests.
@@ -122,20 +154,31 @@ None yet. Week 2026-W28 (through Sun 2026-07-12) has entries but no summary.
 
 ## Working hypotheses
 
-- A naturally-flagging fairness result is more convincing than a staged one. Keep it real.
-- The model card PDF is the single highest-leverage showpiece.
+- A naturally-flagging fairness result is more convincing than a staged one. Keep it real. This now extends to the gate: if the demo shows generated code being blocked, the block must be genuine, never seeded.
+- The model card PDF is the single highest-leverage showpiece. The evidence pack with its "what this does not say" block would supersede it.
 - A control is only credible if it can be seen firing. Force RBAC and PII to fire every run.
+- A control that can never fire is decoration. `CTL-CONTRACT-01` (dataset drift) cannot fire against static CSVs; say so rather than demo it.
+- Governance that blocks legitimate work gets routed around. The false-block rate matters as much as the true-block rate, and a demo that ignores it is not credible to anyone who has shipped internal tools.
+- The artifact is evidence of judgment, not the case itself. The KRAs are organisational and no amount of building closes that gap.
 
 ## Open questions
 
-- Should linear analysis runs feed the adoption metrics and model registry? (The execution-routing half of this is now decided; see ruled out.)
+- Does the reframe land? The whole proposal is unaccepted. Nothing in `docs/features/governed-codegen.md` is built.
+- Which comes first, `ctx.sql` or `ctx.table`? `table` is faster; `sql` is the more recognisable governance demo, because the sqlglot row-filter rewrite is what a bank data engineer recognises instantly. Leaning `sql`.
+- Is `n < 10` the right small-cell floor? It is the common default, but a real bank sets it per data domain. Probably a policy value rather than a constant, which is itself a small argument for OPA.
+- Where does drift monitoring live? Evidently is on the dependency map with no stage in the lifecycle.
+- Should linear analysis runs feed the adoption metrics and model registry? (The execution-routing half of this is decided; see ruled out.)
 - Retrieval ranking: the SR 11-7 query ranks the internal modeling standard above the SR 11-7 document itself (SR 11-7 chunks still return at ranks 2-3). Worth a later look at chunking or reranking.
+- `synthetic_its` is registered but has no onboarder, so no local data exists. It is the only Public-class dataset, which makes it the only place L3 could legally run. L3 currently has nowhere to live.
 - Demo GIF/Loom for the README: dropped for now per Sandip (2026-07-14).
 
 ## Things ruled out
 
 - Next.js + FastAPI split (chose Streamlit for speed).
-- fairlearn dependency (implemented metrics directly for auditability).
+- ~~fairlearn dependency~~ (reversed 2026-07-17). Adopting fairlearn. The original call was to hand-roll the metrics for auditability. Under the new thesis ("I govern off-the-shelf tools") that inverts: hand-rolling the one metric a regulator cares most about undercuts the pitch. Governing fairlearn is more on-message than reimplementing it.
+- **Segregation of duties is not enforced today (confirmed defect, 2026-07-17).** Not a decision, a bug, recorded here so it is not rediscovered. `approve()` checks `actor.can_approve`, which is a role check, not an identity check. `RunState` never stores who started the run, so author and approver cannot be compared. `mrm_approver` holds both `can_run` and `can_approve`, so the same persona can approve its own run; so can `admin`. The docstring calls it "the segregation-of-duties control." It is not one. Fix is v0: persist `started_by`, compare in `approve()`, drop `can_run` from the second line and `can_approve` from admin.
+- Prompt screening as the defence against proxy discrimination (ruled out 2026-07-17). Intent is easy to disguise, the analyst's intent is usually innocent, and the output discriminates regardless of what was asked. It also gives false comfort, which is worse than no control. The control is empirical and post-execution instead: measure association between granted features and the protected attribute at Screen, and flag rather than refuse, because business necessity is Legal's call.
+- Thumbs up/down on generated code as adoption telemetry (ruled out 2026-07-17). In a governance product a thumbs-down usually means "the gate blocked me," which may be the system working. The instrument cannot separate "this is bad" from "this correctly stopped me," and optimising a control layer for satisfaction points one way: loosen the controls. Measure abandonment-after-block by control ID instead.
 - ~~LangGraph~~ — reversed 2026-07-13. Adopting LangGraph for the platform buildout. Its graph is static (fixed nodes/edges), so it stays an inspectable workflow, and its interrupt/checkpointer primitives map onto the human gate and memory. The plain state machine was right for the single-pipeline demo, wrong for the platform.
 - OpenMP/BLAS thread pinning as the crash fix (tested, did nothing, removed). The real fix is the pyarrow memory pool.
 - FRED data (macro time-series does not fit the classification/fairness story).

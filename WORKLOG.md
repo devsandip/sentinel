@@ -236,3 +236,31 @@ Append-only session handoff log. Newest entries at the bottom.
 - Faithfulness on the Anthropic SDK, not the ragas package: the package is broken here and a hand-rolled, prompt-visible judge is more auditable, which fits the governance thesis. Same metric definition.
 - Faithfulness scoped to the RAG-grounded policy claim, not the model's computed numbers. Those are the eval gate's job. This is the correct Ragas definition, not score inflation.
 - ULB sampled to keep the real fraud imbalance and rounded to stay lean; LendingClub kept wide and messy because messiness is the triage target.
+
+## 2026-07-17: Rethink. Govern the LLM, not scikit-learn. PRD + deck, no code.
+
+**Did:**
+- Rethought the whole project before building further. Core finding: the governance harness is not governing the language model, it is governing scikit-learn. Every control fires on a logistic regression; turn the LLM off and they all still pass. The model narrates at the end and never touches anything, so nothing governs it.
+- Proposed the reframe: the model moves upstream of execution and writes the analysis code, with a static-analysis gate between generation and execution. Governance becomes differentiated controls per transition (RBAC/purpose at Access, code safety at Gate, disclosure at Screen, SR 11-7 at Attest) rather than a perimeter. Organising idea is an autonomy ladder (L0-L3) where the tier is computed from role x data classification, never chosen.
+- Wrote `docs/features/governed-codegen.md` (PRD, ~7.7k words, 25 controls catalogued, 19 sections). Opens with one complete request traced end to end with real values, because the stated problem was not being able to visualise the product.
+- Built the 15-slide argument as HTML + PDF beside it (`governed-codegen-deck.{html,pdf}`), generated via headless Chrome print styles.
+- Fact-checked the proposal against the code and found a confirmed defect: segregation of duties is not enforced. `approve()` checks `actor.can_approve` (a role check); `RunState` never stores who started the run, so author vs approver cannot be compared; `mrm_approver` and `admin` both hold `can_run` + `can_approve`. Same persona can approve its own run. Filed as v0.
+- Also corrected two of my own proposals against reality: the existing `config/personas.yaml` already models three lines of defence and is better than the personas I invented, so the PRD extends it rather than replacing it. And `synthetic_its` is registered but has no onboarder, which means L3 (Public-class only) currently has nowhere to run.
+- Processed external review (Gemini). Accepted three suggestions with reframing (CTL-PROXY-01, CTL-INJECT-01, CTL-COMPLEX-01/CTL-CONTRACT-01), rejected one with a counter-proposal (thumbs up/down -> abandonment-after-block).
+
+**State now:**
+- Main is at `16b2c3b`, pushed. Three commits today, all docs: `6bc97f4` (PRD + deck), `dc9c1e4` (proxy/injection/scope), `16b2c3b` (deck synced to PRD, 13 -> 15 slides).
+- No code changed. 127 tests pass, ruff clean. Prod untouched and still green at SHA `9dcd20b`.
+- Deck slide numbering now derives from the DOM instead of being hardcoded per section; TOC numbers derive from target position. Inserting a slide previously meant hand-editing 13 strings.
+
+**Next:**
+- Decide: v0 (the SoD fix, an afternoon, real regardless of the reframe) or a clickable Console/Gate fake (no backend, hardcoded to the golden path) as the actual cure for the visualisation problem.
+- If the reframe lands, v1 is one vertical slice: Generate -> Gate -> Execute -> Screen at L2 on `german_credit`, with fairlearn doing the maths, plus CTL-PROXY-01.
+- Week 2026-W28 still has entries and no weekly summary. W29 ends Sunday 2026-07-19.
+
+**Decisions:**
+- fairlearn is adopted, reversing 2026-07-13. If the pitch is "I govern off-the-shelf tools," hand-rolling the metric a regulator cares most about undercuts it.
+- The LLM is a tool under SR 11-7 when a human reviews its code, and a model when it autonomously produces a number that drives a decision. This is architecture, not philosophy: it fixes where the human gate sits, and it is why L3 is fenced to synthetic data.
+- Proxy discrimination is controlled empirically at Screen, not by screening the prompt. It flags rather than refuses, because business necessity is Legal's call.
+- Data classifications are simulated and labelled as such. Every dataset here is genuinely public; pretending otherwise is the dishonesty this project argues against.
+- Only CTL-PROXY-01 enters v1. Every reviewer proposes additions and none propose deletions; a control accepted into the document is not thereby accepted into v1.
