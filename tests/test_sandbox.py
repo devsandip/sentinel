@@ -44,8 +44,9 @@ def test_ctx_emit_and_sql_surface():
     assert not ctx.has_emitted
     ctx.emit({"result": 1})
     assert ctx.has_emitted and ctx.emitted == {"result": 1}
-    with pytest.raises(NotImplementedError):
-        ctx.sql("SELECT 1")
+    # ctx.sql is implemented in v2: it runs on DuckDB over the scoped tables.
+    out = ctx.sql("SELECT 1 AS one")
+    assert int(out.iloc[0, 0]) == 1
 
 
 # -- the sandbox happy path ------------------------------------------------

@@ -21,10 +21,13 @@ CTL_CODE_02 = "CTL-CODE-02"  # no filesystem writes, no open() in write mode
 CTL_CODE_03 = "CTL-CODE-03"  # no eval/exec/compile/__import__/importlib, no pickle
 CTL_CODE_04 = "CTL-CODE-04"  # no dunder-escape attribute access
 CTL_EGRESS_01 = "CTL-EGRESS-01"  # no network module referenced at all
-CTL_COL_01 = "CTL-COL-01"  # every column literal appears in the grant
+CTL_COL_01 = "CTL-COL-01"  # every column literal appears in the grant; no SELECT *
 # A parse failure is refused before any deeper check: code that will not compile
 # cannot be reasoned about, so it never reaches execution.
 CTL_CODE_00 = "CTL-CODE-00"  # generated code does not parse
+# The sqlglot half of the gate (sql_gate.py), for SQL passed to ctx.sql (v2).
+CTL_PURP_01 = "CTL-PURP-01"  # table is outside the purpose's scope
+CTL_COMPLEX_01 = "CTL-COMPLEX-01"  # Cartesian join, or join count over the ceiling
 
 # -- Allowlisted imports at L2 (section 6) ---------------------------------
 # A dotted module is allowed if it equals one of these or is a submodule of one

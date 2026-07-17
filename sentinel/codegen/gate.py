@@ -9,9 +9,12 @@ happened after. Both are needed; this is the one that is demonstrable. The v1
 done-when turns on it: a generated webhook call is caught here as CTL-EGRESS-01
 and never reaches the sandbox.
 
-Scope note: `ctx.sql` and its sqlglot column/table analysis are v2. This gate is
-the Python `ast` half only. CTL-COL-01's SQL `SELECT *` check lands with it; the
-DataFrame-side column check here is the subset that v1 needs.
+Two parsers, not one (section 5, Stage 5). This module runs the Python `ast`
+half; when it finds a `ctx.sql(<literal>)` call it hands the literal to the
+sqlglot half (sql_gate.py) and stamps the Python line of the call onto each SQL
+violation, so the Gate screen still reads top to bottom. A `ctx.sql` argument
+that is not a static string literal is refused: the gate cannot verify columns in
+SQL it cannot read.
 """
 
 from __future__ import annotations
@@ -32,6 +35,7 @@ from .allowlist import (
     name_verdict,
     open_mode_is_write,
 )
+from .sql_gate import gate_sql
 
 _CONTROL_MESSAGES = {
     "CTL-CODE-00": "generated code does not parse",
@@ -41,6 +45,8 @@ _CONTROL_MESSAGES = {
     "CTL-CODE-04": "attribute access escapes the sandbox object graph",
     "CTL-EGRESS-01": "network egress is not permitted; no network module may be referenced",
     "CTL-COL-01": "column is not in the grant for this purpose",
+    "CTL-PURP-01": "table is not in scope for this purpose",
+    "CTL-COMPLEX-01": "query is too complex (Cartesian join or too many joins)",
 }
 
 
@@ -92,9 +98,17 @@ class GateResult:
 class _GateVisitor(ast.NodeVisitor):
     """Collects violations. One pass; table-variable tracking is done up front."""
 
-    def __init__(self, granted_columns: set[str], table_vars: set[str]) -> None:
+    def __init__(
+        self,
+        granted_columns: set[str],
+        table_vars: set[str],
+        allowed_tables: set[str] | None,
+        join_ceiling: int,
+    ) -> None:
         self.granted_columns = granted_columns
         self.table_vars = table_vars
+        self.allowed_tables = allowed_tables
+        self.join_ceiling = join_ceiling
         self.violations: list[Violation] = []
 
     def _add(self, control: str, line: int, detail: str) -> None:
@@ -125,7 +139,7 @@ class _GateVisitor(ast.NodeVisitor):
             self._add(verdict, node.lineno, node.id)
         self.generic_visit(node)
 
-    # -- calls: eval/exec/compile/__import__ and open() in write mode ------
+    # -- calls: eval/exec/compile/__import__, open() write, and ctx.sql(...) --
     def visit_Call(self, node: ast.Call) -> None:
         func = node.func
         if isinstance(func, ast.Name):
@@ -133,7 +147,39 @@ class _GateVisitor(ast.NodeVisitor):
                 self._add(CTL_CODE_03, node.lineno, f"{func.id}(...)")
             elif func.id == "open" and self._open_is_write(node):
                 self._add(CTL_CODE_02, node.lineno, "open(..., write mode)")
+        elif self._is_ctx_sql(func):
+            self._gate_ctx_sql(node)
         self.generic_visit(node)
+
+    @staticmethod
+    def _is_ctx_sql(func: ast.expr) -> bool:
+        return (
+            isinstance(func, ast.Attribute)
+            and func.attr == "sql"
+            and isinstance(func.value, ast.Name)
+            and func.value.id == "ctx"
+        )
+
+    def _gate_ctx_sql(self, node: ast.Call) -> None:
+        """Run the sqlglot half on the literal passed to ctx.sql, stamping the
+        Python line of the call onto each SQL violation. A non-literal argument is
+        refused: the gate cannot verify columns in SQL it cannot statically read."""
+        arg = node.args[0] if node.args else None
+        if not (isinstance(arg, ast.Constant) and isinstance(arg.value, str)):
+            self._add(
+                CTL_COL_01,
+                node.lineno,
+                "ctx.sql argument must be a static string literal so the gate can read it",
+            )
+            return
+        result = gate_sql(
+            arg.value,
+            granted_columns=self.granted_columns or None,
+            allowed_tables=self.allowed_tables,
+            join_ceiling=self.join_ceiling,
+        )
+        for sv in result.violations:
+            self._add(sv.control, node.lineno, f"in ctx.sql: {sv.detail}")
 
     @staticmethod
     def _open_is_write(node: ast.Call) -> bool:
@@ -205,12 +251,18 @@ def _is_ctx_table_call(value: ast.expr) -> bool:
     )
 
 
-def gate_code(code: str, granted_columns: Iterable[str] | None = None) -> GateResult:
+def gate_code(
+    code: str,
+    granted_columns: Iterable[str] | None = None,
+    allowed_tables: Iterable[str] | None = None,
+    join_ceiling: int = 2,
+) -> GateResult:
     """Statically gate a generated code string. Never executes it.
 
     Returns a GateResult naming every control that fired and the line it fired
-    on. Pass `granted_columns` to enable the CTL-COL-01 DataFrame column check;
-    omit it (or pass None) to skip that check when no grant is in scope.
+    on. Pass `granted_columns` to enable the CTL-COL-01 column check (DataFrame
+    subscripts and ctx.sql). Pass `allowed_tables` to enable the CTL-PURP-01
+    table-scope check inside ctx.sql; omit it to skip that check.
     """
     try:
         tree = ast.parse(code)
@@ -222,8 +274,14 @@ def gate_code(code: str, granted_columns: Iterable[str] | None = None) -> GateRe
         )
 
     granted = set(granted_columns) if granted_columns is not None else set()
+    tables = set(allowed_tables) if allowed_tables is not None else None
     table_vars = _collect_table_vars(tree)
-    visitor = _GateVisitor(granted_columns=granted, table_vars=table_vars)
+    visitor = _GateVisitor(
+        granted_columns=granted,
+        table_vars=table_vars,
+        allowed_tables=tables,
+        join_ceiling=join_ceiling,
+    )
     visitor.visit(tree)
 
     # Stable order: by line, then by control id, so the Gate screen reads top to

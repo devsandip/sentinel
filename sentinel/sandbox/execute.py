@@ -58,6 +58,8 @@ def run_sandboxed(
     tables: dict[str, pd.DataFrame] | None = None,
     params: dict[str, Any] | None = None,
     *,
+    granted_columns: list[str] | None = None,
+    row_filter_sql: str = "",
     wall_clock_s: float = DEFAULT_WALL_CLOCK_S,
     memory_mb: int | None = DEFAULT_MEMORY_MB,
     cpu_s: int | None = None,
@@ -67,12 +69,15 @@ def run_sandboxed(
     Assumes `code` already passed the gate; this runs it, it does not re-check
     it. A wall-clock overrun is reported as CTL-TIME-01. A crash (including a
     memory-limit kill the OS honored) is reported as a non-ok result with the
-    process detail.
+    process detail. `granted_columns` and `row_filter_sql` back the ctx.sql path
+    inside the child (the runtime backstop and the injected identity filter).
     """
     job = {
         "code": code,
         "tables": tables or {},
         "params": params or {},
+        "granted_columns": granted_columns,
+        "row_filter_sql": row_filter_sql,
         "memory_mb": memory_mb,
         # CPU backstop a couple seconds past the wall clock, so the wall-clock
         # timeout is what normally fires.
