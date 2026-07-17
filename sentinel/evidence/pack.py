@@ -86,6 +86,7 @@ class EvidencePack:
             "approver": self.approver,
             "signed_at": self.signed_at,
             "status": self.status,
+            "markdown": self.to_markdown(),
         }
 
     def to_markdown(self) -> str:

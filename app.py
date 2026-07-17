@@ -672,11 +672,15 @@ def render_govflow(persona) -> None:  # noqa: ANN001
         st.info("Pick a request and click Run to generate, gate, and screen an analysis.")
         return
 
-    console_tab, gate_tab = st.tabs(["Console", "Gate (pre-execution review)"])
+    console_tab, gate_tab, evidence_tab = st.tabs(
+        ["Console", "Gate (pre-execution review)", "Evidence pack (leadership)"]
+    )
     with console_tab:
         _govflow_console(pub)
     with gate_tab:
         _govflow_gate(pub)
+    with evidence_tab:
+        _govflow_evidence(pub)
 
 
 def _govflow_console(pub: dict) -> None:
@@ -783,6 +787,59 @@ def _govflow_gate(pub: dict) -> None:
             ),
             width="stretch",
         )
+
+
+def _govflow_evidence(pub: dict) -> None:
+    ev = pub.get("evidence")
+    if not ev:
+        st.info(
+            "No evidence pack: a pack is assembled only for a completed run. This "
+            "run was blocked or errored before Attest."
+        )
+        return
+
+    st.markdown("#### Finding")
+    ci = ev.get("confidence_interval")
+    ci_text = f" (95% CI {ci[0]:.2f} to {ci[1]:.2f})" if ci else ""
+    st.success(ev["finding"] + ci_text)
+
+    st.markdown("#### Provenance")
+    p = ev["provenance"]
+    st.markdown(
+        f"<span class='muted'>analysis <code>{p['analysis']}</code> · dataset "
+        f"<code>{p['dataset']}</code> (sha:{p['dataset_sha']}) · tier "
+        f"<code>{p['tier']}</code> · purpose <code>{p['purpose']}</code> · author "
+        f"<code>{p['author']}</code> · run <code>{p['run_id']}</code></span>",
+        unsafe_allow_html=True,
+    )
+
+    st.markdown("#### Controls attested")
+    st.markdown(
+        "".join(f"<span class='ctrl-chip'>{c}</span>" for c in ev["controls_attested"]),
+        unsafe_allow_html=True,
+    )
+
+    st.markdown("#### What this does not say")
+    st.caption(
+        "Non-negotiable. This block is the difference between an evidence pack a "
+        "bank can file and a dashboard it cannot."
+    )
+    for clause in ev["negative_statement"]:
+        st.markdown(f"- {clause}")
+
+    signoff = (
+        f"Signed by {ev['approver']} at {ev['signed_at']}."
+        if ev["status"] == "signed"
+        else "Pending independent signoff. The approver must not be the author (CTL-SOD-01)."
+    )
+    st.info(f"Status: **{ev['status']}**. {signoff}")
+
+    st.download_button(
+        "Download evidence pack (Quarto-ready markdown)",
+        data=ev["markdown"],
+        file_name=f"evidence_pack_{ev['request_id']}.md",
+        mime="text/markdown",
+    )
 
 
 def render_platform() -> None:
