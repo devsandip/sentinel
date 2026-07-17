@@ -21,8 +21,9 @@ import pandas as pd
 
 from ..codegen.gate import GateResult
 from ..codegen.generate import CodeGenRequest, GenerationOutcome, generate_and_gate
-from ..datasets.fingerprint import live_contract_check
+from ..datasets.fingerprint import FingerprintError, dataset_sha, live_contract_check
 from ..disclosure import ScreenResult, screen
+from ..evidence import EvidencePack, build_evidence_pack
 from ..gateway.model_gateway import TEMPLATED, ModelGateway
 from ..harness.audit import LEVEL_BLOCKED, LEVEL_GATE, AuditLog
 from ..harness.identity import Persona, default_persona, policy_version
@@ -54,7 +55,9 @@ STATUS_ERROR = "error"
 
 CTL_EVAL_01 = "CTL-EVAL-01"
 
-STAGES = ["Ask", "Plan", "Access", "Generate", "Gate", "Execute", "Screen", "Interpret"]
+STAGES = [
+    "Ask", "Plan", "Access", "Generate", "Gate", "Execute", "Screen", "Interpret", "Attest",
+]
 
 
 @dataclass
@@ -90,6 +93,7 @@ class GovernedRunResult:
     execution: ExecutionResult | None = None
     screen: ScreenResult | None = None
     narration: str = ""
+    evidence: EvidencePack | None = None
     controls_fired: list[str] = field(default_factory=list)
     audit: list[dict] = field(default_factory=list)
 
@@ -122,6 +126,7 @@ class GovernedRunResult:
                 self.screen.screened.to_dict(orient="records") if self.screen else []
             ),
             "narration": self.narration,
+            "evidence": self.evidence.to_public_dict() if self.evidence else None,
             "controls_fired": self.controls_fired,
             "audit": self.audit,
         }
@@ -223,6 +228,7 @@ def run_governed_analysis(
             execution=execution,
             screen=scr,
             narration=narration,
+            evidence=evidence,
             controls_fired=_dedupe(controls),
             audit=audit.as_dicts(),
         )
@@ -232,6 +238,7 @@ def run_governed_analysis(
     scr: ScreenResult | None = None
     narration = ""
     plan_agent = ""
+    evidence: EvidencePack | None = None
 
     # Stage 1: Ask -- bind identity, freeze the tier, classify.
     audit.record(
@@ -274,7 +281,7 @@ def run_governed_analysis(
             output_summary=detail,
         )
         stages.append(StageRecord("Plan", "blocked", controls=plan_controls, detail=detail))
-        for s in ("Access", "Generate", "Gate", "Execute", "Screen", "Interpret"):
+        for s in ("Access", "Generate", "Gate", "Execute", "Screen", "Interpret", "Attest"):
             stages.append(StageRecord(s, "skipped", detail="no certified agent to plan"))
         return finish(STATUS_BLOCKED)
 
@@ -294,7 +301,7 @@ def run_governed_analysis(
         stages.append(
             StageRecord("Plan", "blocked", controls=[CTL_CONTRACT_01], detail=contract.detail)
         )
-        for s in ("Access", "Generate", "Gate", "Execute", "Screen", "Interpret"):
+        for s in ("Access", "Generate", "Gate", "Execute", "Screen", "Interpret", "Attest"):
             stages.append(StageRecord(s, "skipped", detail="data contract drifted"))
         return finish(STATUS_BLOCKED)
 
@@ -365,7 +372,7 @@ def run_governed_analysis(
                 detail=outcome.gate.refusal_summary(),
             )
         )
-        for s in ("Execute", "Screen", "Interpret"):
+        for s in ("Execute", "Screen", "Interpret", "Attest"):
             stages.append(StageRecord(s, "skipped", detail="upstream gate block"))
         return finish(STATUS_BLOCKED)
 
@@ -401,7 +408,7 @@ def run_governed_analysis(
                 "Execute", "error", controls=ctl, detail=execution.error or "failed"
             )
         )
-        for s in ("Screen", "Interpret"):
+        for s in ("Screen", "Interpret", "Attest"):
             stages.append(StageRecord(s, "skipped", detail="execution failed"))
         return finish(STATUS_ERROR)
 
@@ -420,7 +427,7 @@ def run_governed_analysis(
                 detail="emitted result must be a DataFrame with an 'n' count column",
             )
         )
-        for s in ("Screen", "Interpret"):
+        for s in ("Screen", "Interpret", "Attest"):
             stages.append(StageRecord(s, "skipped", detail="unusable result shape"))
         return finish(STATUS_ERROR)
 
@@ -491,6 +498,48 @@ def run_governed_analysis(
             "ok" if faithful else "blocked",
             controls=eval_controls,
             detail=why,
+        )
+    )
+
+    # Stage 9: Attest -- assemble the evidence pack. It ships pending: signing it
+    # requires an approver who is not the author (CTL-SOD-01). Its differentiator
+    # is the negative statement, built from what this run actually did.
+    try:
+        ds_sha = dataset_sha(DATASET_ID)
+    except FingerprintError:
+        ds_sha = None
+    attested = _dedupe(
+        controls + [CTL_CONTRACT_01, "CTL-TIME-01"] + ([CTL_EVAL_01] if faithful else [])
+    )
+    evidence = build_evidence_pack(
+        run_id=run_id,
+        analysis=plan_agent,
+        dataset=DATASET_ID,
+        dataset_sha=ds_sha,
+        tier=TIER_L2,
+        purpose=PURPOSE,
+        author=persona.id,
+        code=outcome.code,
+        screened=scr.screened,
+        controls_attested=attested,
+        suppressed=scr.suppressed,
+        proxy_flags=scr.proxy_flags,
+        cell_floor=cell_floor,
+    )
+    audit.record(
+        agent="attest",
+        action="evidence_pack",
+        actor=persona.id,
+        output_summary=(
+            f"evidence pack assembled (pending signoff); "
+            f"{len(evidence.negative_statement)} negative-statement clause(s)"
+        ),
+    )
+    stages.append(
+        StageRecord(
+            "Attest",
+            "ok",
+            detail="evidence pack assembled; pending independent signoff (CTL-SOD-01)",
         )
     )
 
