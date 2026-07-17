@@ -1,37 +1,43 @@
 # Sentinel — Journal Index
 
-Last refreshed: 2026-07-17 22:30
+Last refreshed: 2026-07-17 23:32
 
-Latest entry: [2026-07-17-2230-v1-slice-complete-and-verified.md](entries/2026-07-17-2230-v1-slice-complete-and-verified.md)
+Latest entry: [2026-07-17-2332-v2-and-v3-built-and-verified.md](entries/2026-07-17-2332-v2-and-v3-built-and-verified.md)
 
 ## Where we are now
 
-**v0 and v1 are both built, verified, and on one PR. The thesis runs.**
+**v0, v1, v2, and v3 are built and verified. The platform claim and the oversight
+claim both run.**
 
-On `feat/governed-codegen` (PR #1, nine commits, 183 tests green, ruff clean): v0
-made the segregation-of-duties docstring true (`started_by` on `RunState`,
-`CTL-SOD-01` in `approve()`, the second line loses `can_run` and admin loses
-`can_approve`). Then the entire v1 vertical slice: the `ast` gate, the `ctx` fence
-and allowlist, the subprocess sandbox (`CTL-TIME-01`), the disclosure Screen
-(`CTL-DISC-01/02/03`, `CTL-PROXY-01`), the fairlearn reversal, the live
-code-generation step and the gateway repoint, the `govflow` orchestration (Ask to
-Interpret), the Console and Gate screens, and the seeded adversarial set with the
-section 16 metrics.
+v0 and v1 are on `feat/governed-codegen` (PR #1). v2 and v3 are on
+`feat/govcodegen-v2`, branched off it (PR #2, base `feat/governed-codegen`): nine
+commits, 251 tests green, ruff clean.
 
-Both done-when properties are verified in the browser, not just in tests. A
-generated webhook is caught by the gate as `CTL-EGRESS-01` on line 10 and never
-executes. An n=6 age band (71-75) is suppressed (`CTL-DISC-02`) before the
-narration model sees it, the proxy is flagged (`CTL-PROXY-01`, correlation ratio
-0.92 on a disclosed synthetic feature), and the narration is built from the
-screened numbers only. Gate true-block rate is 100% on fourteen seeded adversarial
-samples, false-block 0% on eight benign.
+**v2, the platform claim.** The SQL half of the gate: `ctx.sql` parses with
+sqlglot, refuses an ungranted column / `SELECT *` / out-of-scope table
+(`CTL-COL-01`, `CTL-PURP-01`) or a Cartesian join (`CTL-COMPLEX-01`), injects the
+identity row filter, and runs on DuckDB. The certification lifecycle: four gates
+between an agent and `certified`, status computed from the gates, only certified
+agents visible to Plan. The scaffolding CLI (`sentinel new-agent`), the only path
+to an agent. And `CTL-CONTRACT-01` drift, built honestly: the contract is pinned to
+the real dataset SHA, the mechanism is proven in a test, and no fake drift is
+staged. The refused-certification demo holds: cohort-retention v0.3 is refused on
+two grounds, and a self-signoff is refused live with `CTL-SOD-01`.
 
-Prod is untouched: none of this has shipped, by design, until reviewed. Held for
-later slices: `ctx.sql` + sqlglot (v2), the registry/certification lifecycle (v2),
-the evidence pack + OpenLineage + Quarto (v3), and breadth across datasets (v4).
+**v3, the oversight claim.** The Attest stage assembles an evidence pack: the
+finding with a Wald CI, the provenance chain, the controls attested as chips, and
+the negative statement, the "what this does not say" block assembled from what the
+run actually did (the suppressed band, the flagged proxy). Signing it refuses a
+self-signoff (`CTL-SOD-01`). Provenance is also emitted as OpenLineage events at
+Access and Attest; the leadership doc exports as Quarto-ready markdown.
 
-Everything below is the prior state: the rethink accepted, and the platform as it
-stands in prod.
+All verified in the browser. Prod is untouched. Deliberately still out: the
+DS-facing marimo notebook and the Quarto PDF render (secondary outputs), and all of
+v4 (breadth), which includes two forks held for Sandip: OPA externalisation (needs
+an external server, an open question in the PRD) and the L3 path (needs
+`synthetic_its` onboarded first).
+
+Everything below is the prior state: v0/v1, the rethink, and the platform in prod.
 
 ---
 
@@ -167,6 +173,7 @@ out).
 
 ## Recent entries
 
+- [2026-07-17-2332-v2-and-v3-built-and-verified.md](entries/2026-07-17-2332-v2-and-v3-built-and-verified.md) : v2 (platform) and v3 (oversight) built and verified in-browser on `feat/govcodegen-v2` (PR #2). ctx.sql + sqlglot gate on DuckDB, the certification lifecycle with the refused-agent demo, the scaffolding CLI, CTL-CONTRACT-01 pinned honestly; the Attest evidence pack with the negative statement, CTL-SOD-01 on signoff, and OpenLineage events. 251 tests. Deferred: marimo, Quarto-PDF, all of v4 (forks: OPA, L3/synthetic_its). Prod untouched.
 - [2026-07-17-2230-v1-slice-complete-and-verified.md](entries/2026-07-17-2230-v1-slice-complete-and-verified.md) : v1 is done and verified in the browser. Live code generation + the gateway repoint, the govflow orchestration (Ask to Interpret), the Console and Gate screens, and the seeded adversarial set. Webhook blocks at CTL-EGRESS-01 line 10; n=6 band suppressed before narration; proxy flagged. Gate true-block 100%, false-block 0%. 183 tests, PR #1, prod untouched.
 - [2026-07-17-2203-v0-shipped-v1-core-fairlearn-reversed.md](entries/2026-07-17-2203-v0-shipped-v1-core-fairlearn-reversed.md) : first code since the rethink. v0 (CTL-SOD-01) shipped; v1 deterministic core built (the ast gate, the Screen with CTL-DISC-02 + CTL-PROXY-01, the sandbox with CTL-TIME-01); fairlearn reinstated in ml/fairness.py. 164 tests, all on PR #1. Prod untouched.
 - [2026-07-17-2102-build-greenlit-v0-then-v1.md](entries/2026-07-17-2102-build-greenlit-v0-then-v1.md) : the rethink is accepted; building starts. A clarification pass on the PRD changed nothing. Model card survives as the Attest evidence pack. Order locked: v0 (SoD fix) then v1 (the vertical slice). Live LLM from the start, feature branch per slice. Branch created, no code yet.
@@ -191,9 +198,9 @@ None yet. Week 2026-W28 (through Sun 2026-07-12) has entries but no summary.
 ## Working hypotheses
 
 - A naturally-flagging fairness result is more convincing than a staged one. Keep it real. This now extends to the gate: if the demo shows generated code being blocked, the block must be genuine, never seeded.
-- The model card PDF is the single highest-leverage showpiece. The evidence pack with its "what this does not say" block would supersede it.
+- The evidence pack with its "what this does not say" block is now built (v3) and is the showpiece the model card PDF pointed toward. The negative statement is assembled from what the run did (the suppressed band, the flagged proxy), not from boilerplate, which is what makes it more than a dashboard. The model card PDF survives as prior art.
 - A control is only credible if it can be seen firing. Force RBAC and PII to fire every run.
-- A control that can never fire is decoration. `CTL-CONTRACT-01` (dataset drift) cannot fire against static CSVs; say so rather than demo it.
+- A control that can never fire is decoration. `CTL-CONTRACT-01` (dataset drift) cannot fire against static CSVs; say so rather than demo it. Built in v2 exactly this way: the contract is pinned to the real dataset SHA, the mismatch path is proven only in a test, and the pin test fails CI if the CSV ever changes. No fake drift is staged.
 - Governance that blocks legitimate work gets routed around. The false-block rate matters as much as the true-block rate, and a demo that ignores it is not credible to anyone who has shipped internal tools.
 - The artifact is evidence of judgment, not the case itself. The KRAs are organisational and no amount of building closes that gap.
 

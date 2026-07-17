@@ -309,3 +309,28 @@ Append-only session handoff log. Newest entries at the bottom.
 - The Access stage uses a fine age band (so 71-75 is genuinely n=6) and a disclosed synthetic proxy column (real german_credit features proxy age at most ~0.35). Both are honest-demo constructions in the same spirit as the synthetic PII columns: the control does real arithmetic on data that is labelled synthetic.
 - The gate stays the Python `ast` half only for v1; `ctx.sql`/sqlglot is v2. Attest (Stage 9) and the evidence pack are later; v1 ends at Interpret.
 - The project's real lint gate is `ruff check` (line-length 100), not black/`ruff format` (the repo is not auto-formatter-clean); matched the hand-wrapped style rather than reformatting unrelated files.
+
+## 2026-07-17 (23:32) — v2 and v3 built and verified (overnight autonomous)
+
+**Did:**
+- Built all of v2 (the platform claim) on a new branch `feat/govcodegen-v2` (off `feat/governed-codegen`), six commits: (A) `ctx.sql` + the sqlglot half of the gate (`sql_gate.py`: CTL-COL-01 / CTL-PURP-01 / CTL-COMPLEX-01, row-filter injection, DuckDB execution; the Python `ast` gate now reads `ctx.sql(<literal>)` and stamps the Python line onto SQL violations); (B) the certification lifecycle (`platform/certification.py`: four gates, status computed from gates, only-certified-visible-to-Plan, the refused cohort-retention v0.3 demo, CTL-SOD-01 reused at certification); (C) the scaffolding CLI (`sentinel new-agent`/`registry`/`certify`, the only path to an agent); (D) CTL-CONTRACT-01 drift (`datasets/fingerprint.py`, pinned to the real german_credit SHA `188808`, mismatch proven only in a test); plus the govflow wiring (Plan stage binds the certified agent + contract check; a `fair_lending_sql` and `sql_star` intent; SQL adversarial + benign samples in the section-16 corpus) and the Registry certification screen + SQL requests in the app.
+- Built all of v3 (the oversight claim), three commits: the Attest stage + evidence pack (`evidence/pack.py`: finding with a Wald CI, provenance chain, controls attested, and the negative statement assembled from the run's suppressed band + flagged proxy; signing refuses a self-signoff, CTL-SOD-01); the leadership evidence-pack screen + Quarto-ready markdown download; and OpenLineage emission at Access + Attest (`lineage/emit.py`, schema-valid events captured in-process).
+- Added base deps: `sqlglot`, `duckdb`, `openlineage-python`. `uv.lock` updated.
+- Verified everything in a browser (port 8520, main checkout on the v2 branch): the SQL analysis runs on DuckDB and still suppresses the n=6 band; the adversarial `SELECT *` blocks at the gate on line 1 and never runs; the Registry shows one certified and one refused agent with reasons; assigning the author as validator is refused live with CTL-SOD-01; the evidence pack shows its four-clause negative statement, pending status, and two OpenLineage events.
+- Wrote journal entry `2026-07-17-2332-v2-and-v3-built-and-verified.md`; refreshed INDEX (v2+v3 state, resolved the evidence-pack and CTL-CONTRACT-01 hypotheses).
+
+**State now:**
+- `feat/govcodegen-v2` holds v2 + v3, nine feature commits + this handoff, pushed. 251 tests green, ruff clean.
+- `feat/governed-codegen` (PR #1, v0+v1) and `main` unchanged. Prod untouched and green at SHA `9dcd20b`; nothing deployed.
+- PR #2 targets `feat/governed-codegen` (a stacked PR), so it shows only the v2+v3 delta while PR #1 is still open.
+
+**Next:**
+- Review PR #1 (v0+v1) and PR #2 (v2+v3). PR #2 is stacked on PR #1; merge #1 first, then #2 (or rebase #2 onto main after #1 merges).
+- Only after merge consider a prod deploy (needs Sandip's go-ahead + the `.env` key sourced; never deploy from a worktree with a bare key).
+- v4 is a Sandip decision, not an autonomous one: it is breadth, and two pieces are forks (OPA externalisation needs an external server and is a PRD open question; the L3 path needs `synthetic_its` onboarded). marimo notebook output and the Quarto PDF render are the remaining secondary v3 surfaces.
+- Weekly summaries still due: W28 and W29 (W29 ends Sun 2026-07-19).
+
+**Decisions:**
+- v2 and v3 landed as a stacked PR (`feat/govcodegen-v2` based on `feat/governed-codegen`) rather than piling onto PR #1, so the v1 "one sentence" PR stays reviewable and the v2+v3 delta is isolated. Same one-PR-many-commits shape as v1.
+- The govflow SQL row filter is left empty on purpose: german_credit has no natural per-identity row split, so injecting a contrived one would be staging. The injection mechanism is proven in the `sql_gate` tests instead.
+- Stopped the autonomous build at the v3/v4 boundary. Built the two remaining claims (platform, oversight) in full; did not start v4 breadth, because the PRD warns depth beats breadth and two v4 pieces (OPA, L3) are architecture forks that need Sandip's call.
