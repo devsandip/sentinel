@@ -1,36 +1,40 @@
 # Sentinel — Journal Index
 
-Last refreshed: 2026-07-17 20:20
+Last refreshed: 2026-07-17 21:02
 
-Latest entry: [2026-07-17-1940-govern-the-llm-not-sklearn.md](entries/2026-07-17-1940-govern-the-llm-not-sklearn.md)
+Latest entry: [2026-07-17-2102-build-greenlit-v0-then-v1.md](entries/2026-07-17-2102-build-greenlit-v0-then-v1.md)
 
 ## Where we are now
 
-**The build is stable and in prod. The thesis is under revision.**
+**The build is stable and in prod. The rethink is accepted, and the build has started.**
 
-On 2026-07-17 I stopped building and rethought the whole thing. The finding: the
-governance layer is not governing the language model, it is governing
-scikit-learn. Every control fires on a logistic regression, and turning the LLM
-off leaves all of them passing. The model narrates at the end of the pipeline and
-never touches anything, so nothing ever governs it. Meanwhile the question being
-asked is whether I can deploy LLMs to help data scientists, and the honest answer
-to how LLMs help data scientists is that they write the code.
+On 2026-07-17 I stopped building and rethought the whole thing, then accepted the
+result. The finding: the governance layer is not governing the language model, it
+is governing scikit-learn. Every control fires on a logistic regression, and
+turning the LLM off leaves all of them passing. The model narrates at the end of
+the pipeline and never touches anything, so nothing ever governs it. Meanwhile the
+question being asked is whether I can deploy LLMs to help data scientists, and the
+honest answer to how LLMs help data scientists is that they write the code.
 
-The proposal moves the model upstream of execution so it writes the analysis
-code, and puts a static-analysis gate between generation and execution.
-Governance stops being a perimeter and becomes differentiated controls at each
-transition: RBAC and purpose at Access, code safety at Gate, disclosure at Screen,
-SR 11-7 at Attest. The organising idea is an autonomy ladder (L0 explains, L1
-chooses, L2 writes inside a fence, L3 improvises) where the tier is computed from
-role times data classification rather than chosen. Maths is bought off the shelf.
-The governance is the product.
+The plan moves the model upstream of execution so it writes the analysis code, and
+puts a static-analysis gate between generation and execution. Governance stops
+being a perimeter and becomes differentiated controls at each transition: RBAC and
+purpose at Access, code safety at Gate, disclosure at Screen, SR 11-7 at Attest.
+The organising idea is an autonomy ladder (L0 explains, L1 chooses, L2 writes
+inside a fence, L3 improvises) where the tier is computed from role times data
+classification rather than chosen. Maths is bought off the shelf. The governance
+is the product.
 
-Nothing from the proposal is built. The PRD is at
+The proposal is now the plan, and building has started. Work goes on a feature
+branch, `feat/governed-codegen`, with a PR per slice, and the code-generation step
+calls the live model from the start of development rather than mocked fixtures.
+**v0** is first: the segregation-of-duties fix, independent of the reframe and
+worth doing regardless (see Things ruled out). **v1** is one vertical slice,
+Generate to Gate to Execute to Screen at L2 on `german_credit`, with fairlearn
+doing the maths and `CTL-PROXY-01` the one control that earns its way in. As of
+this entry no code has changed; the branch exists off `b447e80`. The PRD is at
 `docs/features/governed-codegen.md`, with the 15-slide argument beside it as HTML
-and PDF. **v0** is a confirmed defect worth fixing regardless of whether the
-reframe lands: segregation of duties is not actually enforced (see Things ruled
-out). **v1** is one vertical slice, Generate to Gate to Execute to Screen at L2 on
-`german_credit`, with fairlearn doing the maths.
+and PDF.
 
 Everything below describes the build as it stands. It is accurate and deployed.
 It is also what the proposal would reframe.
@@ -134,6 +138,7 @@ out).
 
 ## Recent entries
 
+- [2026-07-17-2102-build-greenlit-v0-then-v1.md](entries/2026-07-17-2102-build-greenlit-v0-then-v1.md) : the rethink is accepted; building starts. A clarification pass on the PRD changed nothing. Model card survives as the Attest evidence pack. Order locked: v0 (SoD fix) then v1 (the vertical slice). Live LLM from the start, feature branch per slice. Branch created, no code yet.
 - [2026-07-17-1940-govern-the-llm-not-sklearn.md](entries/2026-07-17-1940-govern-the-llm-not-sklearn.md) : the rethink. The harness audits scikit-learn, not the LLM. Autonomy ladder, proxy discrimination, a confirmed SoD defect, fairlearn back in. Docs only, no code.
 - [2026-07-14-0854-datasets-onboarded-and-ragas-faithfulness.md](entries/2026-07-14-0854-datasets-onboarded-and-ragas-faithfulness.md) — ULB fraud + LendingClub onboarded via no-account sources; Ragas faithfulness wired on the Anthropic SDK and run, stable 1.0. 127 tests.
 - [2026-07-14-0646-live-llm-narration-in-prod.md](entries/2026-07-14-0646-live-llm-narration-in-prod.md) — live-LLM narration was silently broken (SDK never installed); fixed + enabled in prod behind a cumulative $50 cap. Verified live.
@@ -163,8 +168,7 @@ None yet. Week 2026-W28 (through Sun 2026-07-12) has entries but no summary.
 
 ## Open questions
 
-- Does the reframe land? The whole proposal is unaccepted. Nothing in `docs/features/governed-codegen.md` is built.
-- Which comes first, `ctx.sql` or `ctx.table`? `table` is faster; `sql` is the more recognisable governance demo, because the sqlglot row-filter rewrite is what a bank data engineer recognises instantly. Leaning `sql`.
+- Which comes first, `ctx.sql` or `ctx.table`? Resolved for v1: `ctx.table`, because v1's done-when (a webhook caught at the gate, an n=3 cell suppressed) needs no SQL. `ctx.sql` plus the sqlglot row-filter rewrite is the more recognisable governance demo and lands in v2, where `CTL-COMPLEX-01` and `CTL-CONTRACT-01` also live.
 - Is `n < 10` the right small-cell floor? It is the common default, but a real bank sets it per data domain. Probably a policy value rather than a constant, which is itself a small argument for OPA.
 - Where does drift monitoring live? Evidently is on the dependency map with no stage in the lifecycle.
 - Should linear analysis runs feed the adoption metrics and model registry? (The execution-routing half of this is decided; see ruled out.)
@@ -175,6 +179,8 @@ None yet. Week 2026-W28 (through Sun 2026-07-12) has entries but no summary.
 ## Things ruled out
 
 - Next.js + FastAPI split (chose Streamlit for speed). Revisited 2026-07-17 and reaffirmed, now on stronger grounds than speed. The runtime is Python end to end and load-bearingly so: the gate parses generated Python with `ast`, the sandbox runs Python, the allowlist is a list of Python imports, and every DS library (fairlearn, statsmodels, DoWhy, lifelines, SHAP, ydata-profiling, sqlglot, Presidio) is Python-only. "Node entirely" would mean reimplementing fairlearn in TypeScript, which is the exact thing the thesis says not to do. "Node + FastAPI" is the prioritization trap: nobody hires an SVP AI PM for a React frontend, and spending three weeks there instead of the gate demonstrates the bad prioritization the role screens against. The demo has three surfaces, not two, and the split is already made: Streamlit (Console + Gate), marimo (DS output), Quarto (leadership doc). Streamlit is also a real deploy target (Databricks Apps, Snowflake), so "how would this productionize" is a one-sentence answer. The real friction is `app.py` at ~1,100 lines with a hand-rolled router and no `pages/`; the fix is Streamlit's native multipage, not a framework switch. Full reasoning in PRD 10.7. The one thing that could reopen it (editing code at the gate) is a v2 design question, not a framework one.
+- Mocked codegen during development (chose live from the start, 2026-07-17). The code-generation step calls the real model throughout dev, with the cumulative spend cap as the backstop. Fixtures would harden the gate against code I wrote, not against code the model writes, which is the wrong target.
+- Direct-to-main for the build (chose a feature branch, 2026-07-17). Work goes on `feat/governed-codegen` with a PR per slice. A clean reviewable history is worth more on a credibility artifact than a fast one.
 - ~~fairlearn dependency~~ (reversed 2026-07-17). Adopting fairlearn. The original call was to hand-roll the metrics for auditability. Under the new thesis ("I govern off-the-shelf tools") that inverts: hand-rolling the one metric a regulator cares most about undercuts the pitch. Governing fairlearn is more on-message than reimplementing it.
 - **Segregation of duties is not enforced today (confirmed defect, 2026-07-17).** Not a decision, a bug, recorded here so it is not rediscovered. `approve()` checks `actor.can_approve`, which is a role check, not an identity check. `RunState` never stores who started the run, so author and approver cannot be compared. `mrm_approver` holds both `can_run` and `can_approve`, so the same persona can approve its own run; so can `admin`. The docstring calls it "the segregation-of-duties control." It is not one. Fix is v0: persist `started_by`, compare in `approve()`, drop `can_run` from the second line and `can_approve` from admin.
 - Prompt screening as the defence against proxy discrimination (ruled out 2026-07-17). Intent is easy to disguise, the analyst's intent is usually innocent, and the output discriminates regardless of what was asked. It also gives false comfort, which is worse than no control. The control is empirical and post-execution instead: measure association between granted features and the protected attribute at Screen, and flag rather than refuse, because business necessity is Legal's call.

@@ -264,3 +264,23 @@ Append-only session handoff log. Newest entries at the bottom.
 - Proxy discrimination is controlled empirically at Screen, not by screening the prompt. It flags rather than refuses, because business necessity is Legal's call.
 - Data classifications are simulated and labelled as such. Every dataset here is genuinely public; pretending otherwise is the dishonesty this project argues against.
 - Only CTL-PROXY-01 enters v1. Every reviewer proposes additions and none propose deletions; a control accepted into the document is not thereby accepted into v1.
+
+## 2026-07-17 (21:02) — Rethink accepted; build greenlit (v0 then v1)
+
+**Did:**
+- Ran a clarification pass on the governed-codegen PRD. Answered eight owner questions: what "every control fires on a logistic regression" means (all controls wrap the sklearn credit-risk pipeline, not the LLM), "cheaper" (marginal engineering cost of the Nth governed analysis), the scaffolding CLI, the two allowlists (`ctx` fence + import list), the L3 data fence (permission not ban), the Ask stage, disparate treatment vs impact, and whether the whole toolkit gets built (no: buy the maths, build the governance).
+- Resolved the model-card question: it survives the reframe and becomes the Attest evidence pack (existing card + provenance chain + "what this does not say" + SoD/lineage controls). `harness/model_card.py` stays.
+- Greenlit the build. Created feature branch `feat/governed-codegen` off `b447e80`. No code changed yet.
+- Wrote journal entry `2026-07-17-2102-build-greenlit-v0-then-v1.md`, refreshed INDEX, and wrote the resume handoff.
+
+**State now:**
+- `main` at `b447e80` (docs). `feat/governed-codegen` branched off it, empty of code. Prod untouched, green at SHA `9dcd20b`. 115 test functions, expected green (not re-run this session).
+- Stray `docs/features/deck.txt` (Gemini's stale pdftotext dump) still untracked; not mine, `rm` recommended.
+
+**Next:**
+- Build v0: persist `started_by` on `RunState` ([orchestrator.py:79](sentinel/orchestrator.py)), add `CTL-SOD-01` in `approve()`, drop `can_run` from `mrm_approver` and `can_approve` from `admin` in `personas.yaml`, with tests. Green commit.
+- Then v1 in dependency order: `codegen/` (ctx + allowlist + prompt) -> `codegen/gate.py` (ast walker) -> `sandbox/` -> `disclosure/` (+ CTL-PROXY-01) -> fairlearn wrapper -> orchestrator wiring -> Console + Gate screens -> seeded adversarial prompt set + metrics tests.
+
+**Decisions:**
+- Live LLM from the start of dev (not mocked fixtures). Feature branch + PR per slice (not direct-to-main).
+- v1 starts with `ctx.table`; `ctx.sql` + sqlglot deferred to v2 (v1 done-when needs no SQL).
