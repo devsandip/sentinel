@@ -84,6 +84,9 @@ class RunState:
     protected_attribute: str
     narration_mode: str  # "scripted" | "live"
     seed: int
+    # The actor id that started the run. Persisted so the human gate can enforce
+    # segregation of duties (CTL-SOD-01): an approver may not be the author.
+    started_by: str = ""
     status: str = STATUS_RUNNING
     steps: list[StepRecord] = field(default_factory=list)
     shared: dict[str, Any] = field(default_factory=dict)
@@ -427,6 +430,7 @@ class Orchestrator:
             protected_attribute=protected,
             narration_mode=narration_mode,
             seed=seed,
+            started_by=actor.id if actor else "",
             controls=controls,
             deps=deps,
         )
@@ -468,10 +472,16 @@ class Orchestrator:
     ) -> RunState:
         """Resume the run with a human decision.
 
-        If an acting persona is given and it lacks promotion authority, the
-        attempt is denied and audited, and the run stays at the gate. This is the
-        role-aware, segregation-of-duties control: only an MRM Approver (or Admin)
-        can promote.
+        Two controls guard promotion, both denied-and-audited with the run left
+        at the gate:
+
+        1. Role check: only a persona with promotion authority (the MRM Approver)
+           may approve. This is role-aware access control.
+        2. CTL-SOD-01, segregation of duties: the approver may not be the author
+           of the run. Independence is what SR 11-7 requires, and it is checked
+           by comparing the approver's identity to ``started_by``, not by role.
+           This is a backstop; the persona model already denies the second line
+           ``can_run`` so the author and approver are structurally disjoint.
         """
         state = self._runs[run_id]
         assert state.deps is not None
@@ -486,6 +496,26 @@ class Orchestrator:
                     f"Role '{actor.name}' lacks promotion authority; "
                     "approval refused. Requires the MRM Approver."
                 ),
+            )
+            return state  # still awaiting; no promotion
+
+        if (
+            actor is not None
+            and approved
+            and state.started_by
+            and actor.id == state.started_by
+        ):
+            state.deps.audit.record(
+                agent="human_reviewer",
+                action="approval_denied",
+                level="blocked",
+                actor=actor.id,
+                output_summary=(
+                    f"CTL-SOD-01: segregation of duties. Approver '{actor.name}' "
+                    f"is the author of this run (started_by='{state.started_by}'); "
+                    "self-approval refused. Requires an independent approver."
+                ),
+                extra={"control": "CTL-SOD-01"},
             )
             return state  # still awaiting; no promotion
 

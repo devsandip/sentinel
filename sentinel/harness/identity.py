@@ -3,9 +3,11 @@
 No real authentication: the UI selects a persona to demonstrate role-aware
 governance. Personas carry capabilities (can_run, can_approve,
 can_toggle_controls, read_only) loaded from config/personas.yaml. The point is
-least privilege and segregation of duties: promotion authority at the human gate
-belongs only to the MRM Approver (and Admin), the Auditor is read-only, and only
-the Admin may toggle a control off in demo mode.
+least privilege and segregation of duties: run authority and promotion authority
+are held by disjoint personas, so an approver is never the author of the run it
+signs off. Promotion authority at the human gate belongs only to the MRM
+Approver, the second line never runs, the Auditor is read-only, and only the
+Admin may toggle a control off in demo mode.
 """
 
 from __future__ import annotations

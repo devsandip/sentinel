@@ -147,8 +147,8 @@ def controls(persona) -> None:
         )
     if not persona.can_run:
         st.caption(
-            f"Your role ({persona.name}) is read-only and cannot run analyses. "
-            "Switch to an Analyst or MRM Approver to run."
+            f"Your role ({persona.name}) cannot run analyses. "
+            "Switch to an Analyst or Admin to run."
         )
 
     settings = _control_toggles(persona)
