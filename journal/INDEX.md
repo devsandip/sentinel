@@ -1,28 +1,34 @@
 # Sentinel — Journal Index
 
-Last refreshed: 2026-07-17 22:03
+Last refreshed: 2026-07-17 22:30
 
-Latest entry: [2026-07-17-2203-v0-shipped-v1-core-fairlearn-reversed.md](entries/2026-07-17-2203-v0-shipped-v1-core-fairlearn-reversed.md)
+Latest entry: [2026-07-17-2230-v1-slice-complete-and-verified.md](entries/2026-07-17-2230-v1-slice-complete-and-verified.md)
 
 ## Where we are now
 
-**The build has started for real. v0 is shipped and the v1 deterministic core is on the branch.**
+**v0 and v1 are both built, verified, and on one PR. The thesis runs.**
 
-On `feat/governed-codegen` (one PR, #1): v0 made the segregation-of-duties
-docstring true (`started_by` on `RunState`, `CTL-SOD-01` in `approve()`, the
-second line loses `can_run` and admin loses `can_approve`). Then the v1 core, the
-deterministic half first because it is the demonstrable half and needs no model:
-the `ast` gate that refuses generated code before execution (a webhook caught as
-`CTL-EGRESS-01`, the first half of the done-when), the Screen that removes an n=3
-cell before the narration model sees it (`CTL-DISC-02`, the second half) with
-`CTL-PROXY-01` riding along, and the subprocess sandbox with a wall-clock cap
-(`CTL-TIME-01`). The fairlearn reversal landed too: `ml/fairness.py` now governs a
-`MetricFrame` instead of hand-rolling the metric, which is the on-message move
-under the platform thesis. 164 tests green, ruff clean, prod untouched.
+On `feat/governed-codegen` (PR #1, nine commits, 183 tests green, ruff clean): v0
+made the segregation-of-duties docstring true (`started_by` on `RunState`,
+`CTL-SOD-01` in `approve()`, the second line loses `can_run` and admin loses
+`can_approve`). Then the entire v1 vertical slice: the `ast` gate, the `ctx` fence
+and allowlist, the subprocess sandbox (`CTL-TIME-01`), the disclosure Screen
+(`CTL-DISC-01/02/03`, `CTL-PROXY-01`), the fairlearn reversal, the live
+code-generation step and the gateway repoint, the `govflow` orchestration (Ask to
+Interpret), the Console and Gate screens, and the seeded adversarial set with the
+section 16 metrics.
 
-Still to come in v1: the live code-generation step and the gateway repoint, the
-orchestrator rewiring into Ask to Interpret, the two Streamlit screens (Console and
-Gate), and the seeded adversarial prompt set with the section 16 metrics tests.
+Both done-when properties are verified in the browser, not just in tests. A
+generated webhook is caught by the gate as `CTL-EGRESS-01` on line 10 and never
+executes. An n=6 age band (71-75) is suppressed (`CTL-DISC-02`) before the
+narration model sees it, the proxy is flagged (`CTL-PROXY-01`, correlation ratio
+0.92 on a disclosed synthetic feature), and the narration is built from the
+screened numbers only. Gate true-block rate is 100% on fourteen seeded adversarial
+samples, false-block 0% on eight benign.
+
+Prod is untouched: none of this has shipped, by design, until reviewed. Held for
+later slices: `ctx.sql` + sqlglot (v2), the registry/certification lifecycle (v2),
+the evidence pack + OpenLineage + Quarto (v3), and breadth across datasets (v4).
 
 Everything below is the prior state: the rethink accepted, and the platform as it
 stands in prod.
@@ -161,6 +167,7 @@ out).
 
 ## Recent entries
 
+- [2026-07-17-2230-v1-slice-complete-and-verified.md](entries/2026-07-17-2230-v1-slice-complete-and-verified.md) : v1 is done and verified in the browser. Live code generation + the gateway repoint, the govflow orchestration (Ask to Interpret), the Console and Gate screens, and the seeded adversarial set. Webhook blocks at CTL-EGRESS-01 line 10; n=6 band suppressed before narration; proxy flagged. Gate true-block 100%, false-block 0%. 183 tests, PR #1, prod untouched.
 - [2026-07-17-2203-v0-shipped-v1-core-fairlearn-reversed.md](entries/2026-07-17-2203-v0-shipped-v1-core-fairlearn-reversed.md) : first code since the rethink. v0 (CTL-SOD-01) shipped; v1 deterministic core built (the ast gate, the Screen with CTL-DISC-02 + CTL-PROXY-01, the sandbox with CTL-TIME-01); fairlearn reinstated in ml/fairness.py. 164 tests, all on PR #1. Prod untouched.
 - [2026-07-17-2102-build-greenlit-v0-then-v1.md](entries/2026-07-17-2102-build-greenlit-v0-then-v1.md) : the rethink is accepted; building starts. A clarification pass on the PRD changed nothing. Model card survives as the Attest evidence pack. Order locked: v0 (SoD fix) then v1 (the vertical slice). Live LLM from the start, feature branch per slice. Branch created, no code yet.
 - [2026-07-17-1940-govern-the-llm-not-sklearn.md](entries/2026-07-17-1940-govern-the-llm-not-sklearn.md) : the rethink. The harness audits scikit-learn, not the LLM. Autonomy ladder, proxy discrimination, a confirmed SoD defect, fairlearn back in. Docs only, no code.
