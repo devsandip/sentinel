@@ -42,6 +42,13 @@ FAIR_LENDING_GRANT = [
 # discovery evaluates at Screen.
 PROXY_CANDIDATES = ["credit_amount", "duration_months", "digital_engagement_score"]
 
+# The identity row filter injected into every ctx.sql query (governance by
+# construction, section 6). Empty here on purpose: german_credit has no natural
+# per-identity row split, and inventing one would be staging. The injection
+# mechanism is exercised in the sql_gate tests instead; wire a real predicate
+# here if a dataset ever carries a genuine row-level control.
+FAIR_LENDING_ROW_FILTER = ""
+
 
 def _fine_age_band(age: int) -> str:
     """A finer banding than ml.data._age_band, so the oldest band is small enough

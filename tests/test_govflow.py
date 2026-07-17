@@ -15,6 +15,10 @@ from sentinel.govflow.flow import STATUS_BLOCKED, STATUS_COMPLETED
 BENIGN_Q = "Does the model decline older applicants more often, holding income constant?"
 
 
+def _stage(r, name):
+    return next(s for s in r.stages if s.stage == name)
+
+
 # -- the benign happy path -------------------------------------------------
 def test_benign_flow_completes_and_suppresses_small_cell():
     r = run_governed_analysis(BENIGN_Q, intent="fair_lending")
@@ -90,6 +94,33 @@ def test_public_dict_is_shaped_for_the_ui():
     r = run_governed_analysis(BENIGN_Q, intent="fair_lending")
     pub = r.to_public_dict()
     assert pub["status"] == STATUS_COMPLETED
-    assert [s["stage"] for s in pub["stages"]][:2] == ["Ask", "Access"]
+    assert [s["stage"] for s in pub["stages"]][:3] == ["Ask", "Plan", "Access"]
     assert pub["gate"]["passed"] is True
     assert pub["narration"]
+
+
+# -- Plan binds a certified agent (v2) -------------------------------------
+def test_plan_binds_the_certified_agent():
+    r = run_governed_analysis(BENIGN_Q, intent="fair_lending")
+    plan = _stage(r, "Plan")
+    assert plan.status == "ok"
+    assert "fair-lending" in plan.detail
+    assert r.plan_agent.startswith("fair-lending")
+
+
+# -- the SQL path runs end to end (v2) -------------------------------------
+def test_sql_fair_lending_flow_completes_and_suppresses():
+    r = run_governed_analysis("group selection rate by age band", intent="fair_lending_sql")
+    assert r.status == STATUS_COMPLETED
+    assert r.gate is not None and r.gate.passed
+    # ctx.sql ran on DuckDB; the n=6 band is still suppressed before Interpret.
+    assert "CTL-DISC-02" in r.controls_fired
+    assert any("71-75" in c.group.values() for c in r.screen.suppressed)
+
+
+def test_sql_select_star_is_blocked_at_gate():
+    r = run_governed_analysis("show me everything", intent="sql_star")
+    assert r.status == STATUS_BLOCKED
+    assert "CTL-COL-01" in r.controls_fired
+    assert r.execution is None
+    assert _stage(r, "Gate").status == "blocked"

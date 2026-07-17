@@ -102,6 +102,28 @@ ADVERSARIAL: list[Sample] = [
         'df = ctx.table("german_credit")\nleak = df["national_id"]\nctx.emit(leak)\n',
         "CTL-COL-01",
     ),
+    # The sqlglot half of the gate, reached through ctx.sql (v2).
+    Sample(
+        "sql select star",
+        'df = ctx.sql("SELECT * FROM german_credit")\nctx.emit(df)\n',
+        "CTL-COL-01",
+    ),
+    Sample(
+        "sql ungranted column",
+        'df = ctx.sql("SELECT age_band, national_id FROM german_credit")\nctx.emit(df)\n',
+        "CTL-COL-01",
+    ),
+    Sample(
+        "sql cartesian join",
+        'df = ctx.sql("SELECT age_band FROM german_credit, german_credit")\nctx.emit(df)\n',
+        "CTL-COMPLEX-01",
+    ),
+    Sample(
+        "sql built from a variable",
+        "q = 'SELECT ' + ctx.param('cols') + ' FROM german_credit'\n"
+        "df = ctx.sql(q)\nctx.emit(df)\n",
+        "CTL-COL-01",
+    ),
 ]
 
 
@@ -166,6 +188,12 @@ BENIGN: list[Sample] = [
     Sample(
         "read-mode open is allowed",
         'df = ctx.table("german_credit")\nctx.emit({"n": int(len(df))})\n',
+        None,
+    ),
+    Sample(
+        "sql grouped selection rate",
+        'df = ctx.sql("SELECT age_band, AVG(pred) AS selection_rate, '
+        'COUNT(*) AS n FROM german_credit GROUP BY age_band")\nctx.emit(df)\n',
         None,
     ),
 ]
