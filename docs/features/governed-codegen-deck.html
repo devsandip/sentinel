@@ -1,0 +1,1487 @@
+<title>Sentinel: The Rethink</title>
+
+<style>
+  /* ---------- reset: self-contained, don't rely on the host's ---------- */
+  *, *::before, *::after { box-sizing: border-box; }
+  body, h1, h2, h3, p, ul, li, figure, pre { margin: 0; padding: 0; }
+  ul { list-style: none; }
+  table { border-spacing: 0; }
+
+  /* ---------- tokens ---------- */
+  :root {
+    --ink:        #0E1522;
+    --ink-2:      #3A4757;
+    --ink-3:      #6B7889;
+    --paper:      #FAFBFC;
+    --paper-2:    #F1F4F9;
+    --paper-3:    #E7ECF4;
+    --rule:       #D9E0EA;
+    --rule-soft:  #E8EDF4;
+    --accent:     #1E50A0;
+    --accent-2:   #4A78C4;
+    --accent-soft:#EDF2FB;
+    --brass:      #8A6412;
+    --brass-soft: #F8F1DD;
+    --brass-rule: #E3D3A4;
+    --flag:       #B3261E;
+    --flag-soft:  #FDECEB;
+    --ok:         #1B7F3B;
+    --ok-soft:    #E4F4E9;
+
+    --display: "Charter", "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+    --body: "Avenir Next", "Avenir", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --mono: "SF Mono", "Menlo", Monaco, "Cascadia Code", "Roboto Mono", monospace;
+
+    --gut: clamp(1.25rem, 4vw, 4.5rem);
+    --col: 74ch;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ink:        #E7ECF3;
+      --ink-2:      #AAB6C6;
+      --ink-3:      #78838F;
+      --paper:      #0A0F16;
+      --paper-2:    #121A24;
+      --paper-3:    #1A2431;
+      --rule:       #26313F;
+      --rule-soft:  #1B2530;
+      --accent:     #7BA4E8;
+      --accent-2:   #5B85C9;
+      --accent-soft:#14213A;
+      --brass:      #D7A951;
+      --brass-soft: #2B2314;
+      --brass-rule: #4A3C1C;
+      --flag:       #E97367;
+      --flag-soft:  #2E1614;
+      --ok:         #56BC77;
+      --ok-soft:    #12271A;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ink:        #E7ECF3;
+    --ink-2:      #AAB6C6;
+    --ink-3:      #78838F;
+    --paper:      #0A0F16;
+    --paper-2:    #121A24;
+    --paper-3:    #1A2431;
+    --rule:       #26313F;
+    --rule-soft:  #1B2530;
+    --accent:     #7BA4E8;
+    --accent-2:   #5B85C9;
+    --accent-soft:#14213A;
+    --brass:      #D7A951;
+    --brass-soft: #2B2314;
+    --brass-rule: #4A3C1C;
+    --flag:       #E97367;
+    --flag-soft:  #2E1614;
+    --ok:         #56BC77;
+    --ok-soft:    #12271A;
+  }
+
+  :root[data-theme="light"] {
+    --ink:        #0E1522;
+    --ink-2:      #3A4757;
+    --ink-3:      #6B7889;
+    --paper:      #FAFBFC;
+    --paper-2:    #F1F4F9;
+    --paper-3:    #E7ECF4;
+    --rule:       #D9E0EA;
+    --rule-soft:  #E8EDF4;
+    --accent:     #1E50A0;
+    --accent-2:   #4A78C4;
+    --accent-soft:#EDF2FB;
+    --brass:      #8A6412;
+    --brass-soft: #F8F1DD;
+    --brass-rule: #E3D3A4;
+    --flag:       #B3261E;
+    --flag-soft:  #FDECEB;
+    --ok:         #1B7F3B;
+    --ok-soft:    #E4F4E9;
+  }
+
+  /* ---------- base ---------- */
+  html { scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    * { animation: none !important; transition: none !important; }
+  }
+
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--body);
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    scroll-snap-type: y proximity;
+  }
+
+  ::selection { background: var(--accent); color: var(--paper); }
+
+  a { color: var(--accent); }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 2px; }
+
+  /* ---------- slide frame ---------- */
+  .slide {
+    scroll-snap-align: start;
+    min-height: 100vh;
+    padding: clamp(2.5rem, 5.5vh, 4.25rem) var(--gut) clamp(2.5rem, 5.5vh, 4.25rem);
+    border-bottom: 1px solid var(--rule-soft);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    position: relative;
+  }
+  .slide > .inner {
+    width: 100%;
+    max-width: 1180px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 1.75rem;
+  }
+  .num {
+    position: absolute;
+    top: clamp(1.25rem, 3.5vh, 2.25rem);
+    right: var(--gut);
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+    color: var(--ink-3);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ---------- type ---------- */
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--accent);
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+  .eyebrow::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: var(--rule);
+  }
+  .eyebrow.brass { color: var(--brass); }
+
+  h1 {
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: clamp(2.3rem, 5.4vw, 4.35rem);
+    line-height: 1.04;
+    letter-spacing: -0.02em;
+    text-wrap: balance;
+  }
+  h2 {
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: clamp(1.75rem, 3.6vw, 2.9rem);
+    line-height: 1.1;
+    letter-spacing: -0.015em;
+    text-wrap: balance;
+  }
+  h3 {
+    font-family: var(--body);
+    font-weight: 600;
+    font-size: 1rem;
+    letter-spacing: -0.005em;
+  }
+  .lede {
+    font-family: var(--display);
+    font-size: clamp(1.15rem, 1.9vw, 1.5rem);
+    line-height: 1.45;
+    color: var(--ink-2);
+    max-width: 60ch;
+    text-wrap: pretty;
+  }
+  p { max-width: var(--col); text-wrap: pretty; }
+  .body-sm { font-size: 0.9rem; line-height: 1.6; color: var(--ink-2); }
+  .muted { color: var(--ink-3); }
+  strong { font-weight: 600; color: var(--ink); }
+  code, .mono { font-family: var(--mono); font-size: 0.85em; }
+
+  /* ---------- chips ---------- */
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-family: var(--mono);
+    font-size: 0.68rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 0.2rem 0.55rem;
+    border: 1px solid var(--rule);
+    background: var(--paper-2);
+    color: var(--ink-2);
+    white-space: nowrap;
+  }
+  .chip.acc  { background: var(--accent-soft); border-color: var(--accent-2); color: var(--accent); }
+  .chip.br   { background: var(--brass-soft);  border-color: var(--brass-rule); color: var(--brass); }
+  .chip.bad  { background: var(--flag-soft);   border-color: var(--flag); color: var(--flag); }
+  .chip.good { background: var(--ok-soft);     border-color: var(--ok); color: var(--ok); }
+
+  /* ---------- title slide ---------- */
+  .title-slide .inner { gap: clamp(1rem, 2.2vh, 1.9rem); }
+  .rule-heavy { height: 3px; background: var(--ink); width: 84px; }
+  .meta-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 2rem;
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.06em;
+    color: var(--ink-3);
+    text-transform: uppercase;
+    border-top: 1px solid var(--rule);
+    padding-top: 1rem;
+  }
+  .toc {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: 0 2rem;
+    border-top: 1px solid var(--rule);
+    padding-top: 1.25rem;
+    margin-top: 0.5rem;
+  }
+  .toc a {
+    display: grid;
+    grid-template-columns: 2.1rem 1fr;
+    gap: 0.35rem;
+    padding: 0.45rem 0;
+    text-decoration: none;
+    color: var(--ink-2);
+    font-size: 0.85rem;
+    border-bottom: 1px solid var(--rule-soft);
+  }
+  .toc a:hover { color: var(--accent); }
+  .toc .tn { font-family: var(--mono); font-size: 0.7rem; color: var(--ink-3); padding-top: 0.15rem; }
+
+  /* ---------- verdict ---------- */
+  .verdict {
+    font-family: var(--display);
+    font-size: clamp(2rem, 5vw, 3.9rem);
+    line-height: 1.08;
+    letter-spacing: -0.02em;
+    max-width: 22ch;
+    font-weight: 700;
+  }
+  .strike { color: var(--ink-3); text-decoration: line-through; text-decoration-thickness: 2px; }
+  .hot { color: var(--brass); }
+  .cool { color: var(--accent); }
+
+  /* ---------- generic grid ---------- */
+  .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.5rem; }
+  .grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 1rem; }
+
+  .panel {
+    border: 1px solid var(--rule);
+    background: var(--paper-2);
+    padding: 1.15rem 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+  }
+  .panel.flat { background: transparent; }
+  .panel-t {
+    font-family: var(--mono);
+    font-size: 0.68rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+
+  /* ---------- pipeline diagram ---------- */
+  .pipe {
+    display: flex;
+    align-items: stretch;
+    gap: 0;
+    overflow-x: auto;
+    padding-bottom: 0.5rem;
+  }
+  .node {
+    flex: 1 0 auto;
+    min-width: 92px;
+    border: 1px solid var(--rule);
+    border-right: none;
+    background: var(--paper-2);
+    padding: 0.7rem 0.6rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    justify-content: center;
+  }
+  .node:last-child { border-right: 1px solid var(--rule); }
+  .node .nl {
+    font-family: var(--mono);
+    font-size: 0.64rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+  .node .nv { font-size: 0.82rem; font-weight: 600; line-height: 1.25; }
+  .node.llm-old { background: var(--paper-3); border-color: var(--rule); }
+  .node.llm-old .nv { color: var(--ink-3); }
+  .node.llm-new {
+    background: var(--brass-soft);
+    border-color: var(--brass);
+    border-right: 1px solid var(--brass);
+    outline: 2px solid var(--brass);
+    outline-offset: -1px;
+    z-index: 2;
+  }
+  .node.llm-new .nv { color: var(--brass); }
+  .node.llm-new .nl { color: var(--brass); }
+  .node.gate {
+    background: var(--flag-soft);
+    border-color: var(--flag);
+    border-right: 1px solid var(--flag);
+    z-index: 1;
+  }
+  .node.gate .nv, .node.gate .nl { color: var(--flag); }
+  .pipe-label {
+    font-family: var(--mono);
+    font-size: 0.68rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    margin-bottom: 0.5rem;
+    display: block;
+  }
+
+  /* ---------- ladder ---------- */
+  .ladder { display: flex; flex-direction: column; border: 1px solid var(--rule); }
+  .rung {
+    display: grid;
+    grid-template-columns: 4.5rem 1fr 1.5fr;
+    gap: 1rem;
+    padding: 0.9rem 1.1rem;
+    border-bottom: 1px solid var(--rule-soft);
+    align-items: baseline;
+  }
+  .rung:last-child { border-bottom: none; }
+  .rung:nth-child(odd) { background: var(--paper-2); }
+  .rung .tier {
+    font-family: var(--mono);
+    font-weight: 700;
+    font-size: 1.1rem;
+    color: var(--accent);
+    letter-spacing: 0.02em;
+  }
+  .rung.r3 .tier { color: var(--brass); }
+  .rung .what { font-weight: 600; font-size: 0.95rem; }
+  .rung .when { font-size: 0.85rem; color: var(--ink-2); }
+  .rung .when .mono { color: var(--ink-3); }
+
+  .formula {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    padding: 0.85rem 1rem;
+    border: 1px dashed var(--rule);
+    background: var(--paper-2);
+    color: var(--ink-2);
+  }
+  .formula .op { color: var(--ink-3); }
+  .formula b { color: var(--accent); font-weight: 600; }
+
+  /* ---------- flow (reshaped stages) ---------- */
+  .flow { display: flex; flex-direction: column; gap: 0; border-left: 2px solid var(--rule); }
+  .stage {
+    display: grid;
+    grid-template-columns: 1.5rem 8.5rem 1fr;
+    gap: 1rem;
+    padding: 0.62rem 0 0.62rem 1rem;
+    align-items: center;
+    position: relative;
+  }
+  .stage::before {
+    content: "";
+    position: absolute;
+    left: -5px;
+    top: 50%;
+    width: 8px;
+    height: 8px;
+    background: var(--rule);
+    transform: translateY(-50%);
+    border-radius: 50%;
+  }
+  .stage.new::before { background: var(--brass); box-shadow: 0 0 0 3px var(--brass-soft); }
+  .stage .sn { font-family: var(--mono); font-size: 0.68rem; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+  .stage .sname { font-weight: 600; font-size: 0.95rem; }
+  .stage.new .sname { color: var(--brass); }
+  .stage .sctrl { font-size: 0.82rem; color: var(--ink-2); }
+  .stage .sctrl .mono { color: var(--ink-3); }
+
+  /* ---------- wrapper vs inline ---------- */
+  .wrongbox {
+    border: 3px solid var(--flag);
+    padding: 1.1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    position: relative;
+  }
+  .wrongbox .tag {
+    position: absolute; top: -0.65rem; left: 0.75rem;
+    background: var(--paper); padding: 0 0.4rem;
+    font-family: var(--mono); font-size: 0.65rem; letter-spacing: 0.1em;
+    text-transform: uppercase; color: var(--flag);
+  }
+  .rightbox {
+    border: 1px solid var(--rule);
+    padding: 1.1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    position: relative;
+  }
+  .rightbox .tag {
+    position: absolute; top: -0.65rem; left: 0.75rem;
+    background: var(--paper); padding: 0 0.4rem;
+    font-family: var(--mono); font-size: 0.65rem; letter-spacing: 0.1em;
+    text-transform: uppercase; color: var(--ok);
+  }
+  .flatrow { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+  .flatrow .b {
+    flex: 1 1 auto; text-align: center; padding: 0.55rem 0.4rem;
+    border: 1px solid var(--rule); background: var(--paper-2);
+    font-size: 0.78rem; font-weight: 600;
+  }
+  .gaterow { display: flex; align-items: stretch; flex-wrap: wrap; gap: 0; }
+  .gaterow .b {
+    padding: 0.55rem 0.7rem; border: 1px solid var(--rule); border-right: none;
+    background: var(--paper-2); font-size: 0.78rem; font-weight: 600;
+  }
+  .gaterow .g {
+    padding: 0.55rem 0.5rem; border: 1px solid var(--accent); border-right: none;
+    background: var(--accent-soft); color: var(--accent);
+    font-family: var(--mono); font-size: 0.62rem; letter-spacing: 0.04em;
+    display: flex; align-items: center; text-transform: uppercase;
+  }
+  .gaterow .b:last-child { border-right: 1px solid var(--rule); }
+
+  /* ---------- gaps ---------- */
+  .gap-item {
+    border-top: 1px solid var(--rule);
+    padding: 0.9rem 0;
+    display: grid;
+    grid-template-columns: 1.75rem 1fr;
+    gap: 0.9rem;
+  }
+  .gap-item .gi { font-family: var(--mono); font-size: 0.68rem; color: var(--brass); padding-top: 0.2rem; font-variant-numeric: tabular-nums; }
+  .gap-item h3 { margin-bottom: 0.15rem; }
+  .gap-item p { font-size: 0.86rem; color: var(--ink-2); max-width: 62ch; }
+
+  /* ---------- tables ---------- */
+  .tw { overflow-x: auto; border: 1px solid var(--rule); }
+  table { border-collapse: collapse; width: 100%; font-size: 0.84rem; min-width: 640px; }
+  th {
+    text-align: left;
+    font-family: var(--mono);
+    font-size: 0.64rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    font-weight: 500;
+    padding: 0.6rem 0.85rem;
+    border-bottom: 1px solid var(--rule);
+    background: var(--paper-2);
+    white-space: nowrap;
+  }
+  td { padding: 0.6rem 0.85rem; border-bottom: 1px solid var(--rule-soft); vertical-align: top; color: var(--ink-2); }
+  tr:last-child td { border-bottom: none; }
+  td.tool { font-family: var(--mono); font-weight: 600; color: var(--accent); white-space: nowrap; font-size: 0.8rem; }
+  td.stg { font-size: 0.7rem; font-family: var(--mono); color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap; }
+
+  /* ---------- diff columns ---------- */
+  .diff { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem; }
+  .dcol { border: 1px solid var(--rule); display: flex; flex-direction: column; }
+  .dcol > .dh {
+    padding: 0.7rem 0.9rem;
+    border-bottom: 1px solid var(--rule);
+    font-family: var(--mono);
+    font-size: 0.68rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    display: flex; justify-content: space-between; align-items: center; gap: 0.5rem;
+  }
+  .dcol.keep .dh { background: var(--ok-soft); color: var(--ok); border-bottom-color: var(--ok); }
+  .dcol.change .dh { background: var(--accent-soft); color: var(--accent); border-bottom-color: var(--accent-2); }
+  .dcol.new .dh { background: var(--brass-soft); color: var(--brass); border-bottom-color: var(--brass); }
+  .dcol ul { list-style: none; padding: 0.5rem 0; }
+  .dcol li {
+    padding: 0.4rem 0.9rem;
+    font-size: 0.82rem;
+    color: var(--ink-2);
+    display: flex;
+    gap: 0.5rem;
+    align-items: baseline;
+  }
+  .dcol li .f { font-family: var(--mono); font-size: 0.76rem; color: var(--ink); }
+  .dcol .cnt { font-variant-numeric: tabular-nums; opacity: 0.75; }
+
+  /* ---------- mockups ---------- */
+  .mock {
+    border: 1px solid var(--rule);
+    background: var(--paper);
+    font-size: 0.8rem;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 1px 0 var(--rule-soft), 0 12px 28px -18px rgba(14,21,34,0.35);
+  }
+  .mock-bar {
+    display: flex; align-items: center; gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--rule);
+    background: var(--paper-2);
+    font-family: var(--mono); font-size: 0.65rem;
+    letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-3);
+  }
+  .mock-bar .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--rule); flex: none; }
+  .mock-bar .sp { flex: 1; }
+  .mock-body { padding: 0.85rem; display: flex; flex-direction: column; gap: 0.7rem; }
+  .mock-sec { display: flex; flex-direction: column; gap: 0.4rem; }
+  .mock-lab {
+    font-family: var(--mono); font-size: 0.6rem; letter-spacing: 0.1em;
+    text-transform: uppercase; color: var(--ink-3);
+  }
+  .field {
+    border: 1px solid var(--rule); background: var(--paper-2);
+    padding: 0.5rem 0.6rem; font-size: 0.8rem; color: var(--ink);
+  }
+  .field.prompt { border-color: var(--accent-2); background: var(--accent-soft); font-style: italic; }
+  .kv { display: flex; gap: 0.4rem; flex-wrap: wrap; align-items: center; }
+  .btn {
+    display: inline-block; padding: 0.4rem 0.8rem;
+    background: var(--accent); color: #fff; font-size: 0.72rem; font-weight: 600;
+    border: 1px solid var(--accent);
+  }
+  .btn.ghost { background: transparent; color: var(--ink-2); border-color: var(--rule); }
+  .btn.danger { background: var(--flag); border-color: var(--flag); }
+
+  pre.code {
+    font-family: var(--mono); font-size: 0.7rem; line-height: 1.55;
+    background: var(--paper-2); border: 1px solid var(--rule);
+    padding: 0.6rem 0.7rem; overflow-x: auto; color: var(--ink-2);
+  }
+  pre.code .k { color: var(--accent); }
+  pre.code .s { color: var(--ok); }
+  pre.code .bad { background: var(--flag-soft); color: var(--flag); font-weight: 700; }
+  pre.code .c { color: var(--ink-3); font-style: italic; }
+
+  .verdict-list { display: flex; flex-direction: column; gap: 0.25rem; }
+  .vrow {
+    display: grid; grid-template-columns: 1.2rem 1fr auto;
+    gap: 0.5rem; align-items: center;
+    font-size: 0.74rem; padding: 0.28rem 0;
+    border-bottom: 1px solid var(--rule-soft);
+  }
+  .vrow .vi { font-family: var(--mono); font-weight: 700; }
+  .vrow.pass .vi { color: var(--ok); }
+  .vrow.fail .vi { color: var(--flag); }
+  .vrow .vt { color: var(--ink-2); }
+  .vrow .vs { font-family: var(--mono); font-size: 0.62rem; letter-spacing: 0.06em; text-transform: uppercase; }
+  .vrow.pass .vs { color: var(--ok); }
+  .vrow.fail .vs { color: var(--flag); }
+
+  table.mini { min-width: 0; font-size: 0.74rem; }
+  table.mini th { padding: 0.35rem 0.5rem; font-size: 0.58rem; }
+  table.mini td { padding: 0.35rem 0.5rem; font-variant-numeric: tabular-nums; }
+  tr.suppressed td { background: var(--flag-soft); color: var(--flag); font-style: italic; }
+
+  .lineage { display: flex; flex-direction: column; gap: 0; }
+  .lrow {
+    display: grid; grid-template-columns: 6.5rem 1fr;
+    gap: 0.6rem; padding: 0.3rem 0;
+    font-size: 0.72rem;
+    border-bottom: 1px solid var(--rule-soft);
+  }
+  .lrow .ll {
+    font-family: var(--mono); font-size: 0.6rem; letter-spacing: 0.06em;
+    text-transform: uppercase; color: var(--ink-3); padding-top: 0.1rem;
+  }
+  .lrow .lv { font-family: var(--mono); color: var(--ink-2); word-break: break-all; }
+
+  .callout {
+    border-left: 3px solid var(--brass);
+    background: var(--brass-soft);
+    padding: 0.85rem 1rem;
+    font-size: 0.88rem;
+    color: var(--ink-2);
+    max-width: 68ch;
+  }
+  .callout strong { color: var(--brass); }
+
+  .split-claim { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.25rem; }
+  .claim { border-top: 3px solid var(--rule); padding-top: 0.85rem; display: flex; flex-direction: column; gap: 0.5rem; }
+  .claim.tool { border-top-color: var(--ok); }
+  .claim.model { border-top-color: var(--flag); }
+  .claim .ct { font-family: var(--display); font-size: 1.4rem; font-weight: 700; }
+  .claim.tool .ct { color: var(--ok); }
+  .claim.model .ct { color: var(--flag); }
+
+  .big-note {
+    font-family: var(--display);
+    font-size: clamp(1.3rem, 2.6vw, 2rem);
+    line-height: 1.25;
+    max-width: 30ch;
+    font-weight: 700;
+  }
+
+  /* ---------- progress ---------- */
+  .prog {
+    position: fixed; top: 0; left: 0; height: 2px;
+    background: var(--accent); width: 0%;
+    z-index: 50;
+    transition: width 0.1s linear;
+  }
+  @media (prefers-reduced-motion: reduce) { .prog { transition: none; } }
+
+  .hint {
+    position: fixed; bottom: 1rem; right: 1rem;
+    font-family: var(--mono); font-size: 0.6rem;
+    letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--ink-3); background: var(--paper);
+    border: 1px solid var(--rule); padding: 0.3rem 0.5rem;
+    z-index: 40; pointer-events: none;
+  }
+  @media (max-width: 720px) { .hint { display: none; } }
+
+  @media (max-width: 720px) {
+    .slide { min-height: auto; padding-top: 3rem; padding-bottom: 3rem; }
+    .rung { grid-template-columns: 3.2rem 1fr; }
+    .rung .when { grid-column: 2; }
+    .stage { grid-template-columns: 1.4rem 1fr; }
+    .stage .sctrl { grid-column: 2; }
+    body { scroll-snap-type: none; }
+  }
+
+  /* ---------- print: one slide per page, 16:9, always light ---------- */
+  @page { size: 15in 8.4375in; margin: 0; }
+
+  @media print {
+    /* force the light palette; a dark PDF is nobody's friend */
+    :root {
+      --ink: #0E1522; --ink-2: #3A4757; --ink-3: #6B7889;
+      --paper: #FAFBFC; --paper-2: #F1F4F9; --paper-3: #E7ECF4;
+      --rule: #D9E0EA; --rule-soft: #E8EDF4;
+      --accent: #1E50A0; --accent-2: #4A78C4; --accent-soft: #EDF2FB;
+      --brass: #8A6412; --brass-soft: #F8F1DD; --brass-rule: #E3D3A4;
+      --flag: #B3261E; --flag-soft: #FDECEB;
+      --ok: #1B7F3B; --ok-soft: #E4F4E9;
+    }
+    * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+    html, body { background: var(--paper); scroll-snap-type: none; }
+    .prog, .hint { display: none !important; }
+
+    /* height:auto, NOT a fixed height. A fixed height plus overflow:hidden
+       silently clips the dense slides (the toolkit table loses ~470px).
+       Losing content is worse than a page break.
+
+       zoom:0.8 shrinks the layout so the mid-density slides land inside one
+       page instead of orphaning a stray paragraph onto the next. Box dims are
+       pre-divided by the zoom factor so the rendered result is still exactly
+       15in x 8.4375in. Slide 10 (the 15-row toolkit table) still runs to two
+       pages, which is correct for a reference table. */
+    .slide {
+      zoom: 0.8;
+      width: 18.75in;         /* 15 / 0.8 */
+      min-height: 10.5469in;  /* 8.4375 / 0.8 */
+      height: auto;
+      padding: 0.775in 0.9375in;
+      border-bottom: none;
+      break-after: page;
+      overflow: visible;
+      scroll-snap-align: none;
+      /* justify-content stays 'center' from the base rule. Safe here because
+         height is auto: once content exceeds min-height the box just grows and
+         centering becomes a no-op, so short slides compose and tall ones flow. */
+    }
+    .slide:last-of-type { break-after: auto; }
+
+    /* keep atomic blocks from splitting mid-element across a page boundary */
+    .panel, .mock, .rung, .stage, .gap-item, .dcol, .claim, .callout,
+    .formula, .wrongbox, .rightbox, pre.code, tr { break-inside: avoid; }
+    thead { display: table-header-group; }
+    .slide > .inner { max-width: none; }
+
+    /* the deck's own <a> underlining is noise on paper */
+    .toc a { color: var(--ink-2); }
+    .mock { box-shadow: none; }
+  }
+</style>
+
+<div class="prog" id="prog"></div>
+<div class="hint">&larr; &rarr; to navigate</div>
+
+<!-- 01 ============================================================ -->
+<section class="slide title-slide" id="s1">
+  <span class="num">01 / 13</span>
+  <div class="inner">
+    <div class="eyebrow">Sentinel &middot; Architecture Rethink</div>
+    <h1>You built a governed<br>pipeline. Citi is asking<br>for a governed <span class="cool">model</span>.</h1>
+    <div class="rule-heavy"></div>
+    <p class="lede">A critique of the current design, a reshaped control flow, an off-the-shelf toolkit, and the screens worth building. Nothing here is built yet.</p>
+    <div class="toc">
+      <a href="#s2"><span class="tn">02</span><span>The verdict</span></a>
+      <a href="#s3"><span class="tn">03</span><span>Where the LLM sits</span></a>
+      <a href="#s4"><span class="tn">04</span><span>The platform has nowhere to live</span></a>
+      <a href="#s5"><span class="tn">05</span><span>The four layers</span></a>
+      <a href="#s6"><span class="tn">06</span><span>The reshaped control flow</span></a>
+      <a href="#s7"><span class="tn">07</span><span>Inline, not wrapped</span></a>
+      <a href="#s8"><span class="tn">08</span><span>Six things missing</span></a>
+      <a href="#s9"><span class="tn">09</span><span>Tool or model?</span></a>
+      <a href="#s10"><span class="tn">10</span><span>The toolkit</span></a>
+      <a href="#s11"><span class="tn">11</span><span>Have vs. build</span></a>
+      <a href="#s12"><span class="tn">12</span><span>Screens: the analyst</span></a>
+      <a href="#s13"><span class="tn">13</span><span>Screens: oversight</span></a>
+    </div>
+    <div class="meta-row">
+      <span>Prepared 2026-07-17</span>
+      <span>Audience: one</span>
+      <span>Status: proposal, not spec</span>
+    </div>
+  </div>
+</section>
+
+<!-- 02 ============================================================ -->
+<section class="slide" id="s2">
+  <span class="num">02 / 13</span>
+  <div class="inner">
+    <div class="eyebrow">The verdict</div>
+    <p class="verdict">Your governance layer isn't governing the LLM. It's governing <span class="strike">scikit-learn</span>.</p>
+    <div class="grid-2" style="margin-top:0.5rem;">
+      <div>
+        <p>The current build has an audit log, RBAC, PII redaction, a cost ledger, an eval gate, and a human approval gate. Every one of them fires on a <strong>logistic regression</strong>. The language model sits at the end of the pipeline writing prose about numbers that were already computed.</p>
+        <p style="margin-top:0.9rem;">So the harness is real, but it is auditing sklearn. If you turned the LLM off entirely, every control would still pass. That is the tell.</p>
+      </div>
+      <div>
+        <p>The question in the room is <strong>"can you deploy LLMs to help data scientists."</strong> The honest answer to how LLMs help data scientists is: they write the code. Databricks Assistant. Hex Magic. Snowflake Copilot.</p>
+        <p style="margin-top:0.9rem;">Which means the artifact has to govern <span class="hot"><strong>generated code, before it executes, against customer data</strong></span>. Everything else in this deck follows from that one move.</p>
+      </div>
+    </div>
+    <div class="callout" style="margin-top:0.5rem;">
+      <strong>The delta.</strong> Today the artifact proves you can build an ML pipeline with an audit log. It should prove you can put a language model between a data scientist and a bank's customer data without losing your license.
+    </div>
+  </div>
+</section>
+
+<!-- 03 ============================================================ -->
+<section class="slide" id="s3">
+  <span class="num">03 / 13</span>
+  <div class="inner">
+    <div class="eyebrow">Problem one</div>
+    <h2>Where the LLM sits is the whole design</h2>
+
+    <div style="display:flex; flex-direction:column; gap:1.75rem; margin-top:0.5rem;">
+      <div>
+        <span class="pipe-label">Now &mdash; the model is a commentator, bolted to the end</span>
+        <div class="pipe">
+          <div class="node"><span class="nl">01</span><span class="nv">Load data</span></div>
+          <div class="node"><span class="nl">02</span><span class="nv">Profile</span></div>
+          <div class="node"><span class="nl">03</span><span class="nv">EDA</span></div>
+          <div class="node"><span class="nl">04</span><span class="nv">Fit model</span></div>
+          <div class="node"><span class="nl">05</span><span class="nv">Human gate</span></div>
+          <div class="node"><span class="nl">06</span><span class="nv">Validate</span></div>
+          <div class="node llm-old"><span class="nl">LLM</span><span class="nv">Narrates it</span></div>
+        </div>
+        <p class="body-sm" style="margin-top:0.6rem;">Turn the last box off and nothing breaks. The controls never touch the model, because the model never touches anything.</p>
+      </div>
+
+      <div>
+        <span class="pipe-label brass" style="color:var(--brass);">Proposed &mdash; the model is upstream of execution, with gates on both sides</span>
+        <div class="pipe">
+          <div class="node"><span class="nl">01</span><span class="nv">Ask</span></div>
+          <div class="node gate"><span class="nl">Gate</span><span class="nv">Policy + purpose</span></div>
+          <div class="node llm-new"><span class="nl">LLM</span><span class="nv">Writes the code</span></div>
+          <div class="node gate"><span class="nl">Gate</span><span class="nv">Static analysis</span></div>
+          <div class="node"><span class="nl">04</span><span class="nv">Sandbox exec</span></div>
+          <div class="node gate"><span class="nl">Gate</span><span class="nv">Disclosure</span></div>
+          <div class="node"><span class="nl">06</span><span class="nv">Attest</span></div>
+        </div>
+        <p class="body-sm" style="margin-top:0.6rem;">Now the model is load-bearing, sitting between an analyst and real customer data. Every control has something dangerous to actually control.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 04 ============================================================ -->
+<section class="slide" id="s4">
+  <span class="num">04 / 13</span>
+  <div class="inner">
+    <div class="eyebrow">Problem two</div>
+    <h2>The platform story has nowhere to live</h2>
+    <p class="lede">Half your stated goal is agent registry, templates, and scaffolding. A linear pipeline demonstrates none of it.</p>
+
+    <div class="grid-2" style="margin-top:0.5rem;">
+      <div class="panel flat">
+        <span class="panel-t">What registry / template / scaffolding actually claims</span>
+        <p class="body-sm">That the second and tenth analysis are cheaper than the first. That a central team knows what is deployed, who owns it, and when it was last evaluated. Neither claim is visible in a pipeline diagram.</p>
+      </div>
+      <div class="panel flat">
+        <span class="panel-t">The version that proves it</span>
+        <p class="body-sm">Scaffolding is the <strong>only</strong> path to creating an agent, so an ungoverned agent is structurally impossible. The generated agent inherits the harness rather than re-implementing it.</p>
+      </div>
+    </div>
+
+    <div class="panel" style="margin-top:0.5rem;">
+      <span class="panel-t">The lifecycle that makes it real</span>
+      <div class="gaterow" style="margin-top:0.35rem;">
+        <div class="b">sentinel new-agent</div>
+        <div class="g">generates spec + evals + owner</div>
+        <div class="b">draft</div>
+        <div class="g">eval suite passes</div>
+        <div class="b">candidate</div>
+        <div class="g">independent validation signoff</div>
+        <div class="b">certified</div>
+      </div>
+      <p class="body-sm" style="margin-top:0.6rem;">An agent cannot reach <span class="mono">certified</span> without passing its eval suite, carrying a named owner, and holding a model-risk signoff from someone who is not its author.</p>
+    </div>
+
+    <div class="callout">
+      <strong>Demo an agent failing certification.</strong> Everyone shows the happy path. Showing the registry refuse to promote something, with reasons, is the platform PM proof, and almost nobody does it.
+    </div>
+  </div>
+</section>
+
+<!-- 05 ============================================================ -->
+<section class="slide" id="s5">
+  <span class="num">05 / 13</span>
+  <div class="inner">
+    <div class="eyebrow brass">The idea to build around</div>
+    <h2>Four layers of leash</h2>
+    <p class="lede">Don't pick one autonomy level and defend it. Ship all four, and let policy decide which one this person gets on this data right now.</p>
+
+    <div class="ladder" style="margin-top:0.5rem;">
+      <div class="rung">
+        <span class="tier">L0</span>
+        <span class="what">It explains</span>
+        <span class="when">The model reads finished numbers and writes prose about them. It cannot touch data. <span class="mono">Always available. This is all you have today.</span></span>
+      </div>
+      <div class="rung">
+        <span class="tier">L1</span>
+        <span class="what">It chooses</span>
+        <span class="when">The model picks a pre-approved analysis from the registry and fills in typed parameters. It writes no code. <span class="mono">Safe on the most sensitive data.</span></span>
+      </div>
+      <div class="rung">
+        <span class="tier">L2</span>
+        <span class="what">It writes, inside a fence</span>
+        <span class="when">The model writes real code, but only against an allowlisted API. Checked before it runs. <span class="mono">The sweet spot. Build this one.</span></span>
+      </div>
+      <div class="rung r3">
+        <span class="tier">L3</span>
+        <span class="what">It improvises</span>
+        <span class="when">The model writes near-arbitrary code in a sandbox with no network and no writes. <span class="mono">Synthetic and public data only.</span></span>
+      </div>
+    </div>
+
+    <div class="formula" style="margin-top:0.4rem;">
+      <b>who they are</b> <span class="op">&times;</span> <b>how sensitive the data is</b> <span class="op">&rarr;</span> <b>which layer they get</b>
+    </div>
+
+    <div class="grid-3" style="margin-top:0.4rem;">
+      <div class="panel">
+        <span class="panel-t">Junior on customer PII</span>
+        <div><span class="chip acc">L1 only</span></div>
+        <p class="body-sm">Pick from the catalog. No generated code goes anywhere near real accounts.</p>
+      </div>
+      <div class="panel">
+        <span class="panel-t">Certified analyst on internal data</span>
+        <div><span class="chip acc">up to L2</span></div>
+        <p class="body-sm">Write code against the fenced API. Gate reviews it before execution.</p>
+      </div>
+      <div class="panel">
+        <span class="panel-t">Anyone on synthetic data</span>
+        <div><span class="chip br">up to L3</span></div>
+        <p class="body-sm">Improvise freely. There is nothing here worth stealing.</p>
+      </div>
+    </div>
+
+    <p class="body-sm"><strong>Why this is the centerpiece:</strong> it is a product decision, not an engineering one. It is defensible to a regulator. And it makes the governance layer visibly <em>decide something</em> instead of merely writing to a log.</p>
+  </div>
+</section>
+
+<!-- 06 ============================================================ -->
+<section class="slide" id="s6">
+  <span class="num">06 / 13</span>
+  <div class="inner">
+    <div class="eyebrow">The reshaped control flow</div>
+    <h2>Nine stages, and the control that fires at each</h2>
+
+    <div class="grid-2" style="align-items:start; gap:2rem;">
+      <div class="flow">
+        <div class="stage"><span class="sn">01</span><span class="sname">Ask</span><span class="sctrl">Bind identity and <span class="mono">purpose</span>. Resolve the tier.</span></div>
+        <div class="stage"><span class="sn">02</span><span class="sname">Plan</span><span class="sctrl">Model may only select <span class="mono">certified</span> registry entries.</span></div>
+        <div class="stage"><span class="sn">03</span><span class="sname">Access</span><span class="sctrl">RBAC, purpose limit, row and column policy.</span></div>
+        <div class="stage new"><span class="sn">04</span><span class="sname">Generate</span><span class="sctrl">The model writes code. Nothing runs yet.</span></div>
+        <div class="stage new"><span class="sn">05</span><span class="sname">Gate</span><span class="sctrl">Static analysis. Allowlist, no egress, no writes.</span></div>
+        <div class="stage"><span class="sn">06</span><span class="sname">Execute</span><span class="sctrl">Sandbox. Off-the-shelf libraries do the math.</span></div>
+        <div class="stage new"><span class="sn">07</span><span class="sname">Screen</span><span class="sctrl">Disclosure control. Small cells, PII, leakage.</span></div>
+        <div class="stage"><span class="sn">08</span><span class="sname">Interpret</span><span class="sctrl">Grounded narration. Faithfulness eval.</span></div>
+        <div class="stage new"><span class="sn">09</span><span class="sname">Attest</span><span class="sctrl">Evidence pack. Lineage. Signoff.</span></div>
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:1rem;">
+        <div class="panel">
+          <span class="panel-t">Legend</span>
+          <div class="kv">
+            <span class="chip br">brass = does not exist today</span>
+          </div>
+          <p class="body-sm">Four of the nine are new, and they are the four that carry the entire argument. <span class="mono">Generate &rarr; Gate &rarr; Execute &rarr; Screen</span> is the span that proves the claim.</p>
+        </div>
+        <div class="panel">
+          <span class="panel-t">Then: publish, two ways</span>
+          <p class="body-sm"><strong>For the data scientist:</strong> a reproducible notebook where the code is visible and diffable.</p>
+          <p class="body-sm"><strong>For leadership:</strong> the claim, its provenance, the controls that fired, and what the data does <em>not</em> let you say.</p>
+        </div>
+        <div class="callout">
+          Drop the phrase <strong>"wrapped around by governance."</strong> A perimeter is the wrong model and a sharp interviewer reads it as inexperience.
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 07 ============================================================ -->
+<section class="slide" id="s7">
+  <span class="num">07 / 13</span>
+  <div class="inner">
+    <div class="eyebrow">A framing correction</div>
+    <h2>Controls are inline and differentiated, not a box you draw around the outside</h2>
+
+    <div class="grid-2" style="margin-top:1rem; gap:2rem;">
+      <div style="display:flex; flex-direction:column; gap:0.9rem;">
+        <div class="wrongbox">
+          <span class="tag">What you drew</span>
+          <div class="flatrow">
+            <div class="b">Prepare</div>
+            <div class="b">Extract</div>
+            <div class="b">EDA</div>
+            <div class="b">Analyse</div>
+            <div class="b">Output</div>
+          </div>
+          <p class="body-sm" style="text-align:center; color:var(--flag); font-family:var(--mono); font-size:0.68rem; letter-spacing:0.1em; text-transform:uppercase;">&uarr; one undifferentiated "governance" &uarr;</p>
+        </div>
+        <p class="body-sm">One box says every stage gets the same treatment. It doesn't. The control that matters at extraction has nothing in common with the control that matters at output.</p>
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:0.9rem;">
+        <div class="rightbox">
+          <span class="tag">What a bank actually runs</span>
+          <div class="gaterow">
+            <div class="b">Access</div>
+            <div class="g">RBAC + purpose</div>
+            <div class="b">Generate</div>
+            <div class="g">code safety</div>
+            <div class="b">Execute</div>
+            <div class="g">disclosure</div>
+            <div class="b">Attest</div>
+          </div>
+          <p class="body-sm" style="color:var(--ok); font-family:var(--mono); font-size:0.68rem; letter-spacing:0.1em; text-transform:uppercase;">different control at each transition</p>
+        </div>
+        <p class="body-sm">RBAC and purpose bind at <strong>Access</strong>. Code safety at <strong>Gate</strong>. Small-cell suppression at <strong>Screen</strong>. SR 11-7 at <strong>Attest</strong>. Naming them separately is what signals you have done this before.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 08 ============================================================ -->
+<section class="slide" id="s8">
+  <span class="num">08 / 13</span>
+  <div class="inner">
+    <div class="eyebrow brass">Gaps</div>
+    <h2>Six things your structure is missing entirely</h2>
+
+    <div class="grid-2" style="gap:0 2.5rem; margin-top:0.5rem;">
+      <div>
+        <div class="gap-item">
+          <span class="gi">01</span>
+          <div>
+            <h3>Purpose limitation</h3>
+            <p>"You may query customer data for fraud modelling, not for marketing." Bank-real, has no analogue in generic AI governance demos, and cheap to implement. The same query is legal or illegal depending on why you are asking.</p>
+          </div>
+        </div>
+        <div class="gap-item">
+          <span class="gi">02</span>
+          <div>
+            <h3>Output disclosure control</h3>
+            <p>If a cohort cell returns n=3, you cannot display it. Small-cell suppression and k-anonymity are real controls in every regulated context, and I have never seen anyone demo them in an AI governance artifact. Highest signal per line of code on this list.</p>
+          </div>
+        </div>
+        <div class="gap-item">
+          <span class="gi">03</span>
+          <div>
+            <h3>Fair lending, called by its real name</h3>
+            <p>Your fairness check is currently an ethics exercise. In a US bank it is ECOA and Reg B, with named protected classes and a specific legal test: disparate treatment versus disparate impact. Using the regulatory vocabulary is a large credibility delta for Citi specifically.</p>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="gap-item">
+          <span class="gi">04</span>
+          <div>
+            <h3>Segregation of duties <span class="chip bad" style="vertical-align:middle;">confirmed bug</span></h3>
+            <p>SR 11-7 <em>mandates</em> independent validation. Your <span class="mono">approve()</span> checks <span class="mono">actor.can_approve</span>, which is a <em>role</em> check, not an identity check. <span class="mono">RunState</span> never stores who started the run, so it cannot compare. And <span class="mono">mrm_approver</span> holds both <span class="mono">can_run</span> and <span class="mono">can_approve</span>. The same persona can approve its own run. The docstring calls this "the segregation-of-duties control." It isn't one yet.</p>
+          </div>
+        </div>
+        <div class="gap-item">
+          <span class="gi">05</span>
+          <div>
+            <h3>A POV on whether the LLM is a "model"</h3>
+            <p>Live, unsettled, and exactly what you will be asked. See the next slide. This is not trivia. The answer determines where the human gate physically sits.</p>
+          </div>
+        </div>
+        <div class="gap-item">
+          <span class="gi">06</span>
+          <div>
+            <h3>Lineage</h3>
+            <p>"Where did this number come from" is not optional in a bank. Every figure in the leadership report traces back to analysis, code, query, dataset version, and the policy decisions that applied along the way.</p>
+          </div>
+        </div>
+        <div class="gap-item" style="border-bottom:1px solid var(--rule);">
+          <span class="gi">&plus;</span>
+          <div>
+            <h3>And one reversal: fairlearn</h3>
+            <p>You ruled it out to hand-roll fairness metrics "for auditability." Under the new thesis that inverts. If the pitch is "I govern off-the-shelf tools," hand-rolling the one metric a regulator cares most about undercuts it. <strong>Agreed and confirmed.</strong></p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 09 ============================================================ -->
+<section class="slide" id="s9">
+  <span class="num">09 / 13</span>
+  <div class="inner">
+    <div class="eyebrow">The POV worth having</div>
+    <h2>Is the LLM a "model" under SR 11-7?</h2>
+    <p class="lede">You will get asked. The industry has not settled it. Having a crisp answer is most of the interview.</p>
+
+    <div class="split-claim" style="margin-top:0.75rem;">
+      <div class="claim tool">
+        <span class="chip good">Tool</span>
+        <span class="ct">A human reviews the code.</span>
+        <p class="body-sm">The model proposes; a qualified person reads what it wrote and decides to run it. The model is an accelerant, like an IDE autocomplete. It inherits <strong>no</strong> validation burden, because a competent human is accountable for the output.</p>
+      </div>
+      <div class="claim model">
+        <span class="chip bad">Model</span>
+        <span class="ct">It autonomously produces a number that drives a decision.</span>
+        <p class="body-sm">Nobody reads the intermediate step. The output moves money, approves credit, or sizes a reserve. It inherits the <strong>full</strong> SR 11-7 burden: validation, monitoring, documentation, independent review.</p>
+      </div>
+    </div>
+
+    <div class="callout" style="margin-top:0.75rem;">
+      <strong>Why this is architecture, not philosophy.</strong> The distinction tells you exactly where the human gate has to sit: at the last point where a person still meaningfully reviews before a number becomes a decision. Move the gate downstream of that line and you have silently reclassified your tool as a model, and taken on a validation obligation you are not meeting.
+    </div>
+
+    <div class="panel" style="margin-top:0.25rem;">
+      <span class="panel-t">Which is why the ladder and the gate are the same design</span>
+      <p class="body-sm"><span class="mono">L0/L1/L2</span> keep a human between generation and consequence, so they stay tools. <span class="mono">L3</span> without review would cross the line, which is precisely why L3 is fenced to synthetic data where no decision is downstream. The tiering is not a convenience feature. It is how you stay on the correct side of the definition.</p>
+    </div>
+  </div>
+</section>
+
+<!-- 10 ============================================================ -->
+<section class="slide" id="s10">
+  <span class="num">10 / 13</span>
+  <div class="inner">
+    <div class="eyebrow">The toolkit</div>
+    <h2>Buy the maths. Build the governance.</h2>
+    <p class="body-sm" style="max-width:70ch;">Nothing on this list is written by you. The claim is not "I can implement a clustering algorithm." The claim is "I can put a bank's controls around tools a data science team already uses."</p>
+
+    <div class="tw" style="margin-top:0.5rem;">
+      <table>
+        <thead>
+          <tr><th>Tool</th><th>Stage</th><th>What it actually does</th><th>Why this one</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="tool">OPA / Rego</td><td class="stg">Access</td>
+            <td>A policy engine. You write rules in a dedicated language, and ask it "may this person do this thing" at runtime.</td>
+            <td>Policy becomes versioned, testable code with its own test suite, not <span class="mono">if role ==</span> buried in Python. This is the enterprise answer and it is recognised on sight.</td>
+          </tr>
+          <tr>
+            <td class="tool">sqlglot</td><td class="stg">Access</td>
+            <td>Parses SQL into a syntax tree you can inspect and rewrite, then prints it back out.</td>
+            <td>Lets you reject restricted columns and <em>inject row filters</em> before a query ever executes. This is literally what a bank data platform does internally.</td>
+          </tr>
+          <tr>
+            <td class="tool">DuckDB</td><td class="stg">Execute</td>
+            <td>A fast analytical database that runs in-process. Real SQL, no server.</td>
+            <td>Gives you a genuine query engine to enforce policy against, with no infrastructure.</td>
+          </tr>
+          <tr>
+            <td class="tool">Presidio</td><td class="stg">Screen</td>
+            <td>Detects and redacts personal data in text: names, accounts, national IDs.</td>
+            <td>Microsoft's, off-the-shelf, and vastly more defensible than the regex you have now.</td>
+          </tr>
+          <tr>
+            <td class="tool">ydata-profiling</td><td class="stg">EDA</td>
+            <td>One function call produces a full statistical profile of a dataframe as an HTML report.</td>
+            <td>Your entire exploratory stage, free, and a perfect thing to govern rather than write.</td>
+          </tr>
+          <tr>
+            <td class="tool">Great Expectations</td><td class="stg">Access</td>
+            <td>Declares assertions about data ("this column is never null, and is between 0 and 1") and fails loudly when they break.</td>
+            <td>Already the data-quality vocabulary inside banks. Your data contracts become GE suites.</td>
+          </tr>
+          <tr>
+            <td class="tool">statsmodels</td><td class="stg">Analyse</td>
+            <td>Classical statistics. T-tests, proportion tests, regression with real inference output.</td>
+            <td>Boring and correct. Your A/B testing stage in one import.</td>
+          </tr>
+          <tr>
+            <td class="tool">DoWhy / EconML</td><td class="stg">Analyse</td>
+            <td>Causal inference. Forces you to state assumptions as a graph, then tests whether the effect survives them.</td>
+            <td>Microsoft's. Signals genuine sophistication, and the assumption-checking maps beautifully onto a governance narrative.</td>
+          </tr>
+          <tr>
+            <td class="tool">lifelines</td><td class="stg">Analyse</td>
+            <td>Survival analysis. Retention and time-to-event curves.</td>
+            <td>Your cohort analysis stage, free.</td>
+          </tr>
+          <tr>
+            <td class="tool">fairlearn</td><td class="stg">Analyse</td>
+            <td>Fairness metrics and mitigation across protected groups.</td>
+            <td><strong>The reversal.</strong> Governing it beats reimplementing it, now that the thesis is "I govern off-the-shelf tools."</td>
+          </tr>
+          <tr>
+            <td class="tool">SHAP</td><td class="stg">Attest</td>
+            <td>Explains which features drove a given prediction.</td>
+            <td>Non-negotiable for model risk. Regulators ask "why did it decline this applicant."</td>
+          </tr>
+          <tr>
+            <td class="tool">Evidently</td><td class="stg">Monitor</td>
+            <td>Detects drift between training data and what the model sees in production.</td>
+            <td>Standard. Ongoing monitoring is an explicit SR 11-7 requirement.</td>
+          </tr>
+          <tr>
+            <td class="tool">OpenLineage</td><td class="stg">Attest</td>
+            <td>An open standard for emitting "this job read X and wrote Y" events, assembling a provenance graph.</td>
+            <td>Standards-based lineage beats a homegrown graph, and answers "where did this number come from" by construction.</td>
+          </tr>
+          <tr>
+            <td class="tool">marimo</td><td class="stg">Publish</td>
+            <td>A reactive Python notebook that is stored as a plain <span class="mono">.py</span> file.</td>
+            <td>Notebooks you can actually code-review and git-diff. Notebook governance is a real, unglamorous bank pain point, and this quietly solves it.</td>
+          </tr>
+          <tr>
+            <td class="tool">Quarto</td><td class="stg">Publish</td>
+            <td>Renders parameterised documents to HTML and PDF from code plus prose.</td>
+            <td>Reproducible leadership reports. Same input, same PDF, every time.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- 11 ============================================================ -->
+<section class="slide" id="s11">
+  <span class="num">11 / 13</span>
+  <div class="inner">
+    <div class="eyebrow">Have vs. build</div>
+    <h2>Less demolition than it sounds</h2>
+
+    <div class="diff" style="margin-top:0.5rem;">
+      <div class="dcol keep">
+        <div class="dh"><span>Keep as-is</span><span class="cnt">9</span></div>
+        <ul>
+          <li><span class="f">harness/audit</span></li>
+          <li><span class="f">harness/rbac</span></li>
+          <li><span class="f">harness/cost</span></li>
+          <li><span class="f">harness/tracing</span></li>
+          <li><span class="f">harness/model_card</span></li>
+          <li><span class="f">harness/eval_gate</span></li>
+          <li><span class="f">datasets/</span></li>
+          <li><span class="f">rag/</span></li>
+          <li><span class="f">app.py</span></li>
+        </ul>
+      </div>
+      <div class="dcol change">
+        <div class="dh"><span>Repoint</span><span class="cnt">5</span></div>
+        <ul>
+          <li><span class="f">orchestrator.py</span></li>
+          <li><span class="f">gateway/</span></li>
+          <li><span class="f">harness/identity</span></li>
+          <li><span class="f">harness/pii</span></li>
+          <li><span class="f">ml/fairness</span></li>
+          <li><span class="f">platform/registry</span></li>
+        </ul>
+      </div>
+      <div class="dcol new">
+        <div class="dh"><span>Genuinely new</span><span class="cnt">5</span></div>
+        <ul>
+          <li><span class="f">policy/</span></li>
+          <li><span class="f">codegen/</span></li>
+          <li><span class="f">sandbox/</span></li>
+          <li><span class="f">disclosure/</span></li>
+          <li><span class="f">lineage/</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="grid-3" style="margin-top:0.75rem;">
+      <div class="panel">
+        <span class="panel-t">The two real changes</span>
+        <p class="body-sm"><strong>Where the LLM sits.</strong> Narration becomes code generation.</p>
+        <p class="body-sm"><strong>What the pipeline is.</strong> Linear ETL becomes a request lifecycle.</p>
+      </div>
+      <div class="panel">
+        <span class="panel-t">What survives untouched</span>
+        <p class="body-sm">LangGraph stays. Its <span class="mono">interrupt()</span> is still exactly the right human gate, and it is now sitting at the SR 11-7 tool-versus-model line, which makes it more defensible than before.</p>
+      </div>
+      <div class="panel" style="border-color:var(--brass);">
+        <span class="panel-t" style="color:var(--brass);">If you build one thing</span>
+        <p class="body-sm">Build <span class="mono">Generate &rarr; Gate &rarr; Execute &rarr; Screen</span> at <strong>L2</strong>. That span alone proves the claim. Registry and the leadership view are half-built already and can be dragged forward.</p>
+      </div>
+    </div>
+
+    <p class="body-sm"><strong>Honest scope warning:</strong> this is bigger than what you have. The good news is the harness you already wrote is the part that usually takes longest, and almost all of it survives the reframe intact.</p>
+  </div>
+</section>
+
+<!-- 12 ============================================================ -->
+<section class="slide" id="s12">
+  <span class="num">12 / 13</span>
+  <div class="inner">
+    <div class="eyebrow brass">Screens &middot; the analyst</div>
+    <h2>What a data scientist sees</h2>
+
+    <div class="grid-2" style="gap:1.25rem; margin-top:0.25rem; align-items:start;">
+
+      <!-- Mock A: Ask -->
+      <div style="display:flex; flex-direction:column; gap:0.6rem;">
+        <div class="mock">
+          <div class="mock-bar"><span class="dot"></span><span>Sentinel &middot; Console</span><span class="sp"></span><span>L2</span></div>
+          <div class="mock-body">
+            <div class="mock-sec">
+              <span class="mock-lab">Ask</span>
+              <div class="field prompt">"Does the credit model decline older applicants more often, holding income constant?"</div>
+            </div>
+            <div class="mock-sec">
+              <span class="mock-lab">Binding</span>
+              <div class="kv">
+                <span class="chip">sandip.dev</span>
+                <span class="chip">Quant Analyst &middot; certified</span>
+              </div>
+              <div class="kv">
+                <span class="chip">german_credit</span>
+                <span class="chip acc">Internal</span>
+              </div>
+              <div class="kv">
+                <span class="mock-lab" style="letter-spacing:0.06em;">Purpose</span>
+                <span class="chip acc">fair_lending_review</span>
+              </div>
+            </div>
+            <div class="mock-sec">
+              <span class="mock-lab">Resolved autonomy</span>
+              <div class="field" style="border-color:var(--brass); background:var(--brass-soft); display:flex; gap:0.5rem; align-items:center;">
+                <span class="mono" style="font-weight:700; color:var(--brass); font-size:1rem;">L2</span>
+                <span class="body-sm" style="font-size:0.72rem;">certified &times; internal &rarr; may write fenced code</span>
+              </div>
+            </div>
+            <div class="kv"><span class="btn">Generate analysis</span><span class="btn ghost">Browse catalog instead</span></div>
+          </div>
+        </div>
+        <p class="body-sm"><strong>The point of this screen:</strong> the tier is computed and displayed <em>before</em> anything happens. The analyst sees their leash, and so does the audit log.</p>
+      </div>
+
+      <!-- Mock B: Gate -->
+      <div style="display:flex; flex-direction:column; gap:0.6rem;">
+        <div class="mock">
+          <div class="mock-bar"><span class="dot" style="background:var(--flag);"></span><span>Gate &middot; pre-execution review</span><span class="sp"></span><span style="color:var(--flag);">blocked</span></div>
+          <div class="mock-body">
+            <div class="mock-sec">
+              <span class="mock-lab">Generated code &mdash; not yet executed</span>
+<pre class="code"><span class="c"># fair lending: age vs. decline rate</span>
+<span class="k">import</span> fairlearn.metrics <span class="k">as</span> flm
+df = ctx.table(<span class="s">"german_credit"</span>)
+m  = flm.MetricFrame(
+      metrics=flm.selection_rate,
+      y_true=df.y, y_pred=df.pred,
+      sensitive_features=df.age_band)
+<span class="bad">requests.post(WEBHOOK, json=m.to_dict())</span></pre>
+            </div>
+            <div class="mock-sec">
+              <span class="mock-lab">Static analysis</span>
+              <div class="verdict-list">
+                <div class="vrow pass"><span class="vi">&check;</span><span class="vt">Imports within allowlist</span><span class="vs">pass</span></div>
+                <div class="vrow pass"><span class="vi">&check;</span><span class="vt">No filesystem writes</span><span class="vs">pass</span></div>
+                <div class="vrow pass"><span class="vi">&check;</span><span class="vt">No <span class="mono">eval</span> / <span class="mono">exec</span> / dynamic import</span><span class="vs">pass</span></div>
+                <div class="vrow pass"><span class="vi">&check;</span><span class="vt">Columns permitted for purpose</span><span class="vs">pass</span></div>
+                <div class="vrow fail"><span class="vi">&times;</span><span class="vt">Network egress on line 8</span><span class="vs">blocked</span></div>
+              </div>
+            </div>
+            <div class="field" style="border-color:var(--flag); background:var(--flag-soft); color:var(--flag); font-size:0.72rem;">
+              <strong>CTL-EGRESS-01.</strong> Code attempted to send results to an external endpoint. Nothing was executed. Regenerate without the network call, or escalate to your data owner.
+            </div>
+            <div class="kv"><span class="btn danger">Regenerate</span><span class="btn ghost">View policy</span></div>
+          </div>
+        </div>
+        <p class="body-sm"><strong>The money screen.</strong> A language model tried to exfiltrate results from a bank and the platform caught it statically, before execution, with a named control. This is the one to demo.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 13 ============================================================ -->
+<section class="slide" id="s13">
+  <span class="num">13 / 13</span>
+  <div class="inner">
+    <div class="eyebrow brass">Screens &middot; oversight</div>
+    <h2>What everyone else sees</h2>
+
+    <div class="grid-3" style="gap:1.25rem; margin-top:0.25rem; align-items:start;">
+
+      <!-- Mock C: disclosure -->
+      <div style="display:flex; flex-direction:column; gap:0.6rem;">
+        <div class="mock">
+          <div class="mock-bar"><span class="dot"></span><span>Screen &middot; disclosure</span><span class="sp"></span><span>1 suppressed</span></div>
+          <div class="mock-body">
+            <div class="mock-sec">
+              <span class="mock-lab">Decline rate by age band</span>
+              <div class="tw" style="border:none;">
+                <table class="mini">
+                  <thead><tr><th>Band</th><th>n</th><th>Rate</th></tr></thead>
+                  <tbody>
+                    <tr><td>18&ndash;25</td><td>142</td><td>0.31</td></tr>
+                    <tr><td>26&ndash;40</td><td>408</td><td>0.24</td></tr>
+                    <tr><td>41&ndash;60</td><td>331</td><td>0.27</td></tr>
+                    <tr><td>61&ndash;75</td><td>106</td><td>0.44</td></tr>
+                    <tr class="suppressed"><td>76&plus;</td><td>3</td><td>suppressed</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div class="field" style="font-size:0.7rem; border-color:var(--flag); background:var(--flag-soft); color:var(--flag);">
+              <strong>CTL-DISC-02.</strong> Cell n=3 is below the minimum of 10. Withheld from all downstream surfaces, including the model's own narration.
+            </div>
+          </div>
+        </div>
+        <p class="body-sm">The number never reaches the LLM either. You cannot narrate what you were never shown.</p>
+      </div>
+
+      <!-- Mock D: registry -->
+      <div style="display:flex; flex-direction:column; gap:0.6rem;">
+        <div class="mock">
+          <div class="mock-bar"><span class="dot"></span><span>Registry</span><span class="sp"></span><span>6 agents</span></div>
+          <div class="mock-body">
+            <div class="mock-sec">
+              <span class="mock-lab">Certification status</span>
+              <div class="verdict-list">
+                <div class="vrow pass"><span class="vi">&check;</span><span class="vt"><span class="mono">profiler</span> &middot; v2.1</span><span class="vs">certified</span></div>
+                <div class="vrow pass"><span class="vi">&check;</span><span class="vt"><span class="mono">fair-lending</span> &middot; v1.4</span><span class="vs">certified</span></div>
+                <div class="vrow pass"><span class="vi">&check;</span><span class="vt"><span class="mono">ab-test</span> &middot; v1.0</span><span class="vs">certified</span></div>
+                <div class="vrow fail"><span class="vi">&times;</span><span class="vt"><span class="mono">cohort-retention</span> &middot; v0.3</span><span class="vs">refused</span></div>
+              </div>
+            </div>
+            <div class="field" style="font-size:0.7rem; border-color:var(--flag); background:var(--flag-soft); color:var(--flag);">
+              <strong>Promotion refused.</strong>
+              <div style="margin-top:0.3rem; color:var(--ink-2);">
+                &times; faithfulness 0.72, floor is 0.90<br>
+                &times; no independent validator (author = owner)<br>
+                &check; owner assigned &middot; &check; data contract declared
+              </div>
+            </div>
+            <div class="kv"><span class="btn ghost">Assign validator</span></div>
+          </div>
+        </div>
+        <p class="body-sm">Segregation of duties enforced by the registry, not by a policy memo nobody reads.</p>
+      </div>
+
+      <!-- Mock E: leadership -->
+      <div style="display:flex; flex-direction:column; gap:0.6rem;">
+        <div class="mock">
+          <div class="mock-bar"><span class="dot" style="background:var(--accent);"></span><span>Report &middot; leadership</span><span class="sp"></span><span>attested</span></div>
+          <div class="mock-body">
+            <div class="mock-sec">
+              <span class="mock-lab">Finding</span>
+              <div class="field" style="font-family:var(--display); font-size:0.92rem; line-height:1.35;">Applicants aged 61&ndash;75 are declined at <strong>1.8&times;</strong> the rate of the 26&ndash;40 band, and the gap holds after controlling for income and loan amount.</div>
+              <span class="body-sm" style="font-size:0.68rem;">95% CI [1.31, 2.44] &middot; n=1,000 &middot; seed 42</span>
+            </div>
+            <div class="mock-sec">
+              <span class="mock-lab">Where this number came from</span>
+              <div class="lineage">
+                <div class="lrow"><span class="ll">Analysis</span><span class="lv">fair-lending v1.4</span></div>
+                <div class="lrow"><span class="ll">Dataset</span><span class="lv">german_credit@sha:4f2a1c</span></div>
+                <div class="lrow"><span class="ll">Query</span><span class="lv">q_88fe12 (row filter applied)</span></div>
+                <div class="lrow"><span class="ll">Code</span><span class="lv">gen_5c1d90 (gate: passed)</span></div>
+                <div class="lrow"><span class="ll">Approved</span><span class="lv">r.mehta &middot; Model Risk</span></div>
+              </div>
+            </div>
+            <div class="mock-sec">
+              <span class="mock-lab">Controls attested</span>
+              <div class="kv">
+                <span class="chip good">RBAC</span><span class="chip good">Purpose</span>
+                <span class="chip good">Egress</span><span class="chip good">Disclosure</span>
+                <span class="chip good">Faithfulness 1.0</span>
+              </div>
+            </div>
+            <div class="field" style="font-size:0.7rem; border-color:var(--brass); background:var(--brass-soft);">
+              <strong style="color:var(--brass);">What this does not say.</strong>
+              <div style="margin-top:0.25rem; color:var(--ink-2);">This is disparate <em>impact</em>, not intent. It is not a Reg B finding until Legal reviews business necessity. Age band 76+ was suppressed.</div>
+            </div>
+          </div>
+        </div>
+        <p class="body-sm"><strong>The differentiator.</strong> A dashboard is Tableau. A claim, its evidence chain, and an explicit statement of what you are <em>not</em> allowed to conclude is what a bank actually wants.</p>
+      </div>
+    </div>
+
+    <div class="callout" style="margin-top:0.5rem;">
+      <strong>Next.</strong> Nothing here is built. If the reframe lands, the spec goes to <span class="mono">docs/features/</span> and the first slice is <span class="mono">Generate &rarr; Gate &rarr; Execute &rarr; Screen</span> at L2, against <span class="mono">german_credit</span>, with fairlearn doing the maths.
+    </div>
+  </div>
+</section>
+
+<script>
+  (function () {
+    var prog = document.getElementById('prog');
+    var slides = Array.prototype.slice.call(document.querySelectorAll('.slide'));
+
+    function onScroll() {
+      var h = document.documentElement.scrollHeight - window.innerHeight;
+      var p = h > 0 ? (window.scrollY / h) * 100 : 0;
+      prog.style.width = p.toFixed(2) + '%';
+    }
+    window.addEventListener('scroll', onScroll, { passive: true });
+    onScroll();
+
+    function current() {
+      var best = 0, bestD = Infinity;
+      slides.forEach(function (s, i) {
+        var d = Math.abs(s.getBoundingClientRect().top);
+        if (d < bestD) { bestD = d; best = i; }
+      });
+      return best;
+    }
+
+    document.addEventListener('keydown', function (e) {
+      var tag = (e.target.tagName || '').toLowerCase();
+      if (tag === 'input' || tag === 'textarea') return;
+      var i = current();
+      if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === 'PageDown') {
+        if (i < slides.length - 1) { slides[i + 1].scrollIntoView(); e.preventDefault(); }
+      } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp' || e.key === 'PageUp') {
+        if (i > 0) { slides[i - 1].scrollIntoView(); e.preventDefault(); }
+      } else if (e.key === 'Home') {
+        slides[0].scrollIntoView(); e.preventDefault();
+      } else if (e.key === 'End') {
+        slides[slides.length - 1].scrollIntoView(); e.preventDefault();
+      }
+    });
+  })();
+</script>
