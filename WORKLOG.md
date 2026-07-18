@@ -334,3 +334,29 @@ Append-only session handoff log. Newest entries at the bottom.
 - v2 and v3 landed as a stacked PR (`feat/govcodegen-v2` based on `feat/governed-codegen`) rather than piling onto PR #1, so the v1 "one sentence" PR stays reviewable and the v2+v3 delta is isolated. Same one-PR-many-commits shape as v1.
 - The govflow SQL row filter is left empty on purpose: german_credit has no natural per-identity row split, so injecting a contrived one would be staging. The injection mechanism is proven in the `sql_gate` tests instead.
 - Stopped the autonomous build at the v3/v4 boundary. Built the two remaining claims (platform, oversight) in full; did not start v4 breadth, because the PRD warns depth beats breadth and two v4 pieces (OPA, L3) are architecture forks that need Sandip's call.
+
+## 2026-07-18 (07:50) — merged v0-v3 to main, shipped to prod, caught + fixed a missing-deps crash, smoke-tested
+
+**Did:**
+- Merged both PRs to main in stacked order: PR #1 (v0/v1) as merge commit `caa9228`, then retargeted PR #2's base from `feat/governed-codegen` to `main` and merged it (v2/v3) as `4692c7c`. Deleted both merged remote + local branches; fast-forwarded local main and synced.
+- Deployed main to prod (AWS EB via `deploy/aws/deploy.sh`, `.env` sourced). The first deploy shipped `4692c7c`, reported EB green + health 200, but the app crashed on import for every session: `ModuleNotFoundError: No module named 'sqlglot'`. Sandip hit it in the browser.
+- Root-caused: `requirements.txt` (what EB pip-installs) was a stale `uv export` predating the v1/v2 base deps, so it was missing four packages the deployed code imports: `fairlearn` (v1) and `sqlglot`/`duckdb`/`openlineage-python` (v2). Local tests never caught it because `uv` installs from `pyproject`/`uv.lock`, not `requirements.txt`. Health 200 masked it because that endpoint is Streamlit's server-level check and answers before `app.py` runs.
+- Fixed by regenerating `requirements.txt` (`uv export --no-hashes --no-dev --extra pgvector --extra live`), committed `8aeccba`, redeployed. Prod now on bundle `sentinel-20260718-073829.zip`.
+- Smoke-tested all three new surfaces on the live instance (browser): Governed codegen ran the full nine-stage flow (`Execute` passed = sqlglot+DuckDB work in prod, controls CTL-DISC-01/02 + CTL-PROXY-01 fired); the Evidence pack rendered its finding+CI, provenance, six attested controls, the four-clause negative statement, pending status, and two OpenLineage events; the Registry showed certified/refused/candidate agents plus a live CTL-SOD-01 self-signoff refusal (assigning author `priya.raman` as validator was refused).
+- Wrote journal entry `2026-07-18-0723` (merged+shipped) and a correcting entry `2026-07-18-0750` (the deps crash + fix + smoke test); refreshed INDEX.
+
+**State now:**
+- main at `8aeccba` (the requirements fix) on `4692c7c` (v0-v3) on the merge of PR #1. Pushed, in sync. No open PRs, no `feat/*` branches.
+- Prod live and healthy on bundle `sentinel-20260718-073829.zip` (working tree `8aeccba`). EB green, health 200 over HTTPS, live-LLM enabled. All three new surfaces verified rendering on the instance.
+- 251 tests green, ruff clean (code unchanged since the merge; the fix was `requirements.txt` only).
+
+**Next:**
+- Add a guard so `pyproject`/`requirements.txt` drift cannot silently break prod again: generate `requirements.txt` at deploy time from the lock, or a CI check that diffs it against `uv export`.
+- Optional secondary v3 outputs: the marimo notebook and the Quarto PDF render (needs the Quarto binary).
+- v4 remains a Sandip decision (breadth; OPA + L3 are forks).
+- Weekly summaries still due: W28 and W29 (W29 ends Sun 2026-07-19).
+
+**Decisions:**
+- Fixed the crash forward (regenerate `requirements.txt` + redeploy) rather than rolling back, since prod was already down on the new bundle, the fix is a one-line dependency sync, and Sandip was live and watching.
+- Regenerated `requirements.txt` from the lock rather than hand-adding `sqlglot`, so transitive deps of the new packages come along and the file stays a faithful `uv export` (its stated purpose per its own header).
+- Treat the smoke test as a required post-deploy step, not optional: health 200 is necessary but not sufficient because it does not run `app.py`. Loading a page and running a flow is the check that matters.

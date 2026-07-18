@@ -1,22 +1,27 @@
 # Sentinel — Journal Index
 
-Last refreshed: 2026-07-18 07:23
+Last refreshed: 2026-07-18 07:50
 
-Latest entry: [2026-07-18-0723-v0-v3-merged-and-shipped-to-prod.md](entries/2026-07-18-0723-v0-v3-merged-and-shipped-to-prod.md)
+Latest entry: [2026-07-18-0750-prod-crashed-on-missing-deps-fixed.md](entries/2026-07-18-0750-prod-crashed-on-missing-deps-fixed.md)
 
 ## Where we are now
 
-**v0 through v3 are merged to main and live in prod. The governed-codegen rethink
-is now the public artifact, not a branch.**
+**v0 through v3 are merged to main and live in prod, verified by loading the site.
+The governed-codegen rethink is now the public artifact, not a branch.**
 
 Both PRs are merged: PR #1 (v0, v1) landed on main first, then PR #2 (v2, v3) was
-retargeted onto main and merged. main is at `4692c7c`; both feature branches are
-gone. 251 tests green, ruff clean. On 2026-07-18 prod was redeployed from `9dcd20b`
-to `4692c7c`: EB green, public health 200 over HTTPS, confirmed by the source bundle
-key `bundles/sentinel-20260718-071819.zip`, live-LLM narration still on. The deploy
-is additive, so https://sentinel.sandip.dev keeps the platform build and gains the
-governed code-generation console, the registry certification lifecycle, and the
-evidence pack.
+retargeted onto main and merged. main is at `8aeccba` (a `requirements.txt` fix on
+`4692c7c`, the v0-v3 code); both feature branches are gone. 251 tests green, ruff
+clean. Prod runs bundle `bundles/sentinel-20260718-073829.zip`: EB green, health 200
+over HTTPS, live-LLM on. The first deploy on 2026-07-18 crashed on import
+(`requirements.txt` was a stale `uv export` missing `fairlearn`/`sqlglot`/`duckdb`/
+`openlineage-python`); regenerating it and redeploying fixed it. All three new
+surfaces are verified rendering on the instance: the governed code-generation console
+runs the full Ask-to-Attest flow (Execute passes, so sqlglot+DuckDB work in prod),
+the evidence pack shows its finding, CI, provenance, negative statement, and
+OpenLineage events, and the registry shows the certified and refused agents with a
+live CTL-SOD-01 self-signoff refusal. The deploy is additive, so
+https://sentinel.sandip.dev keeps the platform build and gains these three surfaces.
 
 **v2, the platform claim.** The SQL half of the gate: `ctx.sql` parses with
 sqlglot, refuses an ungranted column / `SELECT *` / out-of-scope table
@@ -178,6 +183,7 @@ out).
 
 ## Recent entries
 
+- [2026-07-18-0750-prod-crashed-on-missing-deps-fixed.md](entries/2026-07-18-0750-prod-crashed-on-missing-deps-fixed.md) : the first prod deploy crashed on import (`ModuleNotFoundError: sqlglot`); `requirements.txt` was a stale `uv export` missing `fairlearn`/`sqlglot`/`duckdb`/`openlineage-python`, and health 200 hid it because that endpoint answers before app.py runs. Regenerated `requirements.txt`, redeployed (`8aeccba`, bundle `sentinel-20260718-073829.zip`), and smoke-tested all three surfaces on the live instance: the full flow runs (Execute passes = sqlglot+DuckDB in prod), the evidence pack renders, and the registry's CTL-SOD-01 self-signoff refusal fires live. Lesson: a deploy is verified when a page renders, not when a probe returns 200.
 - [2026-07-18-0723-v0-v3-merged-and-shipped-to-prod.md](entries/2026-07-18-0723-v0-v3-merged-and-shipped-to-prod.md) : both PRs merged to main (PR #1 v0/v1, then PR #2 v2/v3 retargeted onto main), main at `4692c7c`, feature branches deleted, local main synced. Then deployed: prod moved from `9dcd20b` to `4692c7c`, EB green, health 200 over HTTPS, confirmed by source bundle key `bundles/sentinel-20260718-071819.zip`, live-LLM still on. The governed-codegen rethink is now the public artifact. Still out: marimo, Quarto-PDF, all of v4.
 - [2026-07-17-2332-v2-and-v3-built-and-verified.md](entries/2026-07-17-2332-v2-and-v3-built-and-verified.md) : v2 (platform) and v3 (oversight) built and verified in-browser on `feat/govcodegen-v2` (PR #2). ctx.sql + sqlglot gate on DuckDB, the certification lifecycle with the refused-agent demo, the scaffolding CLI, CTL-CONTRACT-01 pinned honestly; the Attest evidence pack with the negative statement, CTL-SOD-01 on signoff, and OpenLineage events. 251 tests. Deferred: marimo, Quarto-PDF, all of v4 (forks: OPA, L3/synthetic_its). Prod untouched.
 - [2026-07-17-2230-v1-slice-complete-and-verified.md](entries/2026-07-17-2230-v1-slice-complete-and-verified.md) : v1 is done and verified in the browser. Live code generation + the gateway repoint, the govflow orchestration (Ask to Interpret), the Console and Gate screens, and the seeded adversarial set. Webhook blocks at CTL-EGRESS-01 line 10; n=6 band suppressed before narration; proxy flagged. Gate true-block 100%, false-block 0%. 183 tests, PR #1, prod untouched.
@@ -203,6 +209,7 @@ None yet. Week 2026-W28 (through Sun 2026-07-12) has entries but no summary.
 
 ## Working hypotheses
 
+- Health 200 is necessary but not sufficient to call a deploy verified: Streamlit's health endpoint answers before app.py runs, so an import crash returns 200 while every page is broken (this happened 2026-07-18). Verify a deploy by loading a page and running a flow, not by probing health. And requirements.txt is a second dependency list that drifts from pyproject/uv.lock unless something regenerates it; the fix is to generate it at deploy time or diff it in CI.
 - A naturally-flagging fairness result is more convincing than a staged one. Keep it real. This now extends to the gate: if the demo shows generated code being blocked, the block must be genuine, never seeded.
 - The evidence pack with its "what this does not say" block is now built (v3) and is the showpiece the model card PDF pointed toward. The negative statement is assembled from what the run did (the suppressed band, the flagged proxy), not from boilerplate, which is what makes it more than a dashboard. The model card PDF survives as prior art.
 - A control is only credible if it can be seen firing. Force RBAC and PII to fire every run.
