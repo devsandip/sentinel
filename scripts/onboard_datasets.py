@@ -188,12 +188,51 @@ def onboard_berka(n_accounts: int = 300) -> Path:
     return out_dir
 
 
+def onboard_synthetic_its(
+    days: int = 365, intervention_day: int = 250, effect: float = 12.0
+) -> Path:
+    """Generate the semi-synthetic interrupted time series (fully synthetic).
+
+    Nothing here is real: a daily metric with a trend, weekly seasonality, a
+    correlated control series, and a known additive effect injected after the
+    intervention date. Because the effect is injected, the ground truth is known,
+    which is the point: it is a validation fixture for causal-impact analysis, and
+    the only Public-class dataset, so the only legal home for the L3 sandbox. The
+    generation is seeded, so re-running reproduces the same file.
+    """
+    import numpy as np
+
+    rng = np.random.default_rng(42)
+    t = np.arange(days)
+    dates = pd.date_range("2025-01-01", periods=days, freq="D")
+    trend = 100.0 + 0.05 * t
+    season = 6.0 * np.sin(2 * np.pi * t / 7)  # weekly seasonality
+    control = trend + season + rng.normal(0, 2.0, days)  # a covariate, no effect
+    intervention = (t >= intervention_day).astype(int)
+    metric = control + intervention * effect + rng.normal(0, 1.5, days)
+    df = pd.DataFrame(
+        {
+            "date": dates.strftime("%Y-%m-%d"),
+            "intervention": intervention,
+            "control": control.round(3),
+            "metric": metric.round(3),
+        }
+    )
+    path = _write("synthetic_its", df)
+    print(
+        f"    ground truth: +{effect} additive effect from day {intervention_day} "
+        f"({dates[intervention_day].date()})"
+    )
+    return path
+
+
 ONBOARDERS = {
     "uci_taiwan_credit": onboard_uci_taiwan,
     "hillstrom": onboard_hillstrom,
     "berka": onboard_berka,
     "ulb_fraud": onboard_ulb_fraud,
     "lendingclub": onboard_lendingclub,
+    "synthetic_its": onboard_synthetic_its,
 }
 
 

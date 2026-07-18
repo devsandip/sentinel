@@ -11,5 +11,32 @@ fair_lending_review.
 from __future__ import annotations
 
 from .flow import GovernedRunResult, StageRecord, run_governed_analysis
+from .l3 import L3_INTENTS, run_l3_analysis
+from .purpose_matrix import (
+    CTL_PURP_01,
+    PURPOSE_MATRIX,
+    PurposeDecision,
+    evaluate_purpose,
+    matrix_rows,
+)
+from .tiers import (
+    TierDecision,
+    resolve_tier,
+    resolve_tier_for_dataset,
+)
 
-__all__ = ["GovernedRunResult", "StageRecord", "run_governed_analysis"]
+__all__ = [
+    "CTL_PURP_01",
+    "GovernedRunResult",
+    "L3_INTENTS",
+    "PURPOSE_MATRIX",
+    "PurposeDecision",
+    "StageRecord",
+    "TierDecision",
+    "evaluate_purpose",
+    "matrix_rows",
+    "resolve_tier",
+    "resolve_tier_for_dataset",
+    "run_governed_analysis",
+    "run_l3_analysis",
+]

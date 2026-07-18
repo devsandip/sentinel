@@ -24,6 +24,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 
 from .allowlist import (
+    ALLOWED_IMPORTS,
     CTL_CODE_00,
     CTL_CODE_02,
     CTL_CODE_03,
@@ -104,11 +105,13 @@ class _GateVisitor(ast.NodeVisitor):
         table_vars: set[str],
         allowed_tables: set[str] | None,
         join_ceiling: int,
+        allowed_imports: frozenset[str],
     ) -> None:
         self.granted_columns = granted_columns
         self.table_vars = table_vars
         self.allowed_tables = allowed_tables
         self.join_ceiling = join_ceiling
+        self.allowed_imports = allowed_imports
         self.violations: list[Violation] = []
 
     def _add(self, control: str, line: int, detail: str) -> None:
@@ -117,7 +120,7 @@ class _GateVisitor(ast.NodeVisitor):
     # -- imports (CTL-CODE-01/02/03, CTL-EGRESS-01) ------------------------
     def visit_Import(self, node: ast.Import) -> None:
         for alias in node.names:
-            verdict = import_verdict(alias.name)
+            verdict = import_verdict(alias.name, self.allowed_imports)
             if verdict is not None:
                 self._add(verdict, node.lineno, f"import {alias.name}")
         self.generic_visit(node)
@@ -126,7 +129,7 @@ class _GateVisitor(ast.NodeVisitor):
         # Relative import (level > 0) has no resolvable module; import_verdict
         # treats an empty module as an allowlist miss.
         module = "" if node.level and not node.module else (node.module or "")
-        verdict = import_verdict(module)
+        verdict = import_verdict(module, self.allowed_imports)
         if verdict is not None:
             shown = ("." * (node.level or 0)) + (node.module or "")
             self._add(verdict, node.lineno, f"from {shown} import ...")
@@ -256,13 +259,16 @@ def gate_code(
     granted_columns: Iterable[str] | None = None,
     allowed_tables: Iterable[str] | None = None,
     join_ceiling: int = 2,
+    allowed_imports: frozenset[str] = ALLOWED_IMPORTS,
 ) -> GateResult:
     """Statically gate a generated code string. Never executes it.
 
     Returns a GateResult naming every control that fired and the line it fired
     on. Pass `granted_columns` to enable the CTL-COL-01 column check (DataFrame
     subscripts and ctx.sql). Pass `allowed_tables` to enable the CTL-PURP-01
-    table-scope check inside ctx.sql; omit it to skip that check.
+    table-scope check inside ctx.sql; omit it to skip that check. `allowed_imports`
+    defaults to the L2 allowlist; pass L3_ALLOWED_IMPORTS for the broad L3 gate,
+    which widens the analytical allowlist but not the egress/fs/dyncode deny lists.
     """
     try:
         tree = ast.parse(code)
@@ -281,6 +287,7 @@ def gate_code(
         table_vars=table_vars,
         allowed_tables=tables,
         join_ceiling=join_ceiling,
+        allowed_imports=allowed_imports,
     )
     visitor.visit(tree)
 

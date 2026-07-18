@@ -53,6 +53,36 @@ ALLOWED_IMPORTS: frozenset[str] = frozenset(
     }
 )
 
+# -- Allowlisted imports at L3 (section 4.5: near-arbitrary code in a sandbox) --
+# L3 widens the *analytical* allowlist to whole packages and safe stdlib compute
+# modules, so the model has broad freedom on Public data. It does NOT widen the
+# deny lists: egress, filesystem, dynamic code, and dunder escapes are refused at
+# every tier. More rope, same hard limits. L3 only runs on Public-class data
+# (synthetic_its), where a broad allowlist is acceptable because nothing is worth
+# stealing (4.6).
+L3_ALLOWED_IMPORTS: frozenset[str] = frozenset(
+    ALLOWED_IMPORTS
+    | {
+        # Whole analysis packages (L2 grants only named submodules).
+        "scipy",
+        "sklearn",
+        "statsmodels",
+        "fairlearn",
+        # Safe stdlib compute (no IO by themselves; IO modules stay denied below).
+        "math",
+        "statistics",
+        "itertools",
+        "functools",
+        "collections",
+        "datetime",
+        "random",
+        "json",
+        "re",
+        "decimal",
+        "fractions",
+    }
+)
+
 # -- Denied, always (section 6). Keyed by root module -> control ------------
 # Network egress: the highest-signal block, and the one the v1 done-when turns
 # on. Any reference at all, imported or not, is a violation.
@@ -119,13 +149,15 @@ def _root(module: str) -> str:
     return module.split(".", 1)[0] if module else module
 
 
-def import_verdict(module: str) -> str | None:
+def import_verdict(module: str, allowed: frozenset[str] = ALLOWED_IMPORTS) -> str | None:
     """Return the control a given imported module violates, or None if allowed.
 
     Denial by category takes precedence over the generic allowlist miss, so
     `import requests` is reported as CTL-EGRESS-01 (what it actually is), not as
-    a bland CTL-CODE-01 allowlist miss. A relative import (module is empty)
-    cannot be resolved against the allowlist and is refused as CTL-CODE-01.
+    a bland CTL-CODE-01 allowlist miss. This ordering is why widening `allowed`
+    for L3 never widens the deny lists: egress/fs/dyncode are checked first and
+    are the same at every tier. A relative import (module is empty) cannot be
+    resolved against the allowlist and is refused as CTL-CODE-01.
     """
     root = _root(module)
     if root in EGRESS_MODULES:
@@ -136,7 +168,7 @@ def import_verdict(module: str) -> str | None:
         return CTL_CODE_03
     if not module:
         return CTL_CODE_01  # relative import; unresolvable against the allowlist
-    if any(module == a or module.startswith(a + ".") for a in ALLOWED_IMPORTS):
+    if any(module == a or module.startswith(a + ".") for a in allowed):
         return None
     return CTL_CODE_01
 
