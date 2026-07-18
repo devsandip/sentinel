@@ -366,3 +366,8 @@ For the Streamlit build this maps to: `st.navigation` / a custom sidebar for the
 (replacing the section radio), a home page for the command center, and the run walkthrough
 (Section 7 phasing) as one of the pages. The four `render_*` surfaces already exist and
 move under the shell largely unchanged.
+
+The full implementation plan for the shell (phases S0-S4), the dataset onboarding
+workstream, and the seeded run-history design is
+`docs/features/unified-app-build.md`. This doc remains the spec for the run
+stepper itself (Sections 2-7); that doc is the build plan for everything around it.
