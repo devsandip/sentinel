@@ -55,56 +55,291 @@ st.set_page_config(page_title="Sentinel — Governed Agentic Analysis", layout="
 
 ACCENT = "#1e50a0"
 
+# The design system (docs/ui-spec.md): every color is a token from the spec's
+# light palette; components style through the tokens. The mockup
+# (docs/mockups/sentinel-stepper-mockup.html) is the pixel target.
 st.markdown(
-    f"""
+    """
     <style>
-      .stApp {{ background: #f7f8fa; }}
-      h1, h2, h3 {{ letter-spacing: -0.01em; }}
-      .block-container {{ padding-top: 2.2rem; }}
-      .sentinel-badge {{
-        display:inline-block; background:{ACCENT}; color:white; font-weight:600;
-        padding:2px 10px; border-radius:12px; font-size:0.8rem; margin-right:6px;
-      }}
-      .sentinel-badge-warn {{ background:#9a6700; }}
-      .ctrl-chip {{
-        display:inline-block; background:#eef2fb; color:{ACCENT}; font-weight:600;
-        padding:2px 9px; border-radius:10px; font-size:0.75rem; margin-right:5px;
-        border:1px solid #d5e0f5;
-      }}
-      .flag {{ color:#b3261e; font-weight:700; }}
-      .ok {{ color:#1b7f3b; font-weight:700; }}
-      .muted {{ color:#5f6b7a; font-size:0.85rem; }}
-      .pill {{
-        display:inline-block; padding:1px 9px; border-radius:10px;
-        font-size:0.72rem; font-weight:700; margin-left:6px;
-      }}
-      .pill-in_use {{ background:#e3f4e9; color:#1b7f3b; border:1px solid #bfe3cc; }}
-      .pill-planned {{ background:#eef2fb; color:{ACCENT}; border:1px solid #d5e0f5; }}
-      .pill-avoided {{ background:#fdeceb; color:#b3261e; border:1px solid #f3ccc9; }}
-      /* Cards and tables read as one system across the app. */
-      div[data-testid="stVerticalBlockBorderWrapper"] {{
-        background: #ffffff; border-radius: 10px;
-      }}
-      div[data-testid="stMetric"] {{
-        background: #ffffff; border: 1px solid #e6e9ef; border-radius: 10px;
-        padding: 10px 14px;
-      }}
-      div[data-testid="stDataFrame"] {{ border: 1px solid #e6e9ef; border-radius: 8px; }}
-      /* Popover triggers look like chips, not gray buttons. */
-      div[data-testid="stPopover"] > div > button {{
-        background:#eef2fb; color:{ACCENT}; border:1px solid #d5e0f5;
-        border-radius:10px; font-size:0.78rem; font-weight:600;
-        padding:2px 10px; min-height:1.6rem; line-height:1.2;
-        white-space:nowrap;
-      }}
-      div[data-testid="stPopover"] > div > button p {{
-        white-space:nowrap; font-size:0.78rem;
-      }}
-      div[data-testid="stPopover"] > div > button:hover {{
-        border-color:{ACCENT}; color:{ACCENT};
-      }}
-      /* The stage stepper radio reads as a segmented control. */
-      div[role="radiogroup"] label {{ font-weight:600; }}
+      :root {
+        --canvas:#e9edf4; --surface:#ffffff; --surface-2:#f4f7fb;
+        --border:#dde4ee; --border-strong:#c4d0e2;
+        --ink:#0f1b2d; --muted:#57647a; --faint:#66717f;
+        --accent:#1e50a0; --accent-strong:#17417f; --accent-ink:#ffffff;
+        --accent-soft:#e8eef9; --accent-soft-border:#cddbf1;
+        --ok:#1b7f3b; --ok-soft:#e6f5ec; --ok-border:#bfe3cc; --ok-ink:#12692f;
+        --warn:#b26a00; --warn-soft:#fbf0dc; --warn-border:#f0d9ad; --warn-ink:#8a5200;
+        --danger:#b3261e; --danger-soft:#fdeceb; --danger-border:#f3ccc9; --danger-ink:#8f1d17;
+        --chrome-bg:#ffffff; --chrome-bg-2:#eef2f8; --chrome-ink:#0f1b2d;
+        --chrome-muted:#5b6a82; --chrome-border:#d6deea; --chrome-hover:#e3e9f3;
+        --chrome-abg:#e8eef9; --chrome-aink:#1e50a0; --chrome-aborder:#cddbf1;
+        --code-bg:#f4f7fc; --code-ink:#2a3852; --code-cm:#8a94a6; --code-kw:#1e50a0;
+        --code-str:#1b7f3b; --code-fn:#a35a00; --code-ln:#aab4c6;
+        --code-viol-bg:rgba(179,38,30,.08); --code-viol-ln:#b3261e; --code-border:#d6deea;
+        --mono:"SF Mono","JetBrains Mono","Fira Code","Cascadia
+          Code",ui-monospace,Menlo,Consolas,monospace;
+        --shadow-sm:0 1px 2px rgba(15,27,45,.06);
+        --shadow-md:0 8px 26px -12px rgba(15,27,45,.22);
+        --r-sm:7px; --r-md:11px; --r-lg:16px;
+      }
+      /* Hide Streamlit's own chrome so this reads as product, not a Streamlit app. */
+      #MainMenu, footer { visibility:hidden; }
+      header[data-testid="stHeader"] { background:transparent; height:0; }
+      .stApp { background:var(--canvas); }
+      .block-container { padding-top:1.1rem; max-width:1120px; }
+      h1, h2, h3, h4 { letter-spacing:-0.011em; font-weight:650; }
+
+      /* ---------- topbar ---------- */
+      .topbar {
+        display:flex; align-items:center; gap:18px; background:var(--chrome-bg);
+        border:1px solid var(--chrome-border); border-radius:var(--r-md);
+        padding:10px 16px; box-shadow:var(--shadow-sm);
+      }
+      .topbar .brand { display:flex; align-items:center; gap:11px; }
+      .topbar .brand svg { width:26px; height:26px; display:block; }
+      .topbar .wm { font-weight:700; letter-spacing:.22em; font-size:15px;
+        color:var(--chrome-ink); }
+      .topbar .sub { color:var(--chrome-muted); font-size:11px; letter-spacing:.05em;
+                     border-left:1px solid var(--chrome-border); padding-left:11px; }
+      .topbar .spacer { flex:1; }
+      .ctx { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+      .ctx-chip {
+        display:inline-flex; align-items:center; gap:7px; background:var(--chrome-bg-2);
+        border:1px solid var(--chrome-border); color:var(--chrome-ink);
+        padding:4px 10px; border-radius:999px; font-size:12px; white-space:nowrap;
+      }
+      .ctx-chip .k { color:var(--chrome-muted); }
+      .ctx-chip .dot { width:6px; height:6px; border-radius:50%; }
+      .ctx-chip.tier { border-color:var(--chrome-aborder); }
+      .tier-badge { font-weight:700; letter-spacing:.04em; color:var(--accent);
+        font-family:var(--mono); }
+
+      /* ---------- sidebar as the nav rail ---------- */
+      section[data-testid="stSidebar"] {
+        background:var(--chrome-bg-2); border-right:1px solid var(--chrome-border);
+      }
+      section[data-testid="stSidebar"] div[role="radiogroup"] label {
+        display:flex; width:100%; padding:8px 11px; border-radius:9px;
+        border:1px solid transparent; margin:1px 0;
+      }
+      section[data-testid="stSidebar"] div[role="radiogroup"] label:hover {
+        background:var(--chrome-hover);
+      }
+      section[data-testid="stSidebar"] div[role="radiogroup"] label[data-selected="true"] {
+        background:var(--chrome-abg); border-color:var(--chrome-aborder);
+      }
+      section[data-testid="stSidebar"] div[role="radiogroup"] label[data-selected="true"] p {
+        color:var(--chrome-aink); font-weight:650;
+      }
+      section[data-testid="stSidebar"] div[role="radiogroup"] label > div > div
+        > div:nth-of-type(1) {
+        display:none;  /* hide the radio circle; the row itself is the affordance */
+      }
+      section[data-testid="stSidebar"] div[role="radiogroup"] label p {
+        font-size:13.5px; font-weight:600; color:var(--chrome-muted);
+      }
+
+      /* ---------- type + text utilities ---------- */
+      .eyebrow { font-size:11px; font-weight:700; letter-spacing:.13em;
+                 text-transform:uppercase; color:var(--faint); }
+      .mono { font-family:var(--mono); font-variant-numeric:tabular-nums; }
+      .muted { color:var(--muted); font-size:0.85rem; }
+      .flag { color:var(--danger); font-weight:700; }
+      .ok { color:var(--ok); font-weight:700; }
+
+      /* ---------- badges + classification chips ---------- */
+      .badge { display:inline-flex; align-items:center; gap:6px; font-size:11px;
+               font-weight:700; padding:3px 8px; border-radius:999px; letter-spacing:.02em; }
+      .badge.ok { background:var(--ok-soft); color:var(--ok-ink); border:1px solid
+        var(--ok-border); }
+      .badge.warn { background:var(--warn-soft); color:var(--warn-ink); border:1px solid
+        var(--warn-border); }
+      .badge.danger { background:var(--danger-soft); color:var(--danger-ink); border:1px solid
+        var(--danger-border); }
+      .badge.info { background:var(--accent-soft); color:var(--accent); border:1px solid
+        var(--accent-soft-border); }
+      .badge.neutral { background:var(--surface-2); color:var(--muted); border:1px solid
+        var(--border-strong); }
+      .cls { font-size:10px; font-weight:800; padding:2px 7px; border-radius:5px;
+             letter-spacing:.03em; text-transform:uppercase; }
+      .cls.public { background:var(--ok-soft); color:var(--ok-ink); border:1px solid
+        var(--ok-border); }
+      .cls.internal { background:var(--accent-soft); color:var(--accent); border:1px solid
+        var(--accent-soft-border); }
+      .cls.confidential { background:var(--warn-soft); color:var(--warn-ink); border:1px solid
+        var(--warn-border); }
+      .cls.restricted { background:var(--danger-soft); color:var(--danger-ink); border:1px solid
+        var(--danger-border); }
+
+      /* legacy pill classes kept for the platform surfaces */
+      .sentinel-badge { display:inline-block; background:var(--accent); color:#fff; font-weight:600;
+        padding:2px 10px; border-radius:12px; font-size:0.8rem; margin-right:6px; }
+      .sentinel-badge-warn { background:var(--warn); }
+      .ctrl-chip { display:inline-block; background:var(--accent-soft); color:var(--accent);
+        font-weight:600;
+        padding:2px 9px; border-radius:8px; font-size:0.75rem; margin-right:5px;
+        border:1px solid var(--accent-soft-border); font-family:var(--mono); }
+      .pill { display:inline-block; padding:1px 9px; border-radius:10px;
+        font-size:0.72rem; font-weight:700; margin-left:6px; }
+      .pill-in_use { background:var(--ok-soft); color:var(--ok-ink); border:1px solid
+        var(--ok-border); }
+      .pill-planned { background:var(--accent-soft); color:var(--accent); border:1px solid
+        var(--accent-soft-border); }
+      .pill-avoided { background:var(--danger-soft); color:var(--danger-ink); border:1px solid
+        var(--danger-border); }
+
+      /* ---------- cards ---------- */
+      div[data-testid="stVerticalBlockBorderWrapper"] {
+        background:var(--surface); border:1px solid var(--border) !important;
+        border-radius:var(--r-lg); box-shadow:var(--shadow-sm);
+      }
+      div[data-testid="stMetric"] {
+        background:var(--surface); border:1px solid var(--border); border-radius:var(--r-md);
+        padding:12px 15px;
+      }
+      div[data-testid="stDataFrame"] { border:1px solid var(--border); border-radius:var(--r-md); }
+      div[data-testid="stExpander"] details {
+        border:1px solid var(--border); border-radius:var(--r-md); background:var(--surface);
+      }
+
+      /* ---------- notes / alerts ---------- */
+      div[data-testid="stAlert"] { border-radius:var(--r-md); }
+
+      /* ---------- control chips (popover triggers) ---------- */
+      div[data-testid="stPopover"] > div > button {
+        background:var(--accent-soft); color:var(--accent);
+        border:1px solid var(--accent-soft-border);
+        border-radius:8px; font-size:11.5px; font-weight:600;
+        padding:2px 9px; min-height:1.65rem; line-height:1.2; white-space:nowrap;
+        font-family:var(--mono);
+      }
+      div[data-testid="stPopover"] > div > button p {
+        white-space:nowrap; font-size:11.5px; font-family:var(--mono); font-weight:600;
+      }
+      div[data-testid="stPopover"] > div > button::before {
+        content:""; display:inline-block; width:7px; height:7px; border-radius:50%;
+        background:var(--accent); margin-right:6px; flex:none;
+      }
+      div[data-testid="stPopover"] > div > button:hover {
+        box-shadow:var(--shadow-sm); transform:translateY(-1px);
+          border-color:var(--accent-soft-border);
+      }
+
+      /* ---------- phead + In/Does/Out + engine bar (stage panels) ---------- */
+      .phead { margin:2px 0 14px; }
+      .phead .eyebrow { display:flex; align-items:center; gap:9px; }
+      .phead h2 { font-size:26px; margin:8px 0 6px; color:var(--ink); }
+      .phead .lede { color:var(--muted); font-size:14.5px; max-width:64ch; }
+      .iodid { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin:14px 0 16px; }
+      .iocard { background:var(--surface-2); border:1px solid var(--border);
+                border-radius:var(--r-md); padding:11px 13px; }
+      .iocard .k { font-size:10.5px; font-weight:700; letter-spacing:.11em;
+                   text-transform:uppercase; color:var(--faint); margin-bottom:5px; }
+      .iocard .v { font-size:12.5px; color:var(--ink); }
+      .iocard.does { background:var(--accent-soft); border-color:var(--accent-soft-border); }
+      .enginebar { display:flex; flex-wrap:wrap; align-items:center; gap:7px;
+                   margin:0 0 14px; padding:10px 13px; background:var(--surface);
+                   border:1px solid var(--border); border-radius:var(--r-md);
+                   box-shadow:var(--shadow-sm); }
+      .eb-lab { font-size:9.5px; font-weight:700; letter-spacing:.11em;
+                text-transform:uppercase; color:var(--faint); }
+      .eb-sep { width:1px; align-self:stretch; background:var(--border); margin:0 5px; }
+      .lib { display:inline-flex; align-items:center; gap:6px; font-family:var(--mono);
+             font-size:11.5px; font-weight:600; padding:3px 9px; border-radius:8px;
+             border:1px solid var(--border-strong); background:var(--surface-2); color:var(--ink); }
+      .lib .d { width:6px; height:6px; border-radius:50%; background:#2f9c94; }
+      .lib.none { color:var(--muted); font-family:inherit; font-style:italic; border-style:dashed; }
+      .ctlchip { display:inline-flex; align-items:center; gap:6px; font-family:var(--mono);
+             font-size:11.5px; font-weight:600; padding:3px 9px; border-radius:8px;
+             border:1px solid var(--accent-soft-border); background:var(--accent-soft);
+               color:var(--accent); }
+      .ctlchip .st { width:7px; height:7px; border-radius:50%; background:var(--faint); }
+      .ctlchip.pass { background:var(--ok-soft); border-color:var(--ok-border);
+        color:var(--ok-ink); }
+      .ctlchip.pass .st { background:var(--ok); }
+      .ctlchip.fired { background:var(--warn-soft); border-color:var(--warn-border);
+        color:var(--warn-ink); }
+      .ctlchip.fired .st { background:var(--warn); }
+      .ctlchip.block { background:var(--danger-soft); border-color:var(--danger-border);
+        color:var(--danger-ink); }
+      .ctlchip.block .st { background:var(--danger); }
+
+      /* ---------- the stepper rail (the govflow stage radio, restyled) ---------- */
+      .st-key-govflow_stage div[role="radiogroup"] {
+        display:flex; flex-wrap:nowrap; align-items:flex-start; gap:0; counter-reset:step;
+        background:var(--chrome-bg-2); border:1px solid var(--chrome-border);
+        border-radius:var(--r-md); padding:14px 10px 12px; overflow-x:auto;
+      }
+      .st-key-govflow_stage div[role="radiogroup"] label {
+        position:relative; flex:1 0 auto; min-width:88px; margin:0; padding:0 4px;
+        display:flex; flex-direction:column; align-items:center; gap:6px;
+        counter-increment:step;
+      }
+      .st-key-govflow_stage div[role="radiogroup"] label > div > div > div:nth-of-type(1) {
+        display:none;  /* the native radio circle; the node replaces it */
+      }
+      .st-key-govflow_stage div[role="radiogroup"] label::before {
+        content:counter(step); width:30px; height:30px; border-radius:50%;
+        display:grid; place-items:center; font-family:var(--mono);
+        font-size:12.5px; font-weight:700; z-index:1;
+        background:var(--chrome-bg); border:2px solid var(--chrome-border);
+        color:var(--chrome-muted); transition:transform .15s ease;
+      }
+      .st-key-govflow_stage div[role="radiogroup"] label[data-selected="true"]::before {
+        background:var(--accent); border-color:var(--accent); color:#fff;
+        box-shadow:0 0 0 4px rgba(47,111,208,.28); transform:scale(1.06);
+      }
+      .st-key-govflow_stage div[role="radiogroup"] label::after {
+        content:""; position:absolute; top:15px; left:calc(-50% + 15px);
+        right:calc(50% + 15px); height:2px; background:var(--chrome-border);
+      }
+      .st-key-govflow_stage div[role="radiogroup"] label:first-child::after { display:none; }
+      .st-key-govflow_stage div[role="radiogroup"] label:last-child::before {
+        content:"\\25A6"; border-style:dashed; font-size:14px;
+      }
+      .st-key-govflow_stage div[role="radiogroup"] label:last-child::after {
+        background:none; border-top:2px dashed var(--chrome-border); height:0;
+      }
+      .st-key-govflow_stage div[role="radiogroup"] label p {
+        font-size:11.5px; color:var(--chrome-muted); font-weight:600;
+        letter-spacing:.02em; white-space:nowrap;
+      }
+      .st-key-govflow_stage div[role="radiogroup"] label[data-selected="true"] p {
+        color:var(--chrome-ink);
+      }
+
+      /* ---------- code block ---------- */
+      .codeblk { background:var(--code-bg); border:1px solid var(--code-border);
+                 border-radius:var(--r-md); overflow:auto; margin:6px 0; }
+      .codeblk table { border-collapse:collapse; font-family:var(--mono);
+                       font-size:12.5px; width:100%; }
+      .codeblk td { border:0; padding:2px 0; color:var(--code-ink); white-space:pre; }
+      .codeblk td.ln { width:38px; text-align:right; padding-right:14px;
+                       color:var(--code-ln); user-select:none; }
+      .codeblk tr.viol td { background:var(--code-viol-bg); }
+      .codeblk tr.viol td.ln { color:var(--code-viol-ln); font-weight:700; }
+      .codeblk .cm { color:var(--code-cm); }
+      .codeblk .kw { color:var(--code-kw); }
+      .codeblk .stlit { color:var(--code-str); }
+      .codeblk .viol-tag { color:var(--code-viol-ln); font-weight:700; }
+
+      /* ---------- spec tables ---------- */
+      .gv-scroll { overflow-x:auto; border:1px solid var(--border); border-radius:var(--r-md); }
+      .gv-table { border-collapse:collapse; font-size:13px; width:100%; }
+      .gv-table th { text-align:left; font-size:11px; letter-spacing:.06em;
+                     text-transform:uppercase; color:var(--muted); font-weight:700;
+                     padding:9px 13px; background:var(--surface-2);
+                     border-bottom:1px solid var(--border); white-space:nowrap; }
+      .gv-table td { padding:8px 13px; border-bottom:1px solid var(--border); }
+      .gv-table tbody tr:last-child td { border-bottom:0; }
+      .gv-withheld { color:var(--danger-ink); text-decoration:line-through;
+                     text-decoration-color:var(--danger); }
+      .gv-masked { color:var(--faint); font-family:var(--mono); letter-spacing:2px; }
+      .gv-struck td, td.gv-struck { color:var(--danger-ink); background:var(--danger-soft);
+                  text-decoration:line-through; text-decoration-color:var(--danger); }
+      .gv-amber td, tr.gv-amber { background:var(--warn-soft); }
+      .gv-below { color:var(--warn-ink); font-size:0.75rem; font-weight:600; white-space:nowrap; }
+      .stage-status { margin:6px 0 10px 0; }
     </style>
     """,
     unsafe_allow_html=True,
@@ -124,83 +359,131 @@ analysis_engine: AnalysisEngine = st.session_state.analysis_engine
 # --------------------------------------------------------------------------
 # Header + controls
 # --------------------------------------------------------------------------
-def _header_chip(cid: str, name: str, persona) -> None:  # noqa: ANN001
-    """One governance chip: click to see exactly what the control enforces, and
-    (for a persona holding toggle authority) to disable it for the next run.
-    The brief: a chip that just sits there tells the interviewer nothing."""
-    info = control_info(cid)
-    disabled_now = (
-        persona is not None
-        and persona.can_toggle_controls
-        and bool(st.session_state.get(f"ctrl_off_{cid}"))
+_SHIELD_SVG = (
+    "<svg viewBox='0 0 24 24' aria-hidden='true'>"
+    "<path d='M12 2 4 5v6c0 5 3.4 8.5 8 11 4.6-2.5 8-6 8-11V5z' fill='#1e50a0'/>"
+    "<path d='M8 12l3 3 5-6' fill='none' stroke='#fff' stroke-width='2' "
+    "stroke-linecap='round' stroke-linejoin='round'/></svg>"
+)
+
+# The six toggleable/explainable harness controls shown in the control plane.
+_PLANE_CATALOG = ["pii", "rbac", "guardrails", "audit", "human_gate", "eval_gate"]
+
+
+def _controls_plane(persona) -> None:  # noqa: ANN001
+    """The one Controls popover (ui-spec 4.8): every control, grouped, with the
+    Admin-only toggles. Replaces the six vanity chips the brief called out."""
+    st.markdown("**Control plane**")
+    st.caption(
+        "The harness controls on the pipeline (toggleable as a demo device) and "
+        "the governed-codegen controls by stage. Disabling is audited and marks "
+        "the run UNGOVERNED."
     )
-    label = f"{name}: off" if disabled_now else name
-    with st.popover(label):
-        st.markdown(f"**{info.name}**")
-        st.write(info.what)
-        if info.why:
-            st.markdown(f"*Why it exists.* {info.why}")
-        catalog = {c[0]: c for c in CONTROL_CATALOG}
-        if cid in catalog:
-            _, _, _desc, breaks = catalog[cid]
+    can_toggle = persona is not None and persona.can_toggle_controls
+    st.markdown("<span class='eyebrow'>Pipeline harness</span>", unsafe_allow_html=True)
+    catalog = {c[0]: c for c in CONTROL_CATALOG}
+    for cid in _PLANE_CATALOG:
+        info = control_info(cid)
+        if cid in catalog and can_toggle:
+            st.checkbox(
+                f"Disable {info.name}",
+                key=f"ctrl_off_{cid}",
+                help=f"{info.what} If off: {catalog[cid][3]}",
+            )
+        else:
             st.markdown(
-                f"<span class='muted'>If disabled: {breaks}</span>",
+                f"<div style='margin:4px 0'><span class='ctlchip pass'>"
+                f"<span class='st'></span>{info.name}</span> "
+                f"<span class='muted'>{info.what}</span></div>",
                 unsafe_allow_html=True,
             )
-            if persona is not None and persona.can_toggle_controls:
-                st.checkbox(
-                    "Disable for the next pipeline run",
-                    key=f"ctrl_off_{cid}",
-                    help=(
-                        "Demo device: turn the control off and re-run to watch the "
-                        "failure it prevents. Disabling is itself audited and the "
-                        "run is marked UNGOVERNED."
-                    ),
-                )
-            else:
-                st.caption(
-                    "Toggling requires the Platform Admin persona. Disabling is "
-                    "audited and marks the run UNGOVERNED."
-                )
-        else:
-            st.caption(info.fired_means)
+    if not can_toggle:
+        st.caption("Toggling requires the Platform Admin persona.")
+    st.markdown(
+        "<span class='eyebrow'>Governed codegen (by stage)</span>",
+        unsafe_allow_html=True,
+    )
+    from sentinel.govflow.controls_info import CONTROLS_INFO
+
+    by_stage: dict[str, list[str]] = {}
+    for cid, info in CONTROLS_INFO.items():
+        if info.implemented:
+            by_stage.setdefault(info.stage, []).append(cid)
+    for stage in ["Ask", "Plan", "Access", "Gate", "Execute", "Screen", "Interpret", "Attest"]:
+        ids = by_stage.get(stage)
+        if not ids:
+            continue
+        chips = "".join(
+            f"<span class='ctlchip'><span class='st'></span>{c}</span> " for c in sorted(ids)
+        )
+        st.markdown(
+            f"<div style='margin:3px 0'><span class='muted'>{stage}:</span> {chips}</div>",
+            unsafe_allow_html=True,
+        )
+    st.caption(
+        "Every chip in the run walkthrough is clickable and explains what the "
+        "control is, why it exists, and what it did on the run."
+    )
 
 
 def header(persona=None) -> None:  # noqa: ANN001
-    left, right = st.columns([3, 2], vertical_alignment="center")
+    """The topbar command frame (ui-spec 2.1): brand lockup + live context chips
+    + the Controls popover. The chips reflect the actual session state (persona,
+    dataset, purpose, computed tier), not decoration."""
+    draft = st.session_state.get("govflow_draft") or {}
+    pub = st.session_state.get("govflow_result") or {}
+    dataset = pub.get("dataset") or draft.get("dataset") or "german_credit"
+    purpose = pub.get("purpose") or draft.get("purpose") or "fair_lending"
+    from sentinel.govflow import matrix_rows, resolve_tier_for_dataset
+    from sentinel.govflow.purpose_matrix import PURPOSE_LABEL
+
+    classification = next(
+        (r["classification"] for r in matrix_rows() if r["dataset"] == dataset), ""
+    )
+    cls_kind = classification.lower() if classification else "internal"
+    tier = "—"
+    dot = "#9aa8c0"
+    pname = "—"
+    if persona is not None:
+        pname = persona.name
+        tier = resolve_tier_for_dataset(
+            dataset, persona.tier_role, persona.attestations
+        ).tier
+        dot = "#5fdc8a" if "certified" in persona.attestations else "#e2a03a"
+    purpose_label = PURPOSE_LABEL.get(purpose, purpose)
+    any_off = _control_settings(persona).any_disabled
+    gov_badge = (
+        "<span class='badge warn'>UNGOVERNED next run</span>"
+        if any_off
+        else "<span class='badge ok'>governed</span>"
+    )
+    left, right = st.columns([11, 2], vertical_alignment="center")
     with left:
-        st.title("Sentinel")
         st.markdown(
-            "<span class='muted'>Governed agentic data science for a regulated "
-            "bank. Pick a question, run a real analysis, watch the controls "
-            "fire.</span>",
+            f"""
+            <div class='topbar'>
+              <div class='brand'>{_SHIELD_SVG}
+                <span class='wm'>SENTINEL</span>
+                <span class='sub'>Governed Agentic Analysis</span>
+              </div>
+              <div class='spacer'></div>
+              <div class='ctx'>
+                <span class='ctx-chip'><span class='dot' style='background:{dot}'></span>
+                  <span class='k'>Acting as</span> {pname}</span>
+                <span class='ctx-chip'><span class='k'>Data</span> {dataset}
+                  <span class='cls {cls_kind}'>{classification or "n/a"}</span></span>
+                <span class='ctx-chip'><span class='k'>Purpose</span> {purpose_label}</span>
+                <span class='ctx-chip tier'><span class='k'>Tier</span>
+                  <span class='tier-badge'>{tier}</span></span>
+                {gov_badge}
+              </div>
+            </div>
+            """,
             unsafe_allow_html=True,
         )
     with right:
-        # The badge reflects what the NEXT run would get: stale Admin toggles
-        # do not degrade a persona that cannot toggle (their runs stay governed).
-        any_off = _control_settings(persona).any_disabled
-        badge = (
-            "<span class='sentinel-badge sentinel-badge-warn'>Governance: DEGRADED"
-            "</span>"
-            if any_off
-            else "<span class='sentinel-badge'>Governance: ON</span>"
-        )
-        st.markdown(
-            f"<div style='text-align:right'>{badge}</div>", unsafe_allow_html=True
-        )
-        chip_cols = st.columns(6)
-        chips = [
-            ("pii", "PII"),
-            ("rbac", "RBAC"),
-            ("guardrails", "Tools"),
-            ("audit", "Audit"),
-            ("human_gate", "Human gate"),
-            ("eval_gate", "Eval gate"),
-        ]
-        for col, (cid, name) in zip(chip_cols, chips, strict=True):
-            with col:
-                _header_chip(cid, name, persona)
+        with st.popover("Controls"):
+            _controls_plane(persona)
 
 
 def _control_settings(persona) -> ControlSettings:  # noqa: ANN001

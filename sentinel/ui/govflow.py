@@ -57,6 +57,90 @@ from ..govflow.tiers import (
 STAGES = [
     "Ask", "Plan", "Access", "Generate", "Gate", "Execute", "Screen", "Interpret", "Attest",
 ]
+# The rail has a 10th, visually distinct stop: the Architecture overview
+# (ui-spec 2.3). It is an appendix, not a stage; the flow knows nothing of it.
+ARCHITECTURE = "Architecture"
+NAV_STOPS = STAGES + [ARCHITECTURE]
+
+# The neutral badge next to "Stage N of 9" in each panel head (mockup phead).
+_STAGE_KICKER = {
+    "Ask": "Bind & scope",
+    "Plan": "Select certified analysis",
+    "Access": "Enforce by construction",
+    "Generate": "Model writes code",
+    "Gate": "Static review",
+    "Execute": "Sandboxed run",
+    "Screen": "Disclosure control",
+    "Interpret": "Narrate & check",
+    "Attest": "Evidence & signoff",
+}
+
+# In / Does / Out, one line each (ui-spec 4.5). Honest: matches the flow.
+_IODID = {
+    "Ask": (
+        "Free choice of dataset, purpose, question",
+        "Binds identity, declares the purpose, computes the autonomy tier",
+        "A frozen request at a computed tier; the tier cannot change mid-request",
+    ),
+    "Plan": (
+        "The frozen request",
+        "Binds a certified registry entry; checks the data contract for drift",
+        "A chosen analysis plus parameters",
+    ),
+    "Access": (
+        "The purpose and the grant",
+        "Checks purpose limitation, then builds a policy-scoped view",
+        "A scoped table; a denied column does not exist on it",
+    ),
+    "Generate": (
+        "The question plus the fenced ctx API",
+        "The model writes analysis code (seeded sample in scripted mode)",
+        "A code string, unexecuted, headed for the gate",
+    ),
+    "Gate": (
+        "The unexecuted code",
+        "Two parsers walk it: Python ast, sqlglot for ctx.sql. No execution",
+        "Cleared for the sandbox, or a refusal naming the control and line",
+    ),
+    "Execute": (
+        "Gated code plus the scoped table",
+        "Runs in a subprocess sandbox with caps and a single emit channel",
+        "The raw emitted result, still unscreened",
+    ),
+    "Screen": (
+        "The raw emitted result",
+        "Suppresses small cells; measures proxy association; records findings",
+        "The screened table: the only thing anything downstream sees",
+    ),
+    "Interpret": (
+        "The screened table only",
+        "Composes the narration, then checks it against the screened result",
+        "A narration plus a faithfulness verdict (CTL-EVAL-01)",
+    ),
+    "Attest": (
+        "Everything the run did",
+        "Assembles the evidence pack, negative statement, lineage events",
+        "An evidence pack, pending an independent signoff (CTL-SOD-01)",
+    ),
+}
+
+# The engine bar (ui-spec 4.6): framework & tools used / governance implemented,
+# per stage. Libraries listed only where they actually run at that stage.
+_ENGINE = {
+    "Ask": ([], ["CTL-PURP-01"]),
+    "Plan": ([], ["CTL-CONTRACT-01", "CTL-EVAL-01", "CTL-SOD-01"]),
+    "Access": (["pandas"], ["CTL-PURP-01"]),
+    "Generate": (["claude-sonnet-5"], []),
+    "Gate": (
+        ["ast", "sqlglot"],
+        ["CTL-EGRESS-01", "CTL-CODE-01", "CTL-CODE-02", "CTL-CODE-03",
+         "CTL-CODE-04", "CTL-COL-01", "CTL-COMPLEX-01"],
+    ),
+    "Execute": (["subprocess", "duckdb"], ["CTL-TIME-01"]),
+    "Screen": (["pandas", "numpy"], ["CTL-DISC-01", "CTL-DISC-02", "CTL-PROXY-01"]),
+    "Interpret": ([], ["CTL-EVAL-01"]),
+    "Attest": (["openlineage", "quarto", "marimo"], ["CTL-SOD-01"]),
+}
 
 _STATUS_ICON = {"ok": "✓", "blocked": "✕", "error": "✕", "skipped": "–"}
 _STATUS_CLASS = {"ok": "ok", "blocked": "flag", "error": "flag", "skipped": "muted"}
@@ -205,9 +289,9 @@ def _goto(stage: str) -> None:
 
 
 def _step(delta: int) -> None:
-    cur = st.session_state.get("govflow_stage", STAGES[0])
-    idx = STAGES.index(cur) if cur in STAGES else 0
-    st.session_state.govflow_stage = STAGES[max(0, min(len(STAGES) - 1, idx + delta))]
+    cur = st.session_state.get("govflow_stage", NAV_STOPS[0])
+    idx = NAV_STOPS.index(cur) if cur in NAV_STOPS else 0
+    st.session_state.govflow_stage = NAV_STOPS[max(0, min(len(NAV_STOPS) - 1, idx + delta))]
 
 
 def _reset_run() -> None:
@@ -232,6 +316,39 @@ def _esc(v: object) -> str:
         # Integral floats (counts that went through pandas) read as ints.
         return html.escape(str(int(v)) if v.is_integer() else f"{v:.2f}")
     return html.escape(str(v))
+
+
+_KW_RE = re.compile(
+    r"\b(import|from|as|def|return|if|elif|else|for|while|with|in|not|and|or|"
+    r"lambda|True|False|None|class|try|except|raise)\b"
+)
+_STR_RE = re.compile(r"('[^']*'|\"[^\"]*\")")
+
+
+def _code_html(code: str, viol: dict[int, str] | None = None) -> str:
+    """The spec's code block (ui-spec 4.9): mono line numbers, light syntax
+    color, and the violating line tinted with its control tag. Static string
+    processing over html-escaped text; presentation only."""
+    viol = viol or {}
+    rows = []
+    for i, line in enumerate(code.splitlines(), 1):
+        esc = html.escape(line)
+        if "#" in esc:
+            head, _, tail = esc.partition("#")
+            esc = head + f"<span class='cm'>#{tail}</span>"
+            body, cm = head, f"<span class='cm'>#{tail}</span>"
+        else:
+            body, cm = esc, ""
+        body = _STR_RE.sub(r"<span class='stlit'>\1</span>", body)
+        body = _KW_RE.sub(r"<span class='kw'>\1</span>", body)
+        tag = (
+            f"  <span class='viol-tag'>&#10229; {viol[i]}</span>" if i in viol else ""
+        )
+        cls = " class='viol'" if i in viol else ""
+        rows.append(
+            f"<tr{cls}><td class='ln'>{i}</td><td>{body}{cm}{tag}</td></tr>"
+        )
+    return f"<div class='codeblk'><table>{''.join(rows)}</table></div>"
 
 
 def _md_esc(v: object) -> str:
@@ -341,26 +458,86 @@ def _control_chip_row(ids: list[str], pub: dict | None) -> None:
         _control_popover(cid, pub, container=cols[i % len(cols)])
 
 
+def _engine_bar(stage: str) -> None:
+    """Framework & tools used / governance implemented, one strip per stage."""
+    libs, ctls = _ENGINE.get(stage, ([], []))
+    lib_html = (
+        " ".join(
+            f"<span class='lib'><span class='d'></span>{html.escape(x)}</span>"
+            for x in libs
+        )
+        if libs
+        else "<span class='lib none'>policy only, no external library</span>"
+    )
+    ctl_html = (
+        " ".join(
+            f"<span class='ctlchip'><span class='st'></span>{c}</span>" for c in ctls
+        )
+        if ctls
+        else "<span class='lib none'>no named control acts here</span>"
+    )
+    st.markdown(
+        f"<div class='enginebar'><span class='eb-lab'>Framework &amp; tools used</span> "
+        f"{lib_html}<span class='eb-sep'></span>"
+        f"<span class='eb-lab'>Governance implemented</span> {ctl_html}</div>",
+        unsafe_allow_html=True,
+    )
+
+
+_STATUS_BADGE = {
+    "ok": ("ok", "\u2713 ok"),
+    "blocked": ("danger", "\u2715 refused"),
+    "error": ("danger", "\u2715 error"),
+    "skipped": ("neutral", "\u2013 skipped"),
+}
+
+
 def _stage_banner(pub: dict | None, stage: str) -> None:
-    """Status line + explainer + this-stage controls, at the top of each panel."""
-    st.markdown(f"#### {STAGES.index(stage) + 1}. {stage}")
-    st.markdown(
-        f"<span class='muted'>{html.escape(_STAGE_EXPLAINER[stage])}</span>",
-        unsafe_allow_html=True,
-    )
+    """The mockup phead: eyebrow (Stage N of 9 + kicker + status badge), h2,
+    lede, then the engine bar and this stage's control chips."""
     rec = _stage_rec(pub, stage)
-    if rec is None:
-        return
-    icon = _STATUS_ICON.get(rec["status"], rec["status"])
-    cls = _STATUS_CLASS.get(rec["status"], "muted")
+    status_html = ""
+    if rec is not None:
+        kind, label = _STATUS_BADGE.get(rec["status"], ("neutral", rec["status"]))
+        status_html = f"<span class='badge {kind}'>{label}</span>"
+    kicker = _STAGE_KICKER.get(stage, "")
     st.markdown(
-        f"<div class='stage-status'><span class='{cls}'>{icon} {rec['status']}</span> "
-        f"<span class='muted'>{html.escape(rec.get('detail', ''))}</span></div>",
+        f"""
+        <div class='phead'>
+          <div class='eyebrow'><span>Stage {STAGES.index(stage) + 1} of 9</span>
+            <span class='badge neutral'>{html.escape(kicker)}</span> {status_html}</div>
+          <h2>{stage}</h2>
+          <p class='lede'>{html.escape(_STAGE_EXPLAINER[stage])}</p>
+        </div>
+        """,
         unsafe_allow_html=True,
     )
-    if rec.get("controls"):
+    io = _IODID.get(stage)
+    if io:
         st.markdown(
-            "<span class='muted'>Controls at this stage:</span>", unsafe_allow_html=True
+            f"""
+            <div class='iodid'>
+              <div class='iocard'><div class='k'>In</div><div
+                class='v'>{html.escape(io[0])}</div></div>
+              <div class='iocard does'><div class='k'>Does</div><div
+                class='v'>{html.escape(io[1])}</div></div>
+              <div class='iocard'><div class='k'>Out</div><div
+                class='v'>{html.escape(io[2])}</div></div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    _engine_bar(stage)
+    if rec is not None and rec.get("detail"):
+        st.markdown(
+            f"<div class='stage-status'><span class='muted'>"
+            f"{html.escape(rec.get('detail', ''))}</span></div>",
+            unsafe_allow_html=True,
+        )
+    if rec is not None and rec.get("controls"):
+        st.markdown(
+            "<span class='muted'>Fired at this stage (click to inspect):</span>",
+            unsafe_allow_html=True,
         )
         _control_chip_row(rec["controls"], pub)
 
@@ -575,7 +752,9 @@ def _execute_pending(persona) -> None:  # noqa: ANN001
         st.session_state.govflow_stage = "Gate"
 
 
-def _run_flow(cfg: dict, persona, *, repair_of: str = "", repair_feedback: str = ""):  # noqa: ANN001
+def _run_flow(  # noqa: ANN001
+    cfg: dict, persona, *, repair_of: str = "", repair_feedback: str = ""
+):
     if cfg["is_l3"]:
         result = run_l3_analysis(
             cfg["question"], persona=persona, intent=cfg["intent"], repair_of=repair_of
@@ -909,7 +1088,7 @@ def _panel_generate(pub: dict | None, cfg: dict | None, persona) -> None:  # noq
         f"Source: <b>{tag}</b>, {pub.get('attempts', 0)} attempt(s).</span>",
         unsafe_allow_html=True,
     )
-    st.code(code, language="python")
+    st.markdown(_code_html(code), unsafe_allow_html=True)
     attempts = pub.get("generation_attempts") or []
     if len(attempts) > 1:
         with st.expander(f"Attempt history ({len(attempts)})"):
@@ -969,13 +1148,20 @@ def _panel_gate(pub: dict | None, cfg: dict | None, persona) -> None:  # noqa: A
             f"{'passed' if gate['passed'] else 'was refused again'}. Nothing was "
             "whitelisted: same gate, fresh read."
         )
+        prior_viol = {
+            v["line"]: v["control"]
+            for v in (prior.get("gate") or {}).get("violations", [])
+        }
         c1, c2 = st.columns(2)
         with c1:
             st.markdown("**Before (refused)**")
-            st.code(prior.get("generated_code") or "", language="python")
+            st.markdown(
+                _code_html(prior.get("generated_code") or "", prior_viol),
+                unsafe_allow_html=True,
+            )
         with c2:
             st.markdown("**After (repaired)**")
-            st.code(code, language="python")
+            st.markdown(_code_html(code), unsafe_allow_html=True)
 
     st.markdown("**What the parsers checked**")
     fired = {v["control"] for v in gate.get("violations", [])}
@@ -1000,11 +1186,7 @@ def _panel_gate(pub: dict | None, cfg: dict | None, persona) -> None:  # noqa: A
 
     if not (pub.get("repaired_from") and prior):
         blocked_lines = {v["line"]: v["control"] for v in gate.get("violations", [])}
-        rendered = []
-        for i, line in enumerate(code.splitlines(), 1):
-            marker = f"    # <== {blocked_lines[i]}" if i in blocked_lines else ""
-            rendered.append(f"{i:>3}  {line}{marker}")
-        st.code("\n".join(rendered), language="python")
+        st.markdown(_code_html(code, blocked_lines), unsafe_allow_html=True)
 
     if gate.get("violations"):
         st.markdown(
@@ -1422,6 +1604,88 @@ def _panel_attest(pub: dict | None, cfg: dict | None, persona) -> None:  # noqa:
             st.json(lineage)
 
 
+def _panel_architecture(pub: dict | None, cfg: dict | None, persona) -> None:  # noqa: ANN001
+    """The tenth rail stop (ui-spec 2.3): the whole stack, bought vs built.
+    An appendix, not a stage; nothing fires here."""
+    st.markdown(
+        """
+        <div class='phead'>
+          <div class='eyebrow'><span>Architecture</span>
+            <span class='badge info'>overview</span></div>
+          <h2>The governed stack, zoomed out</h2>
+          <p class='lede'>The maths is bought off the shelf; the governance is
+          built. Every library below actually runs in this walkthrough; the
+          controls beside it are the fences it runs inside.</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    b1, b2 = st.columns(2)
+    with b1:
+        st.markdown("**Framework &amp; tools used** (bought)", unsafe_allow_html=True)
+        rows = [
+            ("pandas / numpy", "the data plane at Access and Screen"),
+            ("scikit-learn + fairlearn", "the model and the fairness metrics the code computes"),
+            ("claude-sonnet-5", "writes the analysis code at Generate (live mode)"),
+            ("ast + sqlglot", "the two parsers the Gate reads code with"),
+            ("subprocess + rlimits", "the Execute sandbox: isolation and caps"),
+            ("duckdb", "runs gated ctx.sql with the row filter injected"),
+            ("openlineage", "provenance events emitted at Access and Attest"),
+            ("quarto + marimo", "the two audience outputs from one evidence pack"),
+        ]
+        st.markdown(
+            "".join(
+                f"<div style='display:flex;gap:11px;padding:7px 0;"
+                f"border-bottom:1px solid var(--border)'>"
+                f"<span class='mono' style='font-size:12px;font-weight:700;"
+                f"min-width:170px'>{html.escape(nm)}</span>"
+                f"<span class='muted'>{html.escape(ds)}</span></div>"
+                for nm, ds in rows
+            ),
+            unsafe_allow_html=True,
+        )
+    with b2:
+        st.markdown("**Governance implemented** (built)", unsafe_allow_html=True)
+        for stage in STAGES:
+            _libs, ctls = _ENGINE.get(stage, ([], []))
+            if not ctls:
+                continue
+            chips = " ".join(
+                f"<span class='ctlchip'><span class='st'></span>{c}</span>"
+                for c in ctls
+            )
+            st.markdown(
+                f"<div style='margin:4px 0'><span class='muted'>{stage}:</span> "
+                f"{chips}</div>",
+                unsafe_allow_html=True,
+            )
+    st.markdown("**The import allowlist, as the governed catalogue**")
+    st.markdown(
+        "<span class='muted'>What the model may reach for at L2 (green) and what "
+        "is denied at every tier (red). The gate reads the code; this list is "
+        "the fence.</span>",
+        unsafe_allow_html=True,
+    )
+    allow_html = " ".join(
+        f"<span class='ctlchip pass'><span class='st'></span>{html.escape(m)}</span>"
+        for m in sorted(ALLOWED_IMPORTS)
+    )
+    deny_html = " ".join(
+        f"<span class='ctlchip block'><span class='st'></span>"
+        f"{html.escape(m).replace('_', '&#95;')}</span>"
+        for m in sorted(EGRESS_MODULES | FS_MODULES | DYNCODE_MODULES | DYNCODE_BUILTINS)
+    )
+    st.markdown(
+        f"<div style='margin:8px 0'>{allow_html}</div>"
+        f"<div style='margin:8px 0'>{deny_html}</div>",
+        unsafe_allow_html=True,
+    )
+    st.caption(
+        "On the dependency map but not wired in this build: Presidio, Evidently, "
+        "OPA, pandera. Labeled as roadmap, not claimed."
+    )
+
+
 _PANELS = {
     "Ask": _panel_ask,
     "Plan": _panel_plan,
@@ -1432,6 +1696,7 @@ _PANELS = {
     "Screen": _panel_screen,
     "Interpret": _panel_interpret,
     "Attest": _panel_attest,
+    ARCHITECTURE: _panel_architecture,
 }
 
 
@@ -1564,26 +1829,12 @@ def _tier_resolver() -> None:
 # --------------------------------------------------------------------------
 # Entry point
 # --------------------------------------------------------------------------
-_STEPPER_CSS = """
-<style>
-  .gv-table { border-collapse:collapse; font-size:0.85rem; width:100%; }
-  .gv-table th { text-align:left; padding:6px 10px; border-bottom:2px solid #d5dbe3;
-                 color:#3b4453; font-weight:600; white-space:nowrap; }
-  .gv-table td { padding:5px 10px; border-bottom:1px solid #e8ebf0; }
-  .gv-scroll { overflow-x:auto; }
-  .gv-withheld { color:#b3261e; text-decoration:line-through; }
-  .gv-masked { color:#9aa3af; letter-spacing:2px; }
-  .gv-struck { color:#b3261e; text-decoration:line-through; }
-  .gv-amber { background:#fff8e6; }
-  .gv-below { color:#9a6700; font-size:0.75rem; font-weight:600; white-space:nowrap; }
-  .stage-status { margin:6px 0 10px 0; }
-</style>
-"""
-
-
 def render_govflow(persona) -> None:  # noqa: ANN001
+    st.markdown(
+        "<div class='eyebrow' style='margin-bottom:4px'>Governed run walkthrough</div>",
+        unsafe_allow_html=True,
+    )
     st.subheader("Governed code generation")
-    st.markdown(_STEPPER_CSS, unsafe_allow_html=True)
     st.markdown(
         "<span class='muted'>The model writes the analysis code; a static gate "
         "reads it before the machine does; a disclosure screen removes small cells "
@@ -1630,17 +1881,19 @@ def render_govflow(persona) -> None:  # noqa: ANN001
             "the Plan, then click Run governed analysis to execute all nine stages."
         )
 
-    def _fmt(stage: str) -> str:
-        rec = _stage_rec(pub, stage)
+    def _fmt(stop: str) -> str:
+        rec = _stage_rec(pub, stop)
         if rec is None:
-            return stage
-        return f"{_STATUS_ICON.get(rec['status'], '')} {stage}".strip()
+            return stop
+        return f"{_STATUS_ICON.get(rec['status'], '')} {stop}".strip()
 
     if "govflow_stage" not in st.session_state:
         st.session_state.govflow_stage = "Ask"
+    if st.session_state.govflow_stage not in NAV_STOPS:
+        st.session_state.govflow_stage = "Ask"
     stage = st.radio(
         "Stage",
-        STAGES,
+        NAV_STOPS,
         format_func=_fmt,
         horizontal=True,
         key="govflow_stage",
@@ -1650,14 +1903,22 @@ def render_govflow(persona) -> None:  # noqa: ANN001
     with st.container(border=True):
         _PANELS[stage](pub, cfg, persona)
 
-    idx = STAGES.index(stage)
-    nav1, nav2, _pad = st.columns([1, 1, 6])
+    idx = NAV_STOPS.index(stage)
+    counter = (
+        "Architecture" if stage == ARCHITECTURE else f"Stage {idx + 1} / {len(STAGES)}"
+    )
+    nav1, cap, nav2 = st.columns([1, 6, 1], vertical_alignment="center")
     nav1.button(
         "← Back", disabled=idx == 0, on_click=_step, args=(-1,), key="gv_back"
     )
+    cap.markdown(
+        f"<div style='text-align:center'><span class='mono' "
+        f"style='font-size:12px;color:var(--faint)'>{counter}</span></div>",
+        unsafe_allow_html=True,
+    )
     nav2.button(
         "Next →",
-        disabled=idx == len(STAGES) - 1,
+        disabled=idx == len(NAV_STOPS) - 1,
         on_click=_step,
         args=(1,),
         key="gv_next",

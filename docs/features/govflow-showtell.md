@@ -94,6 +94,43 @@ all are fixed in this branch. The decisions worth keeping:
   column-explicit dump would fail the Execute shape check); the comment in
   generate.py says so instead of overclaiming.
 
+## The design-system adoption (2026-07-19, after Sandip's mid-build review)
+
+Sandip pointed the build at the unified-app mockup and its written spec
+(`docs/ui-spec.md`, brought onto this branch together with
+`docs/features/demo-stepper-ux.md` and `docs/features/unified-app-build.md`
+and the mockups). The stepper and app chrome now implement the spec's design
+system: the full light-token set, hidden Streamlit chrome, the topbar command
+frame (brand lockup + live context chips + one Controls popover replacing the
+six vanity chips), the sidebar styled as the nav rail, the stage rail with
+numbered nodes and connectors, per-stage phead + In/Does/Out + engine bar,
+spec tables, the syntax-colored code block with violation rows, and the
+Architecture tenth stop.
+
+Decisions and known deviations, for the morning review:
+
+- **The rail is the styled stage radio, not custom HTML.** A custom HTML
+  rail's links would reload the page and drop the Streamlit session (losing
+  the run), so the radio stays the interactive layer, CSS-transformed into
+  the mockup's rail (CSS counters for the node numbers, `data-selected` for
+  the active state). Node numbers stay numbers; done-state ✓ shows in the
+  label text, and connectors do not fill on done. Tests keep driving the
+  radio unchanged.
+- **The control drawer is a popover.** Streamlit has no right-edge
+  slide-over; the drawer's three-block content (what it is / why / what it
+  did here) renders in the existing control popovers.
+- **Deferred to the build plan's own phases** (docs/features/
+  unified-app-build.md): the login persona gate (S1), the grouped sidebar +
+  command-center landing (S2, S3), the transition overlay, dark mode and the
+  theme toggle, and the D (datasets) and H (seeded history) workstreams.
+  These are structural additions the plan sequences separately; nothing
+  tonight forecloses them.
+- **Engine-bar honesty.** Library chips list only what actually runs at that
+  stage in this build (e.g. Screen lists pandas + numpy because the
+  association measures are hand-rolled there; the mockup's fairlearn chip
+  belongs to Generate/Execute where the generated code uses it). CTL-TIER-01
+  is not shown as a live control because no code emits it.
+
 ## Out of scope
 
 - OPA externalisation (open PRD question, Sandip's call).
