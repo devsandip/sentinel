@@ -234,14 +234,26 @@ cells to suppress by design).
   reasons and Live mode genuinely loads. Under the verb, a stage-specific line
   (Scoping the data, Reading the code, Screening the result...). Skipped under
   `prefers-reduced-motion`.
-- **The Stack surface.** A top-bar panel that lays out the whole stack as two columns:
-  bought (the analytical libraries, what each does, at which stage) and built (the
-  controls per stage). The showpiece is the Gate import allowlist rendered as the
-  governed catalogue the model may reach for (numpy, pandas, scikit-learn,
-  statsmodels, fairlearn, scipy, DoWhy, lifelines, SHAP permitted; os, subprocess,
-  requests, socket, pickle, eval/exec denied). Honest footer for what is on the
-  dependency map but not yet wired (Presidio, Evidently, OPA, pandera). Only claim
-  libraries that actually run; the roadmap ones are labelled as such.
+- **The Stack surface, as a tenth rail stop ("Architecture").** The whole stack laid
+  out as two columns: bought (the analytical libraries, what each does, at which
+  stage) and built (the controls per stage). The showpiece is the Gate import
+  allowlist rendered as the governed catalogue the model may reach for (numpy,
+  pandas, scikit-learn, statsmodels, fairlearn, scipy, DoWhy, lifelines, SHAP
+  permitted; os, subprocess, requests, socket, pickle, eval/exec denied). Honest
+  footer for what is on the dependency map but not yet wired (Presidio, Evidently,
+  OPA, pandera). Only claim libraries that actually run; the roadmap ones are
+  labelled as such. In the mockup this is **not a modal**: it is a tenth stop on the
+  rail after Attest, rendered as a normal stage panel. The rail marks it apart from
+  the nine governed stages with a distinct glyph node (not a number), a dashed
+  connector, and an "overview" tag; the footer counter reads "Architecture" rather
+  than "Stage 10 / 9", and its transition verb is "Zooming out" (not "Governing" or
+  "Thinking", since nothing fires here). The per-stage engine bar is hidden on this
+  stop because the panel *is* the full engine. The top-bar Stack button and every
+  engine-bar library chip jump to it. This makes the walkthrough close on the whole
+  governed architecture instead of ending abruptly at Attest, and it keeps the "nine
+  governed stages" story intact by framing Architecture as an appendix, not a tenth
+  stage. In the real Streamlit build this can stay a modal or become a real stop;
+  the mockup argues for the stop.
 
 ## 6. Polish layer
 

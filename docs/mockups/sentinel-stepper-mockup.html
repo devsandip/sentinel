@@ -134,6 +134,10 @@
   .tag.fired { background:rgba(226,160,58,.16); color:#e7b45f; border:1px solid rgba(226,160,58,.32); }
   .tag.caught { background:rgba(229,103,94,.16); color:#f0938b; border:1px solid rgba(229,103,94,.3); }
   .tag.quiet { color:var(--rail-muted); opacity:.65; }
+  .tag.meta { background:rgba(47,111,208,.16); color:#8fb2ec; border:1px solid rgba(47,111,208,.34); }
+  .step.meta .connector { border-top:2px dashed var(--rail-border); background:none; height:0; top:16px; }
+  .step.meta.active .connector, .step.meta.done .connector { border-top-color:#2f6fd0; }
+  .step.meta .node { border-style:dashed; }
   .step:hover .node { border-color:#3a557f; }
   .step:hover .lbl { color:var(--rail-ink); }
 
@@ -431,7 +435,7 @@
       <button class="ctx-chip" onclick="showStage(1);showSub(1)" title="Dataset and classification"><span class="k">Data</span> german_credit <span class="badge danger" style="padding:1px 6px;font-size:10px">Restricted</span></button>
       <button class="ctx-chip purpose" onclick="showStage(1);showSub(2)" title="Purpose limitation"><span class="k">Purpose</span> Fair-lending review</button>
       <button class="ctx-chip tier" onclick="openCtl('CTL-TIER-01')" title="How the tier is computed"><span class="k">Tier</span> <span class="tier-badge" id="tier-badge">L2</span></button>
-      <button class="iconbtn" onclick="openStack()" aria-label="Open the stack">&#9638; Stack</button>
+      <button class="iconbtn" onclick="transitionTo(10)" aria-label="Jump to the architecture overview">&#9638; Stack</button>
       <button class="iconbtn" onclick="openControls()" aria-label="Open control panel">&#9639; Controls</button>
       <button class="iconbtn" onclick="toggleTheme()" aria-label="Toggle theme" aria-pressed="false" id="themebtn">&#9681;</button>
     </div>
@@ -982,6 +986,58 @@
     </div>
   </section>
 
+  <!-- STAGE 10 : ARCHITECTURE (the stack, promoted from a modal to a rail stop) -->
+  <section class="panel" id="stage-10" aria-labelledby="h10">
+    <div class="phead">
+      <div class="eyebrow"><span>The full stack</span><span class="badge neutral">Buy the maths, build the governance</span></div>
+      <h2 id="h10">Architecture</h2>
+      <p class="lede">Zoom out from the run. The analysis is off-the-shelf: named libraries do the maths, each at one stage, and we do not reimplement any of it. What we build is the governance, the named controls that sit at every transition and can refuse. Every chip below is a control you already watched fire on this run.</p>
+    </div>
+
+    <div class="grid2">
+      <div class="stackcol">
+        <div class="sc-h"><span class="lib" style="cursor:default"><span class="d"></span>bought</span> The maths</div>
+        <p class="sc-sub">Off-the-shelf. We do not reimplement any of it.</p>
+        <div class="stackrow"><span class="nm">Claude</span><span class="ds">Writes the analysis code, and the narration</span><span class="sg">Generate&middot;Interpret</span></div>
+        <div class="stackrow"><span class="nm">ast</span><span class="ds">Parses generated Python (stdlib)</span><span class="sg">Gate</span></div>
+        <div class="stackrow"><span class="nm">sqlglot</span><span class="ds">Parses the SQL: columns, joins, SELECT *</span><span class="sg">Gate</span></div>
+        <div class="stackrow"><span class="nm">DuckDB</span><span class="ds">Runs the query in the sandbox</span><span class="sg">Access&middot;Execute</span></div>
+        <div class="stackrow"><span class="nm">fairlearn</span><span class="ds">Group fairness metrics (MetricFrame)</span><span class="sg">Screen</span></div>
+        <div class="stackrow"><span class="nm">scipy.stats</span><span class="ds">Proxy association + the Wald interval</span><span class="sg">Screen</span></div>
+        <div class="stackrow"><span class="nm">scikit-learn</span><span class="ds">The underlying credit model</span><span class="sg">upstream</span></div>
+        <div class="stackrow"><span class="nm">SHAP</span><span class="ds">Model explainability</span><span class="sg">model&nbsp;card</span></div>
+        <div class="stackrow"><span class="nm">OpenLineage</span><span class="ds">Provenance events, standards-based</span><span class="sg">Attest</span></div>
+        <div class="stackrow"><span class="nm">Quarto</span><span class="ds">The leadership document render</span><span class="sg">Attest</span></div>
+        <div class="stackrow"><span class="nm">marimo</span><span class="ds">The reviewable analyst notebook</span><span class="sg">Attest</span></div>
+      </div>
+      <div class="stackcol">
+        <div class="sc-h"><span class="badge info">built</span> The governance</div>
+        <p class="sc-sub">Named, observable controls at every transition. This is the product.</p>
+        <div class="stackrow"><span class="sg" style="min-width:64px">Ask</span><span class="ds"><button class="ctl armed" onclick="openCtl('CTL-TIER-01')"><span class="st"></span>TIER-01</button> <button class="ctl armed" onclick="openCtl('CTL-PURP-01')"><span class="st"></span>PURP-01</button></span></div>
+        <div class="stackrow"><span class="sg" style="min-width:64px">Access</span><span class="ds"><button class="ctl armed" onclick="openCtl('CTL-RBAC-01')"><span class="st"></span>RBAC-01</button> <button class="ctl armed" onclick="openCtl('CTL-PURP-02')"><span class="st"></span>PURP-02</button> <button class="ctl armed" onclick="openCtl('CTL-CONTRACT-01')"><span class="st"></span>CONTRACT-01</button></span></div>
+        <div class="stackrow"><span class="sg" style="min-width:64px">Gate</span><span class="ds"><button class="ctl armed" onclick="openCtl('CTL-EGRESS-01')"><span class="st"></span>EGRESS-01</button> <button class="ctl armed" onclick="openCtl('CTL-CODE-03')"><span class="st"></span>CODE-03</button> <button class="ctl armed" onclick="openCtl('CTL-COL-01')"><span class="st"></span>COL-01</button></span></div>
+        <div class="stackrow"><span class="sg" style="min-width:64px">Execute</span><span class="ds"><button class="ctl armed" onclick="openCtl('CTL-TIME-01')"><span class="st"></span>TIME-01</button> <button class="ctl armed" onclick="openCtl('CTL-COST-01')"><span class="st"></span>COST-01</button></span></div>
+        <div class="stackrow"><span class="sg" style="min-width:64px">Screen</span><span class="ds"><button class="ctl armed" onclick="openCtl('CTL-DISC-02')"><span class="st"></span>DISC-02</button> <button class="ctl armed" onclick="openCtl('CTL-PROXY-01')"><span class="st"></span>PROXY-01</button></span></div>
+        <div class="stackrow"><span class="sg" style="min-width:64px">Interpret</span><span class="ds"><button class="ctl armed" onclick="openCtl('CTL-EVAL-01')"><span class="st"></span>EVAL-01</button></span></div>
+        <div class="stackrow"><span class="sg" style="min-width:64px">Attest</span><span class="ds"><button class="ctl armed" onclick="openCtl('CTL-SOD-01')"><span class="st"></span>SOD-01</button> <button class="ctl armed" onclick="openCtl('CTL-LIN-01')"><span class="st"></span>LIN-01</button></span></div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:18px">
+      <div class="card-h"><h3>The import allowlist</h3><span class="eyebrow">where "buy the maths" is enforced</span></div>
+      <div class="card-b">
+        <p class="sc-sub" style="margin-top:0">The Gate's allowlist is the governed catalogue the model may reach for. On it: permitted, and still gate-checked when used. Off it: refused.</p>
+        <div class="allowbox">
+          <span class="lib" style="cursor:default"><span class="d"></span>numpy</span><span class="lib" style="cursor:default"><span class="d"></span>pandas</span><span class="lib" style="cursor:default"><span class="d"></span>scikit-learn</span><span class="lib" style="cursor:default"><span class="d"></span>statsmodels</span><span class="lib" style="cursor:default"><span class="d"></span>fairlearn</span><span class="lib" style="cursor:default"><span class="d"></span>scipy</span><span class="lib" style="cursor:default"><span class="d"></span>dowhy</span><span class="lib" style="cursor:default"><span class="d"></span>lifelines</span><span class="lib" style="cursor:default"><span class="d"></span>shap</span>
+        </div>
+        <div class="allowbox" style="margin-top:8px">
+          <span class="lib" style="cursor:default;border-color:var(--danger-border);background:var(--danger-soft);color:var(--danger-ink)"><span class="d" style="background:var(--danger)"></span>os</span><span class="lib" style="cursor:default;border-color:var(--danger-border);background:var(--danger-soft);color:var(--danger-ink)"><span class="d" style="background:var(--danger)"></span>subprocess</span><span class="lib" style="cursor:default;border-color:var(--danger-border);background:var(--danger-soft);color:var(--danger-ink)"><span class="d" style="background:var(--danger)"></span>requests</span><span class="lib" style="cursor:default;border-color:var(--danger-border);background:var(--danger-soft);color:var(--danger-ink)"><span class="d" style="background:var(--danger)"></span>socket</span><span class="lib" style="cursor:default;border-color:var(--danger-border);background:var(--danger-soft);color:var(--danger-ink)"><span class="d" style="background:var(--danger)"></span>pickle</span><span class="lib" style="cursor:default;border-color:var(--danger-border);background:var(--danger-soft);color:var(--danger-ink)"><span class="d" style="background:var(--danger)"></span>eval / exec</span>
+        </div>
+        <div class="roadmap">On the roadmap (dependency map, not yet wired): Presidio (PII, regex today), Evidently (drift), OPA / Rego (externalized policy), pandera / Great Expectations (data contracts).</div>
+      </div>
+    </div>
+  </section>
+
 </main>
 
 <div class="navbar">
@@ -1019,60 +1075,6 @@
       <button class="drawer-close" style="position:static;margin-left:auto" onclick="closeControls()" aria-label="Close">&times;</button>
     </div>
     <div class="modal-b" id="modal-body"></div>
-  </div>
-</div>
-
-<!-- stack modal: buy the maths, build the governance -->
-<div class="modal" id="stackmodal">
-  <div class="scrim show" onclick="closeStack()" style="position:absolute"></div>
-  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="stack-title" style="position:relative;z-index:1;width:min(840px,96vw)">
-    <div class="modal-h">
-      <div class="brand"><svg viewBox="0 0 24 24" style="width:22px;height:22px" aria-hidden="true"><path d="M12 2 4 5v6c0 5 3.4 8.5 8 11 4.6-2.5 8-6 8-11V5z" fill="var(--accent)"/><path d="M8 12l3 3 5-6" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-      <div><h3 id="stack-title" style="font-size:16px">Buy the maths, build the governance</h3><div style="font-size:12px;color:var(--muted)">The analysis is off-the-shelf. Each library does its work at one stage; a named control governs it. The governance is what we build.</div></div>
-      <button class="drawer-close" style="position:static;margin-left:auto" onclick="closeStack()" aria-label="Close">&times;</button>
-    </div>
-    <div class="modal-b">
-      <div class="grid2">
-        <div class="stackcol">
-          <div class="sc-h"><span class="lib" style="cursor:default"><span class="d"></span>bought</span> The maths</div>
-          <p class="sc-sub">Off-the-shelf. We do not reimplement any of it.</p>
-          <div class="stackrow"><span class="nm">Claude</span><span class="ds">Writes the analysis code, and the narration</span><span class="sg">Generate&middot;Interpret</span></div>
-          <div class="stackrow"><span class="nm">ast</span><span class="ds">Parses generated Python (stdlib)</span><span class="sg">Gate</span></div>
-          <div class="stackrow"><span class="nm">sqlglot</span><span class="ds">Parses the SQL: columns, joins, SELECT *</span><span class="sg">Gate</span></div>
-          <div class="stackrow"><span class="nm">DuckDB</span><span class="ds">Runs the query in the sandbox</span><span class="sg">Access&middot;Execute</span></div>
-          <div class="stackrow"><span class="nm">fairlearn</span><span class="ds">Group fairness metrics (MetricFrame)</span><span class="sg">Screen</span></div>
-          <div class="stackrow"><span class="nm">scipy.stats</span><span class="ds">Proxy association + the Wald interval</span><span class="sg">Screen</span></div>
-          <div class="stackrow"><span class="nm">scikit-learn</span><span class="ds">The underlying credit model</span><span class="sg">upstream</span></div>
-          <div class="stackrow"><span class="nm">SHAP</span><span class="ds">Model explainability</span><span class="sg">model&nbsp;card</span></div>
-          <div class="stackrow"><span class="nm">OpenLineage</span><span class="ds">Provenance events, standards-based</span><span class="sg">Attest</span></div>
-          <div class="stackrow"><span class="nm">Quarto</span><span class="ds">The leadership document render</span><span class="sg">Attest</span></div>
-          <div class="stackrow"><span class="nm">marimo</span><span class="ds">The reviewable analyst notebook</span><span class="sg">Attest</span></div>
-        </div>
-        <div class="stackcol">
-          <div class="sc-h"><span class="badge info">built</span> The governance</div>
-          <p class="sc-sub">Named, observable controls at every transition. This is the product.</p>
-          <div class="stackrow"><span class="sg" style="min-width:64px">Ask</span><span class="ds"><button class="ctl armed" onclick="closeStack();openCtl('CTL-TIER-01')"><span class="st"></span>TIER-01</button> <button class="ctl armed" onclick="closeStack();openCtl('CTL-PURP-01')"><span class="st"></span>PURP-01</button></span></div>
-          <div class="stackrow"><span class="sg" style="min-width:64px">Access</span><span class="ds"><button class="ctl armed" onclick="closeStack();openCtl('CTL-RBAC-01')"><span class="st"></span>RBAC-01</button> <button class="ctl armed" onclick="closeStack();openCtl('CTL-PURP-02')"><span class="st"></span>PURP-02</button> <button class="ctl armed" onclick="closeStack();openCtl('CTL-CONTRACT-01')"><span class="st"></span>CONTRACT-01</button></span></div>
-          <div class="stackrow"><span class="sg" style="min-width:64px">Gate</span><span class="ds"><button class="ctl armed" onclick="closeStack();openCtl('CTL-EGRESS-01')"><span class="st"></span>EGRESS-01</button> <button class="ctl armed" onclick="closeStack();openCtl('CTL-CODE-03')"><span class="st"></span>CODE-03</button> <button class="ctl armed" onclick="closeStack();openCtl('CTL-COL-01')"><span class="st"></span>COL-01</button></span></div>
-          <div class="stackrow"><span class="sg" style="min-width:64px">Execute</span><span class="ds"><button class="ctl armed" onclick="closeStack();openCtl('CTL-TIME-01')"><span class="st"></span>TIME-01</button> <button class="ctl armed" onclick="closeStack();openCtl('CTL-COST-01')"><span class="st"></span>COST-01</button></span></div>
-          <div class="stackrow"><span class="sg" style="min-width:64px">Screen</span><span class="ds"><button class="ctl armed" onclick="closeStack();openCtl('CTL-DISC-02')"><span class="st"></span>DISC-02</button> <button class="ctl armed" onclick="closeStack();openCtl('CTL-PROXY-01')"><span class="st"></span>PROXY-01</button></span></div>
-          <div class="stackrow"><span class="sg" style="min-width:64px">Interpret</span><span class="ds"><button class="ctl armed" onclick="closeStack();openCtl('CTL-EVAL-01')"><span class="st"></span>EVAL-01</button></span></div>
-          <div class="stackrow"><span class="sg" style="min-width:64px">Attest</span><span class="ds"><button class="ctl armed" onclick="closeStack();openCtl('CTL-SOD-01')"><span class="st"></span>SOD-01</button> <button class="ctl armed" onclick="closeStack();openCtl('CTL-LIN-01')"><span class="st"></span>LIN-01</button></span></div>
-        </div>
-      </div>
-      <hr class="hr" />
-      <div class="stackcol">
-        <div class="sc-h">The import allowlist</div>
-        <p class="sc-sub">The Gate's allowlist is the governed catalogue the model may reach for. On it: permitted, and still gate-checked when used. Off it: refused. This is where "buy the maths" is enforced.</p>
-        <div class="allowbox">
-          <span class="lib" style="cursor:default"><span class="d"></span>numpy</span><span class="lib" style="cursor:default"><span class="d"></span>pandas</span><span class="lib" style="cursor:default"><span class="d"></span>scikit-learn</span><span class="lib" style="cursor:default"><span class="d"></span>statsmodels</span><span class="lib" style="cursor:default"><span class="d"></span>fairlearn</span><span class="lib" style="cursor:default"><span class="d"></span>scipy</span><span class="lib" style="cursor:default"><span class="d"></span>dowhy</span><span class="lib" style="cursor:default"><span class="d"></span>lifelines</span><span class="lib" style="cursor:default"><span class="d"></span>shap</span>
-        </div>
-        <div class="allowbox" style="margin-top:8px">
-          <span class="lib" style="cursor:default;border-color:var(--danger-border);background:var(--danger-soft);color:var(--danger-ink)"><span class="d" style="background:var(--danger)"></span>os</span><span class="lib" style="cursor:default;border-color:var(--danger-border);background:var(--danger-soft);color:var(--danger-ink)"><span class="d" style="background:var(--danger)"></span>subprocess</span><span class="lib" style="cursor:default;border-color:var(--danger-border);background:var(--danger-soft);color:var(--danger-ink)"><span class="d" style="background:var(--danger)"></span>requests</span><span class="lib" style="cursor:default;border-color:var(--danger-border);background:var(--danger-soft);color:var(--danger-ink)"><span class="d" style="background:var(--danger)"></span>socket</span><span class="lib" style="cursor:default;border-color:var(--danger-border);background:var(--danger-soft);color:var(--danger-ink)"><span class="d" style="background:var(--danger)"></span>pickle</span><span class="lib" style="cursor:default;border-color:var(--danger-border);background:var(--danger-soft);color:var(--danger-ink)"><span class="d" style="background:var(--danger)"></span>eval / exec</span>
-        </div>
-      </div>
-      <div class="roadmap">On the roadmap (dependency map, not yet wired): Presidio (PII, regex today), Evidently (drift), OPA / Rego (externalized policy), pandera / Great Expectations (data contracts).</div>
-    </div>
   </div>
 </div>
 
@@ -1136,7 +1138,8 @@ const CONTROLS = {
 const STAGES = [
   {n:'Ask',tag:'quiet'},{n:'Plan',tag:'quiet'},{n:'Access',tag:'quiet',mark:'4'},{n:'Generate',tag:'quiet'},
   {n:'Gate',tag:'caught',mark:'1 caught'},{n:'Execute',tag:'quiet'},{n:'Screen',tag:'fired',mark:'3 fired'},
-  {n:'Interpret',tag:'quiet'},{n:'Attest',tag:'quiet'}
+  {n:'Interpret',tag:'quiet'},{n:'Attest',tag:'quiet'},
+  {n:'Architecture',tag:'meta',mark:'overview',meta:true,glyph:'&#9638;'}
 ];
 const CAPS = [
   'Bind the request, choose data, purpose and question, and compute the tier.',
@@ -1147,7 +1150,8 @@ const CAPS = [
   'Run the cleared code under hard sandbox limits.',
   'Suppress small cells and test features for proxy bias.',
   'Narrate from screened numbers only, then check faithfulness.',
-  'Assemble the evidence pack and route it for independent sign-off.'
+  'Assemble the evidence pack and route it for independent sign-off.',
+  'Zoom out. The whole stack: off-the-shelf maths, and the controls we built.'
 ];
 
 /* buy the maths (off-the-shelf library) vs build the governance (controls), per stage */
@@ -1163,9 +1167,12 @@ const STAGE_ENGINE = [
   { buy: ['OpenLineage','Quarto','marimo'], build: ['CTL-SOD-01','CTL-LIN-01'] },
 ];
 function renderEngine(){
+  const bar = document.getElementById('enginebar');
+  if(current===10){ bar.style.display='none'; return; }
+  bar.style.display='';
   const e = STAGE_ENGINE[current-1];
   const buy = e.buy.length
-    ? e.buy.map(l=>`<span class="lib" onclick="openStack()" title="See the full stack"><span class="d"></span>${l}</span>`).join('')
+    ? e.buy.map(l=>`<span class="lib" onclick="transitionTo(10)" title="See the full stack"><span class="d"></span>${l}</span>`).join('')
     : '<span class="lib none">policy only, no external library</span>';
   const build = e.build.length
     ? e.build.map(id=>`<button class="ctl ${FIRED_NOW.has(id)?'pass':'armed'}" onclick="openCtl('${id}')"><span class="st"></span>${id.replace('CTL-','')}</button>`).join('')
@@ -1229,14 +1236,15 @@ function pickPersona(id){
 }
 
 /* ---------- stage transition ("Governing" / "Thinking") ---------- */
-const TRANS = ['Binding identity','Selecting a certified analysis','Scoping the data','Writing the analysis','Reading the code','Running the sandbox','Screening the result','Composing the narration','Sealing the evidence'];
+const TRANS = ['Binding identity','Selecting a certified analysis','Scoping the data','Writing the analysis','Reading the code','Running the sandbox','Screening the result','Composing the narration','Sealing the evidence','The full stack'];
 let pendingSub = null, transTimer = null;
 function transitionTo(n){
-  n = Math.max(1, Math.min(9, n));
+  n = Math.max(1, Math.min(10, n));
   const applySub = ()=>{ if(n===1) showSub(pendingSub || 1); pendingSub = null; };
   if(reduceMotion()){ showStage(n); applySub(); return; }
   const isLLM = (n===4 || n===8);
-  document.getElementById('trans-verb').textContent = isLLM ? 'Thinking' : 'Governing';
+  const verb = n===10 ? 'Zooming out' : (isLLM ? 'Thinking' : 'Governing');
+  document.getElementById('trans-verb').textContent = verb;
   document.getElementById('trans-msg').textContent = TRANS[n-1];
   document.getElementById('transition').classList.add('show');
   clearTimeout(transTimer);
@@ -1250,9 +1258,10 @@ function buildRail(){
   railEl.innerHTML = STAGES.map((s,i)=>{
     const idx=i+1;
     const tag = s.mark ? `<span class="tag ${s.tag}">${s.mark}</span>` : `<span class="tag quiet">&middot;</span>`;
-    return `<div class="step" data-idx="${idx}"><div class="connector"></div>
-      <button onclick="transitionTo(${idx})" aria-label="Go to stage ${idx}, ${s.n}">
-        <span class="node">${idx}</span><span class="lbl">${s.n}</span>${tag}
+    const aria = s.meta ? `Go to ${s.n} overview` : `Go to stage ${idx}, ${s.n}`;
+    return `<div class="step${s.meta?' meta':''}" data-idx="${idx}"><div class="connector"></div>
+      <button onclick="transitionTo(${idx})" aria-label="${aria}">
+        <span class="node" data-glyph="${s.glyph||''}">${s.glyph||idx}</span><span class="lbl">${s.n}</span>${tag}
       </button></div>`;
   }).join('');
 }
@@ -1260,7 +1269,7 @@ let currentSub = 1;
 const reduceMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 function showStage(n){
-  current = Math.max(1, Math.min(9, n));
+  current = Math.max(1, Math.min(10, n));
   document.querySelectorAll('.panel').forEach(p=>p.classList.remove('show'));
   document.getElementById('stage-'+current).classList.add('show');
   document.querySelectorAll('.step').forEach((el)=>{
@@ -1268,7 +1277,7 @@ function showStage(n){
     el.classList.toggle('done', idx < current);
     el.classList.toggle('active', idx === current);
     const node = el.querySelector('.node');
-    node.innerHTML = idx < current ? '&#10003;' : idx;
+    node.innerHTML = idx < current ? '&#10003;' : (node.dataset.glyph || idx);
   });
   updateNav();
   renderEngine();
@@ -1276,9 +1285,9 @@ function showStage(n){
 }
 function updateNav(){
   document.getElementById('backbtn').disabled = (current===1 && currentSub===1);
-  document.getElementById('nextbtn').disabled = (current===9);
-  document.getElementById('nextbtn').innerHTML = current===9 ? 'Done &#10003;' : 'Next &rarr;';
-  document.getElementById('stepcount').textContent = 'Stage '+current+' / 9';
+  document.getElementById('nextbtn').disabled = (current===10);
+  document.getElementById('nextbtn').innerHTML = current===10 ? 'Done &#10003;' : (current===9 ? 'Architecture &rarr;' : 'Next &rarr;');
+  document.getElementById('stepcount').textContent = current===10 ? 'Architecture' : ('Stage '+current+' / 9');
   let cap = CAPS[current-1];
   if(current===1){
     const subcap = ['choose and classify the dataset','select the purpose','pick a pre-built question'][currentSub-1];
@@ -1290,7 +1299,7 @@ function go(d){
   if(current===1 && d>0 && currentSub<3){ showSub(currentSub+1); return; }
   if(current===1 && d<0 && currentSub>1){ showSub(currentSub-1); return; }
   const target = current + d;
-  if(target<1 || target>9) return;
+  if(target<1 || target>10) return;
   pendingSub = (target===1) ? (d<0 ? 3 : 1) : null;
   transitionTo(target);
 }
@@ -1440,10 +1449,6 @@ function renderControls(){
 function openControls(){ renderControls(); document.getElementById('modal').classList.add('show'); }
 function closeControls(){ document.getElementById('modal').classList.remove('show'); }
 
-/* the stack: buy the maths, build the governance */
-function openStack(){ document.getElementById('stackmodal').classList.add('show'); }
-function closeStack(){ document.getElementById('stackmodal').classList.remove('show'); }
-
 /* theme */
 function updateThemeBtn(isDark){
   const b=document.getElementById('themebtn');
@@ -1470,8 +1475,8 @@ function buildAttested(){
 
 document.addEventListener('keydown',e=>{
   const drawerOpen=document.getElementById('drawer').classList.contains('show');
-  const modalOpen=document.getElementById('modal').classList.contains('show') || document.getElementById('stackmodal').classList.contains('show');
-  if(e.key==='Escape'){ closeDrawer(); closeControls(); closeStack(); }
+  const modalOpen=document.getElementById('modal').classList.contains('show');
+  if(e.key==='Escape'){ closeDrawer(); closeControls(); }
   if(e.key==='ArrowRight' && !drawerOpen && !modalOpen) go(1);
   if(e.key==='ArrowLeft' && !drawerOpen && !modalOpen) go(-1);
 });
