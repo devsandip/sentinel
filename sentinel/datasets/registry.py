@@ -165,14 +165,17 @@ DATASETS: list[DatasetSpec] = [
     DatasetSpec(
         id="synthetic_its",
         name="Semi-synthetic interrupted time series",
-        source_url="(generated) tfcausalimpact / labeled injected effect",
+        source_url="(generated) labeled injected effect",
         license="Apache-2.0 / MIT (generated)",
         commercial_ok=True,
-        rows=0,
+        rows=365,
         tables=1,
         provides=frozenset({CAP_TIMESERIES, CAP_TREATMENT}),
         column_roles={"date": ROLE_TIMESTAMP, "intervention": ROLE_TREATMENT},
-        notes="Known ground truth for causal-impact validation. Generated on demand.",
+        onboarded=True,
+        notes="Fully synthetic: a daily metric with a known +12 effect injected from "
+        "day 250. Ground truth is known, so it validates causal-impact analysis. The "
+        "only Public-class dataset, and the only legal home for the L3 sandbox.",
     ),
 ]
 

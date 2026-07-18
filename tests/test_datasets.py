@@ -93,6 +93,27 @@ def test_onboarded_datasets_load_with_declared_roles():
             assert col in df.columns, f"{did}: declared role column {col} missing"
 
 
+def test_synthetic_its_is_onboarded_with_a_known_effect():
+    from sentinel.datasets import available, get_dataset, load_frame
+
+    # The only Public-class dataset, generated fully synthetically, so it ships
+    # onboarded and is the legal home for the L3 sandbox.
+    assert available("synthetic_its")
+    spec = get_dataset("synthetic_its")
+    assert spec.onboarded is True
+    df = load_frame("synthetic_its")
+    assert len(df) == spec.rows == 365
+    assert set(df.columns) >= {"date", "intervention", "control", "metric"}
+    for col in spec.column_roles:
+        assert col in df.columns
+    # The injected effect is real and visible: the intervention lifts the metric
+    # above the control after it fires, and does not before.
+    post = df[df["intervention"] == 1]
+    pre = df[df["intervention"] == 0]
+    assert (post["metric"] - post["control"]).mean() > 8  # ~ +12 effect
+    assert abs((pre["metric"] - pre["control"]).mean()) < 3  # ~ 0 before
+
+
 def test_berka_relational_loads_with_fk_integrity():
     from sentinel.datasets import available, load_tables
 
