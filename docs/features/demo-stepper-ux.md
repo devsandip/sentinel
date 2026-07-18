@@ -301,3 +301,37 @@ The mockup is the fair-lending hero, fully clickable, with real hero-run numbers
 the design target and the interview demo prop. The Streamlit build wires the same screens
 to the live `GovernedRunResult`. Numbers in the mockup are the real ones from the current
 run, so the mockup and the built app should read identically on the hero path.
+
+## 9. Where the platform surfaces live (Datasets, Registry, Platform, Adoption)
+
+The stepper only depicts one govflow run. Prod exposes four more surfaces beside the run,
+today as a single `st.sidebar.radio` labelled "Section": **Datasets** (the 8-dataset
+registry), **Registry** (the model + agent + certification inventory), **Platform**
+(templates, playbooks, patterns), and **Adoption** (runs-per-week, promotion rate, agent
+utilization). They are not stages; they are the platform the run lives in. Three ways to
+incorporate them, all built and clickable in
+`docs/mockups/sentinel-platform-surfaces.html` (a chooser swaps between them):
+
+- **Option A, Platform shell.** The four surfaces become sidebar peers of the run, grouped
+  Workspace / Governance / Platform. Closest to what prod already is (a section radio),
+  just done as a real nav rail with the run as the hero section. Each surface gets a full
+  workspace. Cost: the money demo sits one nav click in.
+- **Option B, Contextual surfacing.** The run stays full-screen; each surface is a
+  slide-over drawer opened from the stage that consumes it, the dataset catalogue at
+  Access, the certification registry at Plan, plus a live adoption stat in the chrome.
+  Proves the surfaces are load-bearing (the catalogue *is* the Access input, the registry
+  *is* the Plan gate) rather than decorative pages. Cost: surfaces are shallow, and
+  Adoption has no natural full-screen home.
+- **Option C, Command center.** A dashboard landing after sign-in tiles the four surfaces
+  with live summary metrics (8 datasets by class, 3 analyses by cert status, 5 templates,
+  29 runs / 67% promoted) and a prominent "start a governed run" CTA. Gives Adoption and
+  Registry a real home and makes Sentinel read as a *platform* in three seconds. Cost:
+  adds a layer above the run.
+
+Recommendation: **C as the interview opener** (establish platform depth, then zoom into one
+run) sitting on top of **A's structure** (the surfaces still exist as full workspaces you
+can navigate to). B's contextual drawers are the strongest single-narrative device and can
+be layered onto either. All three reuse the same `render_*` surface bodies, so the choice
+is layout, not new data. The mockup data is real (from `datasets/registry.py`,
+`platform/registry.py`, `platform/certification.py`, `platform/adoption.py`); the
+adoption rates are seeded demo telemetry, labelled as such.
