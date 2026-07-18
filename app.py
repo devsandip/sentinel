@@ -24,8 +24,22 @@ from sentinel.analyses.spec import (
 from sentinel.datasets import all_datasets
 from sentinel.datasets import available as dataset_available
 from sentinel.gateway.model_gateway import ANTHROPIC, TEMPLATED, ModelGateway
-from sentinel.govflow import evaluate_purpose, matrix_rows, run_governed_analysis
+from sentinel.govflow import (
+    evaluate_purpose,
+    matrix_rows,
+    resolve_tier_for_dataset,
+    run_governed_analysis,
+)
 from sentinel.govflow.purpose_matrix import PURPOSE_LABEL, PURPOSES, SHOWPIECE
+from sentinel.govflow.tiers import (
+    ATT_CERTIFIED,
+    ATT_SANDBOX_WAIVER,
+    CLASSIFICATION_CEILING,
+    ROLE_COMPLIANCE,
+    ROLE_DATA_SCIENTIST,
+    ROLE_EXECUTIVE,
+    ROLE_MODEL_VALIDATOR,
+)
 from sentinel.harness.controls import CONTROL_CATALOG, ControlSettings, from_disabled
 from sentinel.harness.identity import all_personas, default_persona, get_persona
 from sentinel.harness.model_card import ModelCard, render_markdown, render_pdf
@@ -690,16 +704,16 @@ def render_govflow(persona) -> None:  # noqa: ANN001
     if matrix_tab_only:
         st.info("Pick a request and click Run to generate, gate, and screen an analysis.")
         st.divider()
-        _govflow_purpose_matrix()
+        _govflow_access_policy()
         return
 
     pub = st.session_state.get("govflow_result")
-    console_tab, gate_tab, evidence_tab, matrix_tab = st.tabs(
+    console_tab, gate_tab, evidence_tab, access_tab = st.tabs(
         [
             "Console",
             "Gate (pre-execution review)",
             "Evidence pack (leadership)",
-            "Purpose matrix (Access)",
+            "Access policy (purpose + tier)",
         ]
     )
     with console_tab:
@@ -708,8 +722,8 @@ def render_govflow(persona) -> None:  # noqa: ANN001
         _govflow_gate(pub)
     with evidence_tab:
         _govflow_evidence(pub)
-    with matrix_tab:
-        _govflow_purpose_matrix()
+    with access_tab:
+        _govflow_access_policy()
 
 
 def _govflow_console(pub: dict) -> None:
@@ -901,6 +915,64 @@ def _govflow_evidence(pub: dict) -> None:
                 "backend."
             )
             st.json(lineage)
+
+
+def _govflow_access_policy() -> None:
+    st.markdown(
+        "<span class='muted'>Access asks two questions before any code is written: "
+        "<b>why</b> (purpose limitation) and <b>how much rope</b> (autonomy tier). "
+        "Both are decided here, both are computed, not chosen.</span>",
+        unsafe_allow_html=True,
+    )
+    _govflow_purpose_matrix()
+    st.divider()
+    _govflow_tier_resolver()
+
+
+def _govflow_tier_resolver() -> None:
+    st.markdown("#### Autonomy tier: how much rope the model gets")
+    st.markdown(
+        "<span class='muted'>The tier is <b>computed, never chosen</b>: "
+        "<code>tier = min(ceiling(classification), ceiling(role, attestations))</code>. "
+        "Both ceilings bind, so a permissive dataset never elevates a person and a "
+        "trusted person never elevates a dataset. L0 explains, L1 fills typed params, "
+        "L2 writes fenced code, L3 writes in a broad sandbox.</span>",
+        unsafe_allow_html=True,
+    )
+
+    roles = {
+        ROLE_DATA_SCIENTIST: "data scientist",
+        ROLE_MODEL_VALIDATOR: "model validator",
+        ROLE_COMPLIANCE: "compliance officer",
+        ROLE_EXECUTIVE: "executive",
+    }
+    datasets = [r["dataset"] for r in matrix_rows()]
+    tc1, tc2, tc3 = st.columns(3)
+    ds = tc1.selectbox("Dataset", datasets, index=datasets.index("german_credit"), key="tier_ds")
+    role = tc2.selectbox(
+        "Role", list(roles), format_func=lambda r: roles[r], key="tier_role"
+    )
+    atts = tc3.multiselect(
+        "Attestations",
+        [ATT_CERTIFIED, ATT_SANDBOX_WAIVER],
+        default=[ATT_CERTIFIED],
+        key="tier_atts",
+    )
+    d = resolve_tier_for_dataset(ds, role, atts)
+    st.markdown(
+        f"<span class='ctrl-chip'>resolved {d.tier}</span> "
+        f"<span class='muted'>= min(classification {d.classification_ceiling}, "
+        f"person {d.person_ceiling})</span>",
+        unsafe_allow_html=True,
+    )
+    st.caption(d.rationale)
+    with st.expander("Ceiling by classification (PRD 4.6)"):
+        st.caption(
+            "Nothing public is worth stealing (L3); account-level data forbids "
+            "generated code entirely (L1)."
+        )
+        for cls, ceil in CLASSIFICATION_CEILING.items():
+            st.markdown(f"- **{cls}** &rarr; max `{ceil}`")
 
 
 def _govflow_purpose_matrix() -> None:

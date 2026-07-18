@@ -18,6 +18,11 @@ from .purpose_matrix import (
     evaluate_purpose,
     matrix_rows,
 )
+from .tiers import (
+    TierDecision,
+    resolve_tier,
+    resolve_tier_for_dataset,
+)
 
 __all__ = [
     "CTL_PURP_01",
@@ -25,7 +30,10 @@ __all__ = [
     "PURPOSE_MATRIX",
     "PurposeDecision",
     "StageRecord",
+    "TierDecision",
     "evaluate_purpose",
     "matrix_rows",
+    "resolve_tier",
+    "resolve_tier_for_dataset",
     "run_governed_analysis",
 ]
