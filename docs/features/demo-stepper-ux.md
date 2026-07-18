@@ -4,6 +4,11 @@ Feature branch doc. Foundational truth stays in [governed-codegen.md](governed-c
 and [PRODUCT_BRIEF.md](../../PRODUCT_BRIEF.md); this file is the plan for the UX rework
 requested in `docs/more_ideas.md`.
 
+**The visual design itself (tokens, layout, every component) is specified in
+[../ui-spec.md](../ui-spec.md), extracted from the mockup's CSS/markup so the look
+survives independent of the mockup file. This doc covers behavior and screen
+content; that doc covers what it's rendered as. Read both before building.**
+
 ## 0. The problem, in one line
 
 Sentinel has every control it claims, but the demo hides them. The governed run

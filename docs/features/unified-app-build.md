@@ -8,6 +8,9 @@ Registry and Adoption surfaces stop being empty-ish.
 Sources of truth, in order:
 - `docs/mockups/sentinel-stepper-mockup.html`: the pixel target for everything
   (login, dashboard, sidebar, run walkthrough, four surfaces, themes).
+- `docs/ui-spec.md`: the WRITTEN design-system spec extracted from that mockup —
+  every color token, layout rule, and component pattern in prose, independent of
+  the HTML file. S0 below is literally "implement this doc."
 - `docs/features/demo-stepper-ux.md`: the run-stepper spec (Sections 2-7: per-stage
   screens, the four additive flow fields, phasing v5.0-v5.4) and the shell decision
   record (Section 9.1, C-on-A). This doc turns 9.1 into a build plan and adds the
@@ -30,10 +33,11 @@ renderers (`render_platform` ~1158, `render_registry` ~1238, `render_datasets`
 
 ### S0. Design tokens + chrome (extends v5.0 in demo-stepper-ux.md)
 
-- Port the mockup's token system: `.streamlit/config.toml` theme for the base
-  (light + dark), plus one injected CSS block (a single `st.markdown` with
-  `unsafe_allow_html`) carrying the custom properties the mockup defines
-  (`--chrome-*`, `--code-*`, semantic ok/warn/danger, mono stack, radii).
+- Implement `docs/ui-spec.md` Sections 1-2 verbatim: `.streamlit/config.toml`
+  theme for the base (light + dark), plus one injected CSS block (a single
+  `st.markdown` with `unsafe_allow_html`) carrying every custom property in
+  ui-spec.md Section 1 (`--chrome-*`, `--code-*`, semantic ok/warn/danger, mono
+  stack, radii) and the shell grid in Section 2.
 - Hide Streamlit chrome (menu, footer, header) per v5.0.
 - Acceptance: side-by-side with the mockup, the topbar/canvas/cards read as the
   same design system in both themes.
