@@ -1,17 +1,22 @@
 # Sentinel — Journal Index
 
-Last refreshed: 2026-07-17 23:32
+Last refreshed: 2026-07-18 07:23
 
-Latest entry: [2026-07-17-2332-v2-and-v3-built-and-verified.md](entries/2026-07-17-2332-v2-and-v3-built-and-verified.md)
+Latest entry: [2026-07-18-0723-v0-v3-merged-and-shipped-to-prod.md](entries/2026-07-18-0723-v0-v3-merged-and-shipped-to-prod.md)
 
 ## Where we are now
 
-**v0, v1, v2, and v3 are built and verified. The platform claim and the oversight
-claim both run.**
+**v0 through v3 are merged to main and live in prod. The governed-codegen rethink
+is now the public artifact, not a branch.**
 
-v0 and v1 are on `feat/governed-codegen` (PR #1). v2 and v3 are on
-`feat/govcodegen-v2`, branched off it (PR #2, base `feat/governed-codegen`): nine
-commits, 251 tests green, ruff clean.
+Both PRs are merged: PR #1 (v0, v1) landed on main first, then PR #2 (v2, v3) was
+retargeted onto main and merged. main is at `4692c7c`; both feature branches are
+gone. 251 tests green, ruff clean. On 2026-07-18 prod was redeployed from `9dcd20b`
+to `4692c7c`: EB green, public health 200 over HTTPS, confirmed by the source bundle
+key `bundles/sentinel-20260718-071819.zip`, live-LLM narration still on. The deploy
+is additive, so https://sentinel.sandip.dev keeps the platform build and gains the
+governed code-generation console, the registry certification lifecycle, and the
+evidence pack.
 
 **v2, the platform claim.** The SQL half of the gate: `ctx.sql` parses with
 sqlglot, refuses an ungranted column / `SELECT *` / out-of-scope table
@@ -31,7 +36,7 @@ run actually did (the suppressed band, the flagged proxy). Signing it refuses a
 self-signoff (`CTL-SOD-01`). Provenance is also emitted as OpenLineage events at
 Access and Attest; the leadership doc exports as Quarto-ready markdown.
 
-All verified in the browser. Prod is untouched. Deliberately still out: the
+All verified in the browser, and now in prod. Deliberately still out: the
 DS-facing marimo notebook and the Quarto PDF render (secondary outputs), and all of
 v4 (breadth), which includes two forks held for Sandip: OPA externalisation (needs
 an external server, an open question in the PRD) and the L3 path (needs
@@ -173,6 +178,7 @@ out).
 
 ## Recent entries
 
+- [2026-07-18-0723-v0-v3-merged-and-shipped-to-prod.md](entries/2026-07-18-0723-v0-v3-merged-and-shipped-to-prod.md) : both PRs merged to main (PR #1 v0/v1, then PR #2 v2/v3 retargeted onto main), main at `4692c7c`, feature branches deleted, local main synced. Then deployed: prod moved from `9dcd20b` to `4692c7c`, EB green, health 200 over HTTPS, confirmed by source bundle key `bundles/sentinel-20260718-071819.zip`, live-LLM still on. The governed-codegen rethink is now the public artifact. Still out: marimo, Quarto-PDF, all of v4.
 - [2026-07-17-2332-v2-and-v3-built-and-verified.md](entries/2026-07-17-2332-v2-and-v3-built-and-verified.md) : v2 (platform) and v3 (oversight) built and verified in-browser on `feat/govcodegen-v2` (PR #2). ctx.sql + sqlglot gate on DuckDB, the certification lifecycle with the refused-agent demo, the scaffolding CLI, CTL-CONTRACT-01 pinned honestly; the Attest evidence pack with the negative statement, CTL-SOD-01 on signoff, and OpenLineage events. 251 tests. Deferred: marimo, Quarto-PDF, all of v4 (forks: OPA, L3/synthetic_its). Prod untouched.
 - [2026-07-17-2230-v1-slice-complete-and-verified.md](entries/2026-07-17-2230-v1-slice-complete-and-verified.md) : v1 is done and verified in the browser. Live code generation + the gateway repoint, the govflow orchestration (Ask to Interpret), the Console and Gate screens, and the seeded adversarial set. Webhook blocks at CTL-EGRESS-01 line 10; n=6 band suppressed before narration; proxy flagged. Gate true-block 100%, false-block 0%. 183 tests, PR #1, prod untouched.
 - [2026-07-17-2203-v0-shipped-v1-core-fairlearn-reversed.md](entries/2026-07-17-2203-v0-shipped-v1-core-fairlearn-reversed.md) : first code since the rethink. v0 (CTL-SOD-01) shipped; v1 deterministic core built (the ast gate, the Screen with CTL-DISC-02 + CTL-PROXY-01, the sandbox with CTL-TIME-01); fairlearn reinstated in ml/fairness.py. 164 tests, all on PR #1. Prod untouched.
