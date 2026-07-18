@@ -380,3 +380,28 @@ Append-only session handoff log. Newest entries at the bottom.
 **Decisions:**
 - Put the guard at deploy time rather than in CI because this repo has no CI. The deploy script is the last gate before prod, so it is the right place to make stale-`requirements.txt` unshippable.
 - Made `requirements.txt`'s header the single source of truth for which extras ship, instead of duplicating the flags in the script. This removes the one way the guard itself could rot.
+
+## 2026-07-18 (17:56) — shipped the two v3 secondary outputs and started v4 (Access policy)
+
+**Did:**
+- New branch `feat/govcodegen-v4` off main. Three commits, all pushed, no PR yet.
+- v3 secondary outputs (`88c9dab`): `sentinel/evidence/outputs.py`. `to_marimo_notebook` builds a real loadable `marimo.App` `.py` with the generated analysis as a reviewable `def analysis(ctx)` plus a governance-context markdown cell; validated to parse, with a byte-faithful string-constant fallback for multiline-literal code. `render_quarto` writes the `.qmd` and renders a PDF only where the `quarto` binary exists, honest fallback otherwise (the public instance has none). Both are downloads on the evidence pack. 11 tests.
+- v4 purpose matrix (`b087eee`): `sentinel/govflow/purpose_matrix.py`, the 8x6 matrix (PRD 4.4) + simulated classification (4.3), transcribed cell for cell. Wired into the flow's Access stage: a marketing request on german_credit refuses with `CTL-PURP-01` before any code is generated; a permitted-but-unwired purpose stops honestly without `CTL-PURP-01`. New "Access policy" tab + a request preset that drives the refusal. 19 tests.
+- v4 tier resolution (`8156f60`): `sentinel/govflow/tiers.py`. `resolve_tier = min(class ceiling, person ceiling)`, both binding, against the five PRD 4.6 worked examples. Demonstrated live in the Access tab (pick dataset/role/attestations, watch the tier resolve). 14 tests.
+- Verified all of it in the browser (main-checkout Streamlit on :8520): marketing request -> Access BLOCK + `CTL-PURP-01` + downstream skipped; benign -> completed with both evidence downloads present; the Access tab renders the matrix, the live purpose checker, and the live tier resolver.
+
+**State now:**
+- `feat/govcodegen-v4` at `8156f60`, three commits above `be8b7dd`, pushed and tracking. 293 tests pass (up from 251), ruff clean.
+- Prod is untouched: still v0-v3 on bundle `sentinel-20260718-073829.zip`. No deploy this session, none requested.
+- Build/edit/commit happened in the main checkout (`/Users/sandipdev/Developer/sentinel`), not the `continuing-work-938213` worktree, so the main checkout is on `feat/govcodegen-v4`. The worktree branch is still at `be8b7dd`.
+
+**Next:**
+- Open the PR for `feat/govcodegen-v4` (v3 outputs + v4 Access policy). Then decide the merge.
+- Deferred v4, Sandip's calls: OPA externalisation (external server), L3 (needs `synthetic_its` onboarded first), and the larger piece, rewiring the flow's frozen L2 to compute the tier from the live persona plus the L1/L3 execution routes.
+- Weekly summaries still due: W28 and W29 (W29 ends Sun 2026-07-19, tomorrow).
+
+**Decisions:**
+- Read "start v4" (Sandip picked it) as: build the two items that need no external infrastructure (purpose matrix, tier resolution) and defer the forks (OPA, L3) and the flow-rewrite with reasons, rather than half-build the L1 execution route.
+- Made the marimo notebook not auto-run the generated code: reaching data outside the fenced `ctx` would itself be ungoverned, which is the thing the platform refuses. The notebook is the reviewable record + governance context, not a re-execution.
+- Kept the Quarto render honest: produce the `.qmd` always, render the PDF only where the binary is present, never fabricate a PDF. Mirrors the project's stance that a control (or output) you cannot actually produce should be named, not faked.
+- Feature branch + PR for this work, not direct-to-main, because it is a feature (the deploy/docs chores went direct; features get a PR).

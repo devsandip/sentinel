@@ -1,10 +1,42 @@
 # Sentinel — Journal Index
 
-Last refreshed: 2026-07-18 07:50
+Last refreshed: 2026-07-18 17:56
 
-Latest entry: [2026-07-18-0750-prod-crashed-on-missing-deps-fixed.md](entries/2026-07-18-0750-prod-crashed-on-missing-deps-fixed.md)
+Latest entry: [2026-07-18-1756-v3-outputs-and-v4-access-policy.md](entries/2026-07-18-1756-v3-outputs-and-v4-access-policy.md)
 
 ## Where we are now
+
+**v0-v3 are in prod. v4 has started on a branch: the two v3 secondary outputs
+are shipped, and the first two v4 items (purpose matrix + tier resolution) are
+built and verified. Nothing new is deployed; prod is still v0-v3.**
+
+On 2026-07-18 (afternoon) a new branch `feat/govcodegen-v4` added three slices,
+all off main, all pushed, no PR yet. First, the two deferred v3 secondary
+outputs. The marimo notebook is a real loadable `marimo.App` in plain `.py`: the
+generated analysis as a reviewable `def analysis(ctx)` plus a markdown cell with
+the finding, provenance, controls, and negative statement. The Quarto path writes
+the `.qmd` and renders a PDF only where the `quarto` binary exists (the public
+instance has none, so it ships the source honestly). Both are downloads on the
+evidence pack. This makes the PRD's "three surfaces" claim true instead of
+aspirational.
+
+Then two v4 items. The purpose-by-dataset matrix is the showpiece: credit data
+for marketing is refused at Access with `CTL-PURP-01`, before any code is
+generated, because the reason is wrong, not the role. Transcribed cell for cell
+from PRD 4.4, classification labelled simulated, wired into the flow's Access
+stage (a permitted-but-unwired purpose stops honestly, without `CTL-PURP-01`).
+And autonomy tier resolution: `tier = min(ceiling(classification), ceiling(role,
+attestations))`, both ceilings binding, so a permissive dataset never elevates a
+person and a trusted person never elevates a dataset. Built as a tested unit
+against the five PRD worked examples and demonstrated live in the Access tab,
+which now shows both computations: why (purpose) and how much rope (tier). 293
+tests pass, ruff clean. Deferred with reasons: OPA (external server), L3 (needs
+`synthetic_its` onboarded), and rewiring the flow's frozen L2 + the L1/L3
+execution routes (the largest remaining v4 piece).
+
+Everything below is the prior state: v0-v3 in prod.
+
+---
 
 **v0 through v3 are merged to main and live in prod, verified by loading the site.
 The governed-codegen rethink is now the public artifact, not a branch.**
@@ -183,6 +215,7 @@ out).
 
 ## Recent entries
 
+- [2026-07-18-1756-v3-outputs-and-v4-access-policy.md](entries/2026-07-18-1756-v3-outputs-and-v4-access-policy.md) : on `feat/govcodegen-v4`, three slices. The two v3 secondary outputs: a real loadable marimo notebook (generated analysis as a reviewable `def analysis(ctx)` + governance context) and a Quarto `.qmd`/PDF render path (honest fallback where no `quarto` binary). Then two v4 items: the purpose-by-dataset matrix (`CTL-PURP-01` refuses credit-data-for-marketing at Access, wired into the flow) and autonomy tier resolution (`tier = min(class ceiling, person ceiling)`, both binding, demonstrated live in the Access tab). 293 tests, ruff clean. Pushed, no PR yet, prod untouched. Deferred: OPA, L3+synthetic_its, the frozen-L2 flow rewrite + L1/L3 execution routes.
 - [2026-07-18-0750-prod-crashed-on-missing-deps-fixed.md](entries/2026-07-18-0750-prod-crashed-on-missing-deps-fixed.md) : the first prod deploy crashed on import (`ModuleNotFoundError: sqlglot`); `requirements.txt` was a stale `uv export` missing `fairlearn`/`sqlglot`/`duckdb`/`openlineage-python`, and health 200 hid it because that endpoint answers before app.py runs. Regenerated `requirements.txt`, redeployed (`8aeccba`, bundle `sentinel-20260718-073829.zip`), and smoke-tested all three surfaces on the live instance: the full flow runs (Execute passes = sqlglot+DuckDB in prod), the evidence pack renders, and the registry's CTL-SOD-01 self-signoff refusal fires live. Lesson: a deploy is verified when a page renders, not when a probe returns 200.
 - [2026-07-18-0723-v0-v3-merged-and-shipped-to-prod.md](entries/2026-07-18-0723-v0-v3-merged-and-shipped-to-prod.md) : both PRs merged to main (PR #1 v0/v1, then PR #2 v2/v3 retargeted onto main), main at `4692c7c`, feature branches deleted, local main synced. Then deployed: prod moved from `9dcd20b` to `4692c7c`, EB green, health 200 over HTTPS, confirmed by source bundle key `bundles/sentinel-20260718-071819.zip`, live-LLM still on. The governed-codegen rethink is now the public artifact. Still out: marimo, Quarto-PDF, all of v4.
 - [2026-07-17-2332-v2-and-v3-built-and-verified.md](entries/2026-07-17-2332-v2-and-v3-built-and-verified.md) : v2 (platform) and v3 (oversight) built and verified in-browser on `feat/govcodegen-v2` (PR #2). ctx.sql + sqlglot gate on DuckDB, the certification lifecycle with the refused-agent demo, the scaffolding CLI, CTL-CONTRACT-01 pinned honestly; the Attest evidence pack with the negative statement, CTL-SOD-01 on signoff, and OpenLineage events. 251 tests. Deferred: marimo, Quarto-PDF, all of v4 (forks: OPA, L3/synthetic_its). Prod untouched.
