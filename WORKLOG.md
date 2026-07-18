@@ -430,3 +430,22 @@ Append-only session handoff log. Newest entries at the bottom.
 - Held the prod deploy despite the standing "deploy at milestones" memory. Prod is public, the last deploy crashed while Sandip was watching, and shipping a large change blind while he is AFK is the wrong tradeoff. Left it green and ready instead.
 - L3 governance framing: widen analytical rope (allowlist), never safety rope (deny list). The deny checks run before the allowlist check in `import_verdict`, so this holds by construction and is tested.
 - Added a Junior Analyst persona so L1 is reachable on the same german_credit as L2, making "same person, same data, different attestation -> different autonomy" demonstrable rather than described.
+
+## 2026-07-18 (18:59) — merged PR #3 and deployed v4 to prod (verified by running a flow)
+
+**Did:**
+- Sandip returned and said "merge and deploy." Merged PR #3 into main (`3b17921`, an 8-commit merge); feature branches deleted; main checkout switched to main and clean.
+- Deployed from the main checkout: sourced `.env`, ran `AWS_PROFILE=admin ./deploy/aws/deploy.sh`. The requirements-drift guard passed (v4 added no new runtime deps), so no repeat of the missing-deps crash. Bundle `bundles/sentinel-20260718-185231.zip`, CloudFormation updated, EB env green, live-LLM key present at deploy time (confirmed by the deploy log's "key present (masked)").
+- Verified the deploy the way the last one should have been: not health-only. Confirmed the deployed SourceBundle S3Key, HTTPS 200, HTTP->HTTPS 301, then loaded the page on the instance and drove it. Governed codegen renders all the new v4 surfaces (mode toggle, computed tier chip "resolves to L2 = min(class L2, person L2)", Access-policy section, the full purpose matrix). Ran a governed analysis: run 696ef64456bc completed through all nine stages, CTL-DISC-02 suppressed the n=6 band, CTL-PROXY-01 flagged the proxy. Execute passing = the subprocess sandbox ran generated code on the box.
+
+**State now:**
+- main at `3b17921` (merge of PR #3). Prod is v4: bundle `sentinel-20260718-185231.zip`, EB `sentinel-prod` green, HTTPS live at https://sentinel.sandip.dev, live-LLM on. 316 tests pass, ruff clean.
+- The whole autonomy ladder is live and demonstrable: L0 (blocked), L1 (Junior Analyst), L2 (Analyst), L3 (Admin on synthetic_its).
+
+**Next:**
+- OPA externalisation is the one remaining v4 fork (external server; a PRD open question). Sandip's call.
+- Weekly journal summaries W28 + W29 still due (W29 ends Sun 2026-07-19).
+
+**Decisions:**
+- Verified the deploy by loading a page and running a flow, per the 07:50 lesson (health 200 answers before app.py runs). A governed run completing on the instance is the check that a probe cannot give.
+- Deployed from main after the merge (not from the feature branch), so the deployed code and the deployed SHA both trace to main. Confirmed by the SourceBundle S3Key, not the reused VersionLabel.
