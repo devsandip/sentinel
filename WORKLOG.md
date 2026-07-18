@@ -469,3 +469,27 @@ Append-only session handoff log. Newest entries at the bottom.
 **Decisions:**
 - The mockup is the design target and interview prop; numbers in it are the real hero-run values so the built app reads identically. A few sample values are illustrative and labelled (individual credit_amount rows, the 0.17 rate on the suppressed band the code removes before use).
 - Fixed the CTL-PURP-01 placement toward the code (Access), not the PRD (Ask), because the code is the source of truth for where a control fires; the "bound at Ask, enforced at Access" framing keeps both readings honest.
+
+## 2026-07-18 (23:02) — the stepper mockup became the whole-app mockup; adversarial review + theme pass
+
+**Did:**
+- Promoted the "buy the maths, build the governance" Stack surface from a top-bar modal to a real tenth stop on the stepper rail (Architecture, after Attest), styled as an appendix (glyph node, dashed connector, "overview" tag, counter reads "Architecture" not "Stage 10 / 9"). Renamed the two engine-bar labels: "Buy the maths" -> "Framework & Tools used", "Build the governance" -> "Governance implemented".
+- Mapped the four prod surfaces beyond the run (Datasets, Registry, Platform, Adoption) from the code via an Explore agent, then built three genuinely different ways to fold them in as a comparison mockup `docs/mockups/sentinel-platform-surfaces.html`: A (sidebar peers), B (contextual drawers off the run), C (command-center dashboard landing). Sandip chose C on top of A with the tile dashboard as the landing.
+- Built the unified app into `docs/mockups/sentinel-stepper-mockup.html` (now the whole app, not just the stepper): faux persona login first -> command-center dashboard -> persistent left sidebar (Overview / Run / Datasets / Registry / Platform / Adoption) visible on every screen including the nine-stage run -> tiles and sidebar items open a surface across the full content area. All sidebar items always shown, no persona gating for now. All four surfaces populated with real prod data.
+- Ran a three-dimension adversarial review as a Workflow (data fidelity, interaction coverage, a11y/responsive) with an independent verify pass per major. Fixed all eleven confirmed majors: real repo mismatches in the surface data (retrieval-QA template pattern/tools/RBAC, two playbook patterns, three agent RBAC scopes, two dataset licenses); a run-replay bug (added resetRun so the Gate Fix-it and narration replay); grid blowout at narrow widths (minmax(0,1fr) tracks); missing persistent h1; four identical "Open" button names; login without a dialog role.
+- Theme pass Sandip asked for. Added theme-aware `--chrome-*` tokens so the topbar/sidebar/rail are light in light mode (they used the always-dark --rail tokens). Fixed invisible dark-mode Ask sub-step labels (.substep is a button; its text inherited default black). Made the "Start a governed run" CTA and the generated-code block theme-aware (added `--code-*` tokens for the syntax colors). Removed the mobile UI per Sandip: dropped every max-width media query, fixed desktop layout only.
+
+**State now:**
+- Branch `claude/nine-stages-explanation-6d5f5e`. All work committed and pushed. This session's commits: b0159ad (tenth stop), 387acfb (label rename), 2ab8c86 (three options), plus the unified-app build, 82ceac5 (theme-aware chrome + review fixes), 98aba34 (CTA/code theming + mobile removal).
+- Everything is a mockup. Nothing built into `app.py`, nothing deployed. Prod is unchanged (still v4).
+- The design is settled and fully clickable in both themes.
+
+**Next:**
+- Start building the mocked-up UI into the real Streamlit app (`app.py`): the login gate, the command-center home, the persistent sidebar shell, and the run walkthrough per `docs/features/demo-stepper-ux.md` (v5.0 chrome, v5.1 stepper shell, v5.2 flow fields).
+- Onboard the datasets that are only registered (uci_taiwan_credit, berka, ulb_fraud, hillstrom, lendingclub, uci_bank_marketing). Confirm the real onboarded/registered state first via `dataset_available` / `sentinel/datasets/registry.py` (the mockup shows only german_credit + synthetic_its onboarded, but the 2026-07-14 entry says ulb_fraud/lendingclub were onboarded).
+- Pre-run and seed at least two analyses per dataset (five if feasible) so Adoption and the Registry carry real history instead of the seeded W26-W28 telemetry.
+
+**Decisions:**
+- The direction is C-on-A: the command-center dashboard is the landing, the sidebar shell is the skeleton, the run is one view inside it. B's contextual drawers are the strongest single-narrative device but are not in the built app; they can be layered on later.
+- `sentinel-stepper-mockup.html` is now the canonical unified-app mockup (kept the filename to avoid breaking links); `sentinel-platform-surfaces.html` stays as the A/B/C exploration record.
+- Chrome, CTA, and code block follow the theme; the login overlay and nothing else stays deliberately dark in both themes. No mobile UI: this is a desktop demo.

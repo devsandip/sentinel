@@ -1,24 +1,33 @@
 # Sentinel — Journal Index
 
-Last refreshed: 2026-07-18 20:45
+Last refreshed: 2026-07-18 23:02
 
-Latest entry: [2026-07-18-2045-demo-stepper-ux-plan-and-mockup.md](entries/2026-07-18-2045-demo-stepper-ux-plan-and-mockup.md)
+Latest entry: [2026-07-18-2302-unified-app-mockup-and-theme-pass.md](entries/2026-07-18-2302-unified-app-mockup-and-theme-pass.md)
 
 ## Where we are now
 
-**A demo-stepper UX rework is planned and mocked, not built. Prod is unchanged
-(still v4).** Sandip's read: the demo hides its own governance. The nine stages
-compute behind one spinner and flash by as a static ribbon, so an interviewer
-never watches a control fire, and the UI reads like an internal tool. The plan
-(`docs/features/demo-stepper-ux.md`) turns the nine stages into an explicit
-steppable walkthrough where each stage is a screen, every control that fires is
-clickable and explained, and the header chips become a live control panel. The
-clickable design target is `docs/mockups/sentinel-stepper-mockup.html`, all nine
-stages on the real hero numbers, light and dark. Grounding the mockup in the code
-also surfaced and fixed two doc/code inconsistencies (CTL-PURP-01 placed at Ask in
-the PRD but enforced at Access in code; a stale cohort-retention validator comment
-in `certification.py`). 316 tests pass, ruff clean. Next: build v5.0 (chrome +
-design system) and v5.1 (stepper shell).
+**The whole app is designed and fully mocked, reviewed, and theme-polished. Nothing
+is built into `app.py` yet. Prod is unchanged (still v4).** The mockup at
+`docs/mockups/sentinel-stepper-mockup.html` is no longer just the stepper; it is the
+unified app: a faux persona login, then a command-center dashboard landing, then a
+persistent left sidebar (Overview / Run / Datasets / Registry / Platform / Adoption)
+that stays visible on every screen including the nine-stage governed run. Tiles and
+sidebar items open a surface across the full content area; all sidebar items show
+regardless of persona for now. The direction is Sandip's call: C (command center) on
+top of A (sidebar shell), from the three incorporation options explored in
+`docs/mockups/sentinel-platform-surfaces.html`. The Stack surface is now a tenth rail
+stop (Architecture); the engine-bar labels read "Framework & Tools used" and
+"Governance implemented". A three-dimension adversarial review (data fidelity,
+interaction, a11y/responsive) found eleven majors, all fixed. The theme is clean in
+both light and dark (chrome, CTA, and the code block are all theme-aware now), and
+the mobile UI was removed per Sandip: fixed desktop layout only.
+
+Next session, three things: (1) start building this into the real Streamlit app;
+(2) onboard the datasets that are only registered (uci_taiwan_credit, berka,
+ulb_fraud, hillstrom, lendingclub, uci_bank_marketing); (3) pre-run and seed at least
+two analyses per dataset, five if feasible, so Adoption and the Registry carry real
+history. Standing instruction from Sandip: compact aggressively (`/compact`) once the
+token count passes 500k.
 
 Everything below is the prior state: v4 in prod.
 
@@ -261,6 +270,7 @@ out).
 
 ## Recent entries
 
+- [2026-07-18-2302-unified-app-mockup-and-theme-pass.md](entries/2026-07-18-2302-unified-app-mockup-and-theme-pass.md) : the stepper mockup became a mockup of the whole app. Promoted the Stack surface to a tenth rail stop (Architecture); renamed the engine-bar labels (Framework & Tools used / Governance implemented); explored three ways to fold in the four platform surfaces (`sentinel-platform-surfaces.html`, options A/B/C); Sandip chose C-on-A, so built the unified app into `sentinel-stepper-mockup.html` (login -> command-center dashboard -> persistent sidebar -> run + four surfaces, all sidebar items always shown). Ran a three-dimension adversarial review workflow (data fidelity, interaction, a11y/responsive), fixed all eleven confirmed majors (surface-data mismatches vs the repo, a run-replay resetRun, minmax(0,1fr) grid, h1/aria). Then a theme pass: theme-aware --chrome-* and --code-* tokens so the topbar/sidebar/rail, the CTA banner, and the code block are light in light mode; fixed invisible dark-mode substep text; removed the mobile UI per Sandip. Still a mockup, nothing built, prod unchanged.
 - [2026-07-18-2045-demo-stepper-ux-plan-and-mockup.md](entries/2026-07-18-2045-demo-stepper-ux-plan-and-mockup.md) : plan + clickable mockup for a show-and-tell rework of the nine-stage governed run (Sandip's note: the demo hides its own governance). Stepper becomes the primary surface, chips become a live control panel, run computes once and reveals per stage; six of nine stages already carry their data, only Ask/Plan/Access need additive fields. Mockup at `docs/mockups/sentinel-stepper-mockup.html` (all nine stages, real hero numbers, light+dark, control drawer, Screen suppression, Gate Fix-it, admin toggle that un-suppresses the n=6 band). Reviewed by three adversarial critics; fact-check caught invented details (now fixed) and two genuine repo inconsistencies (CTL-PURP-01 Ask->Access in the PRD; stale cohort-retention comment in certification.py). 316 tests, ruff clean. Nothing built into the app, nothing deployed.
 - [2026-07-18-1859-v4-merged-and-deployed-to-prod.md](entries/2026-07-18-1859-v4-merged-and-deployed-to-prod.md) : Sandip said merge and deploy. PR #3 merged to main (`3b17921`); deployed bundle `sentinel-20260718-185231.zip`, EB green, live-LLM on, no drift/missing-deps. Verified the right way this time: loaded the page and ran a flow on the instance. The Governed codegen surface renders all the new v4 pieces (mode toggle, computed tier chip, purpose matrix), and run 696ef64456bc completed through all nine stages (Execute passing = the sandbox ran generated code in prod). prod is v4.
 - [2026-07-18-1844-autonomy-ladder-complete-l0-to-l3.md](entries/2026-07-18-1844-autonomy-ladder-complete-l0-to-l3.md) : finished the buildable v4 (Sandip AFK, said "finish everything"). The flow computes the tier from the persona and routes: L2 codegen (analyst), L1 certified-analysis+params (junior, no code), L0 blocked (second line). Onboarded synthetic_its (fully synthetic, known +12 effect) and built the L3 broad-sandbox route: wide allowlist, same egress/fs/dyncode deny lists (more rope, same hard limits); benign DiD recovers +11.9, three adversarial requests refused. govflow mode toggle so the tier recomputes per dataset. 316 tests. Deferred: OPA (external server). Not deployed; prod still v0-v3.
@@ -306,7 +316,7 @@ None yet. Week 2026-W28 (through Sun 2026-07-12) has entries but no summary.
 - Where does drift monitoring live? Evidently is on the dependency map with no stage in the lifecycle.
 - Should linear analysis runs feed the adoption metrics and model registry? (The execution-routing half of this is decided; see ruled out.)
 - Retrieval ranking: the SR 11-7 query ranks the internal modeling standard above the SR 11-7 document itself (SR 11-7 chunks still return at ranks 2-3). Worth a later look at chunking or reranking.
-- `synthetic_its` is registered but has no onboarder, so no local data exists. It is the only Public-class dataset, which makes it the only place L3 could legally run. L3 currently has nowhere to live.
+- ~~`synthetic_its` is registered but has no onboarder~~ (resolved in v4: onboarded, generated with a known +12 effect, and L3 runs on it). Open follow-on: most datasets are still only registered, not onboarded. The mockup shows german_credit and synthetic_its as onboarded and the other six as registered, while the 2026-07-14 entry says ulb_fraud and lendingclub were onboarded via no-account sources. Next session should confirm the real state (`dataset_available` / `sentinel/datasets/registry.py`) before onboarding the rest.
 - Demo GIF/Loom for the README: dropped for now per Sandip (2026-07-14).
 
 ## Things ruled out
