@@ -15,20 +15,31 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from typing import Any
 
 import pandas as pd
 
 from ..codegen.gate import GateResult
 from ..codegen.generate import CodeGenRequest, GenerationOutcome, generate_and_gate
+from ..datasets.fingerprint import FingerprintError, dataset_sha, live_contract_check
 from ..disclosure import ScreenResult, screen
+from ..evidence import EvidencePack, build_evidence_pack
 from ..gateway.model_gateway import TEMPLATED, ModelGateway
 from ..harness.audit import LEVEL_BLOCKED, LEVEL_GATE, AuditLog
 from ..harness.identity import Persona, default_persona, policy_version
+from ..lineage import run_lineage_events
+from ..platform.certification import (
+    CTL_CONTRACT_01,
+    evaluate,
+    get_entry,
+    plan_visible_entries,
+)
 from ..sandbox import ExecutionResult, run_sandboxed
 from .access import (
     DATASET_ID,
     FAIR_LENDING_GRANT,
+    FAIR_LENDING_ROW_FILTER,
     PROTECTED_ATTRIBUTE,
     PROXY_CANDIDATES,
     build_scoped_table,
@@ -36,6 +47,9 @@ from .access import (
 
 TIER_L2 = "L2"
 PURPOSE = "fair_lending_review"
+# The certified agent Plan binds for this purpose. Only certified agents are
+# visible to Plan (section 11), so if this is not certified the flow refuses.
+PLAN_AGENT_ID = "fair-lending"
 
 STATUS_COMPLETED = "completed"
 STATUS_BLOCKED = "blocked_at_gate"
@@ -43,7 +57,9 @@ STATUS_ERROR = "error"
 
 CTL_EVAL_01 = "CTL-EVAL-01"
 
-STAGES = ["Ask", "Access", "Generate", "Gate", "Execute", "Screen", "Interpret"]
+STAGES = [
+    "Ask", "Plan", "Access", "Generate", "Gate", "Execute", "Screen", "Interpret", "Attest",
+]
 
 
 @dataclass
@@ -72,12 +88,15 @@ class GovernedRunResult:
     purpose: str
     status: str
     stages: list[StageRecord]
+    plan_agent: str = ""
     generated_code: str = ""
     gate: GateResult | None = None
     generation: GenerationOutcome | None = None
     execution: ExecutionResult | None = None
     screen: ScreenResult | None = None
     narration: str = ""
+    evidence: EvidencePack | None = None
+    lineage: list[dict] = field(default_factory=list)
     controls_fired: list[str] = field(default_factory=list)
     audit: list[dict] = field(default_factory=list)
 
@@ -90,6 +109,7 @@ class GovernedRunResult:
             "dataset": self.dataset,
             "purpose": self.purpose,
             "status": self.status,
+            "plan_agent": self.plan_agent,
             "stages": [s.to_dict() for s in self.stages],
             "generated_code": self.generated_code,
             "gate": {
@@ -109,6 +129,8 @@ class GovernedRunResult:
                 self.screen.screened.to_dict(orient="records") if self.screen else []
             ),
             "narration": self.narration,
+            "evidence": self.evidence.to_public_dict() if self.evidence else None,
+            "lineage": self.lineage,
             "controls_fired": self.controls_fired,
             "audit": self.audit,
         }
@@ -203,12 +225,15 @@ def run_governed_analysis(
             purpose=PURPOSE,
             status=status,
             stages=stages,
+            plan_agent=plan_agent,
             generated_code=outcome.code if outcome else "",
             gate=outcome.gate if outcome else None,
             generation=outcome,
             execution=execution,
             screen=scr,
             narration=narration,
+            evidence=evidence,
+            lineage=lineage,
             controls_fired=_dedupe(controls),
             audit=audit.as_dicts(),
         )
@@ -217,6 +242,10 @@ def run_governed_analysis(
     execution: ExecutionResult | None = None
     scr: ScreenResult | None = None
     narration = ""
+    plan_agent = ""
+    evidence: EvidencePack | None = None
+    lineage: list[dict] = []
+    started_at = datetime.now(UTC).isoformat()
 
     # Stage 1: Ask -- bind identity, freeze the tier, classify.
     audit.record(
@@ -231,6 +260,70 @@ def run_governed_analysis(
             "Ask",
             "ok",
             detail=f"purpose={PURPOSE}, tier={TIER_L2} (frozen), persona={persona.name}",
+        )
+    )
+
+    # Stage 2: Plan -- select a certified agent; only certified agents are visible
+    # to Plan, so an uncertified analysis cannot silently reach a user.
+    visible = {e.id: e for e in plan_visible_entries()}
+    selected = visible.get(PLAN_AGENT_ID)
+    if selected is None:
+        entry = get_entry(PLAN_AGENT_ID)
+        if entry is not None:
+            decision = evaluate(entry)
+            plan_controls = [g.control for g in decision.blocking if g.control]
+            controls += plan_controls
+            detail = (
+                f"agent {PLAN_AGENT_ID} is {decision.status}; only certified agents "
+                f"are visible to Plan"
+            )
+        else:
+            plan_controls = []
+            detail = f"no agent {PLAN_AGENT_ID!r} in the registry"
+        audit.record(
+            agent="govflow",
+            action="plan_block",
+            level=LEVEL_BLOCKED,
+            actor=persona.id,
+            output_summary=detail,
+        )
+        stages.append(StageRecord("Plan", "blocked", controls=plan_controls, detail=detail))
+        for s in ("Access", "Generate", "Gate", "Execute", "Screen", "Interpret", "Attest"):
+            stages.append(StageRecord(s, "skipped", detail="no certified agent to plan"))
+        return finish(STATUS_BLOCKED)
+
+    # The certification binds a dataset SHA; check for drift before running
+    # (CTL-CONTRACT-01). On static data there is no drift, so this passes pinned.
+    contract = live_contract_check(selected)
+    if contract.drifted:
+        controls.append(CTL_CONTRACT_01)
+        audit.record(
+            agent="govflow",
+            action="plan_block",
+            level=LEVEL_BLOCKED,
+            actor=persona.id,
+            output_summary=contract.detail,
+            extra={"control": CTL_CONTRACT_01},
+        )
+        stages.append(
+            StageRecord("Plan", "blocked", controls=[CTL_CONTRACT_01], detail=contract.detail)
+        )
+        for s in ("Access", "Generate", "Gate", "Execute", "Screen", "Interpret", "Attest"):
+            stages.append(StageRecord(s, "skipped", detail="data contract drifted"))
+        return finish(STATUS_BLOCKED)
+
+    plan_agent = selected.label()
+    audit.record(
+        agent="govflow",
+        action="plan",
+        actor=persona.id,
+        output_summary=f"bound {plan_agent} (certified); contract {contract.detail}",
+    )
+    stages.append(
+        StageRecord(
+            "Plan",
+            "ok",
+            detail=f"bound {plan_agent} (certified); contract pinned, no drift",
         )
     )
 
@@ -255,6 +348,7 @@ def run_governed_analysis(
         protected_attribute=PROTECTED_ATTRIBUTE,
         analysis=PURPOSE,
         intent=intent,
+        allowed_tables=[DATASET_ID],
     )
     outcome = generate_and_gate(request, gateway, max_attempts=max_attempts)
     stages.append(
@@ -285,7 +379,7 @@ def run_governed_analysis(
                 detail=outcome.gate.refusal_summary(),
             )
         )
-        for s in ("Execute", "Screen", "Interpret"):
+        for s in ("Execute", "Screen", "Interpret", "Attest"):
             stages.append(StageRecord(s, "skipped", detail="upstream gate block"))
         return finish(STATUS_BLOCKED)
 
@@ -297,9 +391,14 @@ def run_governed_analysis(
     )
     stages.append(StageRecord("Gate", "ok", detail="no violations; cleared for execution"))
 
-    # Stage 6: Execute in the sandbox.
+    # Stage 6: Execute in the sandbox. The grant and row filter back ctx.sql: the
+    # runtime backstop for columns, and the injected identity filter.
     execution = run_sandboxed(
-        outcome.code, tables={DATASET_ID: scoped}, wall_clock_s=15
+        outcome.code,
+        tables={DATASET_ID: scoped},
+        granted_columns=FAIR_LENDING_GRANT,
+        row_filter_sql=FAIR_LENDING_ROW_FILTER,
+        wall_clock_s=15,
     )
     if not execution.ok:
         ctl = [execution.control] if execution.control else []
@@ -316,7 +415,7 @@ def run_governed_analysis(
                 "Execute", "error", controls=ctl, detail=execution.error or "failed"
             )
         )
-        for s in ("Screen", "Interpret"):
+        for s in ("Screen", "Interpret", "Attest"):
             stages.append(StageRecord(s, "skipped", detail="execution failed"))
         return finish(STATUS_ERROR)
 
@@ -335,7 +434,7 @@ def run_governed_analysis(
                 detail="emitted result must be a DataFrame with an 'n' count column",
             )
         )
-        for s in ("Screen", "Interpret"):
+        for s in ("Screen", "Interpret", "Attest"):
             stages.append(StageRecord(s, "skipped", detail="unusable result shape"))
         return finish(STATUS_ERROR)
 
@@ -406,6 +505,60 @@ def run_governed_analysis(
             "ok" if faithful else "blocked",
             controls=eval_controls,
             detail=why,
+        )
+    )
+
+    # Stage 9: Attest -- assemble the evidence pack. It ships pending: signing it
+    # requires an approver who is not the author (CTL-SOD-01). Its differentiator
+    # is the negative statement, built from what this run actually did.
+    try:
+        ds_sha = dataset_sha(DATASET_ID)
+    except FingerprintError:
+        ds_sha = None
+    attested = _dedupe(
+        controls + [CTL_CONTRACT_01, "CTL-TIME-01"] + ([CTL_EVAL_01] if faithful else [])
+    )
+    evidence = build_evidence_pack(
+        run_id=run_id,
+        analysis=plan_agent,
+        dataset=DATASET_ID,
+        dataset_sha=ds_sha,
+        tier=TIER_L2,
+        purpose=PURPOSE,
+        author=persona.id,
+        code=outcome.code,
+        screened=scr.screened,
+        controls_attested=attested,
+        suppressed=scr.suppressed,
+        proxy_flags=scr.proxy_flags,
+        cell_floor=cell_floor,
+    )
+    # Emit the provenance chain as OpenLineage events: a START at Access and a
+    # COMPLETE at Attest, the input dataset bound to its contract SHA.
+    lineage = run_lineage_events(
+        run_id=run_id,
+        purpose=PURPOSE,
+        dataset=DATASET_ID,
+        dataset_sha=ds_sha,
+        finding=evidence.finding,
+        started_at=started_at,
+        completed_at=datetime.now(UTC).isoformat(),
+    )
+    audit.record(
+        agent="attest",
+        action="evidence_pack",
+        actor=persona.id,
+        output_summary=(
+            f"evidence pack assembled (pending signoff); "
+            f"{len(evidence.negative_statement)} negative-statement clause(s); "
+            f"{len(lineage)} OpenLineage event(s) emitted"
+        ),
+    )
+    stages.append(
+        StageRecord(
+            "Attest",
+            "ok",
+            detail="evidence pack assembled; pending independent signoff (CTL-SOD-01)",
         )
     )
 

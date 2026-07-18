@@ -9,9 +9,12 @@ Modules:
   allowlist -- the L2 import allowlist and the denied-module -> control mapping.
   gate      -- the `ast` walker that refuses code before execution, naming the
                control and the line (CTL-CODE-01..04, CTL-EGRESS-01, CTL-COL-01).
+  sql_gate  -- the sqlglot half: gates and rewrites the SQL passed to ctx.sql
+               (CTL-COL-01, CTL-PURP-01, CTL-COMPLEX-01), injecting the row filter.
 
-`ctx.sql` and its sqlglot gate are deferred to v2; v1 fences the DataFrame API
-only (`ctx.table`, `ctx.param`, `ctx.emit`).
+The gate runs both parsers (section 5, Stage 5): `ast` reads the Python, sqlglot
+reads the SQL. `ctx.sql` (v2) parses, gates, rewrites, and runs the query on
+DuckDB over the scoped tables.
 """
 
 from __future__ import annotations
@@ -23,13 +26,19 @@ from .generate import (
     generate,
     generate_and_gate,
 )
+from .sql_gate import SqlGateError, SqlGateResult, SqlViolation, gate_sql, rewrite_sql
 
 __all__ = [
     "CodeGenRequest",
     "GateResult",
     "GenerationOutcome",
+    "SqlGateError",
+    "SqlGateResult",
+    "SqlViolation",
     "Violation",
     "gate_code",
+    "gate_sql",
     "generate",
     "generate_and_gate",
+    "rewrite_sql",
 ]

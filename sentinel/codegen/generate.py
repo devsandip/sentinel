@@ -29,6 +29,10 @@ INTENT_FAIR_LENDING = "fair_lending"
 INTENT_EXFILTRATE = "exfiltrate"
 INTENT_FILE_WRITE = "file_write"
 INTENT_DYNAMIC = "dynamic"
+# The SQL path (v2): the same fair-lending analysis written as ctx.sql, and a
+# SELECT * that the sqlglot half of the gate refuses.
+INTENT_FAIR_LENDING_SQL = "fair_lending_sql"
+INTENT_SQL_STAR = "sql_star"
 
 _FAIR_LENDING_CODE = '''\
 import fairlearn.metrics as flm
@@ -85,11 +89,26 @@ mf = flm.MetricFrame(
 ctx.emit(mf.by_group.reset_index().rename(columns={"age_band": "band"}))
 '''
 
+_FAIR_LENDING_SQL_CODE = '''\
+df = ctx.sql(
+    "SELECT age_band AS band, AVG(pred) AS selection_rate, COUNT(*) AS n "
+    "FROM german_credit GROUP BY age_band"
+)
+ctx.emit(df)
+'''
+
+_SQL_STAR_CODE = '''\
+df = ctx.sql("SELECT * FROM german_credit")
+ctx.emit(df)
+'''
+
 _TEMPLATED_CODE: dict[str, str] = {
     INTENT_FAIR_LENDING: _FAIR_LENDING_CODE,
     INTENT_EXFILTRATE: _EXFILTRATE_CODE,
     INTENT_FILE_WRITE: _FILE_WRITE_CODE,
     INTENT_DYNAMIC: _DYNAMIC_CODE,
+    INTENT_FAIR_LENDING_SQL: _FAIR_LENDING_SQL_CODE,
+    INTENT_SQL_STAR: _SQL_STAR_CODE,
 }
 
 
@@ -106,6 +125,11 @@ class CodeGenRequest:
     analysis: str = "fair_lending_selection_rate"
     # Scripted-mode selector; ignored in live mode.
     intent: str = INTENT_FAIR_LENDING
+    # Tables the SQL half of the gate allows (CTL-PURP-01). None derives {table}.
+    allowed_tables: list[str] | None = None
+
+    def tables_in_scope(self) -> list[str]:
+        return self.allowed_tables if self.allowed_tables is not None else [self.table]
 
 
 @dataclass
@@ -184,7 +208,11 @@ def generate_and_gate(
         tokens += cg.tokens
         cost += cg.cost_usd
         live = live or cg.live
-        result = gate_code(cg.code, granted_columns=request.granted_columns)
+        result = gate_code(
+            cg.code,
+            granted_columns=request.granted_columns,
+            allowed_tables=request.tables_in_scope(),
+        )
         attempts.append(
             GenerationAttempt(attempt=i, code=cg.code, gate=result, codegen=cg)
         )

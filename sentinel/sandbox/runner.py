@@ -44,7 +44,12 @@ def _try_setrlimit(resource_mod: Any, which: int, limit: int) -> None:
 
 
 def _run(job: dict[str, Any]) -> dict[str, Any]:
-    ctx = Ctx(tables=job.get("tables") or {}, params=job.get("params") or {})
+    ctx = Ctx(
+        tables=job.get("tables") or {},
+        params=job.get("params") or {},
+        granted_columns=job.get("granted_columns"),
+        row_filter_sql=job.get("row_filter_sql") or "",
+    )
     # Imports in the generated code need real builtins (e.g. __import__ to load
     # pandas); the gate, not a stripped namespace, is what refuses dangerous
     # imports. The sandbox only isolates and caps.
