@@ -449,3 +449,23 @@ Append-only session handoff log. Newest entries at the bottom.
 **Decisions:**
 - Verified the deploy by loading a page and running a flow, per the 07:50 lesson (health 200 answers before app.py runs). A governed run completing on the instance is the check that a probe cannot give.
 - Deployed from main after the merge (not from the feature branch), so the deployed code and the deployed SHA both trace to main. Confirmed by the SourceBundle S3Key, not the reused VersionLabel.
+
+## 2026-07-18 (20:45) — demo-stepper UX plan + clickable mockup; fixed two repo inconsistencies
+
+**Did:**
+- Sandip pointed me at `docs/more_ideas.md`: the demo hides its own governance, the nine stages compute behind one spinner and flash by, and the UI reads like an internal tool. Wrote the plan at `docs/features/demo-stepper-ux.md`: the stepper becomes the primary govflow surface, the six vanity header chips become a live control panel, and the run computes once and reveals per stage. A fan-out read of the codebase established that six of nine stages already carry their data; only Ask/Plan/Access discard what the new screens need (tier computation, contract SHAs, scoped table + denied columns). Phased v5.0-v5.4.
+- Built a self-contained clickable mockup at `docs/mockups/sentinel-stepper-mockup.html`: all nine stages on the real hero numbers, a midnight command frame + shield wordmark, the nine-stage rail as the hero, a control drill-down drawer, denied columns struck and masked at Access, before/after with the struck 71-75 band at Screen, the real proxy bars, a working Gate Fix-it loop, scripted/live Interpret, and an admin toggle that turns CTL-DISC-02 off so the n=6 band survives on Screen. Light and dark. Verified in the browser: no console errors, no horizontal overflow, interactions work.
+- Ran it through three adversarial critics (facts vs code, coverage vs brief, design). Fixed everything actionable: a team shown as certification owner (violates owner-is-person), fabricated proxy eta values, invented personnel names, an attested chain listing 13 of 18, an overstated row-filter claim, plus accessibility (drawer focus, AA contrast, keyboard guards, reduced-motion). Built the two coverage majors it flagged: the Plan params form and an operable control toggle.
+- Fixed two genuine repo inconsistencies the fact-check surfaced. The PRD placed CTL-PURP-01 at Ask while the code enforces it at Access: moved it to Access in the Stage 1 note, the Stage 3 controls, and the catalogue (framed as bound-at-Ask, enforced-at-Access). And the cohort-retention seed comment in `certification.py` described self-validation when the entry has validator=None: corrected to "no independent validator assigned." 316 tests pass, ruff clean.
+
+**State now:**
+- Branch `claude/nine-stages-explanation-6d5f5e`. Uncommitted: two new files (the plan, the mockup) and two edits (`governed-codegen.md`, `certification.py`). Journal entry + INDEX updated.
+- Nothing built into the app, nothing deployed. Prod is unchanged (still v4).
+
+**Next:**
+- Build v5.0 (chrome + design system) and v5.1 (stepper shell) from the plan; the mockup is the design target.
+- The three flow changes the plan calls for (attach `TierDecision` at Ask, `ContractCheck` at Plan, scoped table + denied columns at Access) are the load-bearing v5.2 work.
+
+**Decisions:**
+- The mockup is the design target and interview prop; numbers in it are the real hero-run values so the built app reads identically. A few sample values are illustrative and labelled (individual credit_amount rows, the 0.17 rate on the suppressed band the code removes before use).
+- Fixed the CTL-PURP-01 placement toward the code (Access), not the PRD (Ask), because the code is the source of truth for where a control fires; the "bound at Ask, enforced at Access" framing keeps both readings honest.

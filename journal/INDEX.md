@@ -1,10 +1,28 @@
 # Sentinel — Journal Index
 
-Last refreshed: 2026-07-18 18:59
+Last refreshed: 2026-07-18 20:45
 
-Latest entry: [2026-07-18-1859-v4-merged-and-deployed-to-prod.md](entries/2026-07-18-1859-v4-merged-and-deployed-to-prod.md)
+Latest entry: [2026-07-18-2045-demo-stepper-ux-plan-and-mockup.md](entries/2026-07-18-2045-demo-stepper-ux-plan-and-mockup.md)
 
 ## Where we are now
+
+**A demo-stepper UX rework is planned and mocked, not built. Prod is unchanged
+(still v4).** Sandip's read: the demo hides its own governance. The nine stages
+compute behind one spinner and flash by as a static ribbon, so an interviewer
+never watches a control fire, and the UI reads like an internal tool. The plan
+(`docs/features/demo-stepper-ux.md`) turns the nine stages into an explicit
+steppable walkthrough where each stage is a screen, every control that fires is
+clickable and explained, and the header chips become a live control panel. The
+clickable design target is `docs/mockups/sentinel-stepper-mockup.html`, all nine
+stages on the real hero numbers, light and dark. Grounding the mockup in the code
+also surfaced and fixed two doc/code inconsistencies (CTL-PURP-01 placed at Ask in
+the PRD but enforced at Access in code; a stale cohort-retention validator comment
+in `certification.py`). 316 tests pass, ruff clean. Next: build v5.0 (chrome +
+design system) and v5.1 (stepper shell).
+
+Everything below is the prior state: v4 in prod.
+
+---
 
 **v4 is merged to main (`3b17921`) and LIVE in prod, verified by loading the page
 and running a flow. The autonomy ladder works end to end, L0 to L3. Only OPA
@@ -243,6 +261,7 @@ out).
 
 ## Recent entries
 
+- [2026-07-18-2045-demo-stepper-ux-plan-and-mockup.md](entries/2026-07-18-2045-demo-stepper-ux-plan-and-mockup.md) : plan + clickable mockup for a show-and-tell rework of the nine-stage governed run (Sandip's note: the demo hides its own governance). Stepper becomes the primary surface, chips become a live control panel, run computes once and reveals per stage; six of nine stages already carry their data, only Ask/Plan/Access need additive fields. Mockup at `docs/mockups/sentinel-stepper-mockup.html` (all nine stages, real hero numbers, light+dark, control drawer, Screen suppression, Gate Fix-it, admin toggle that un-suppresses the n=6 band). Reviewed by three adversarial critics; fact-check caught invented details (now fixed) and two genuine repo inconsistencies (CTL-PURP-01 Ask->Access in the PRD; stale cohort-retention comment in certification.py). 316 tests, ruff clean. Nothing built into the app, nothing deployed.
 - [2026-07-18-1859-v4-merged-and-deployed-to-prod.md](entries/2026-07-18-1859-v4-merged-and-deployed-to-prod.md) : Sandip said merge and deploy. PR #3 merged to main (`3b17921`); deployed bundle `sentinel-20260718-185231.zip`, EB green, live-LLM on, no drift/missing-deps. Verified the right way this time: loaded the page and ran a flow on the instance. The Governed codegen surface renders all the new v4 pieces (mode toggle, computed tier chip, purpose matrix), and run 696ef64456bc completed through all nine stages (Execute passing = the sandbox ran generated code in prod). prod is v4.
 - [2026-07-18-1844-autonomy-ladder-complete-l0-to-l3.md](entries/2026-07-18-1844-autonomy-ladder-complete-l0-to-l3.md) : finished the buildable v4 (Sandip AFK, said "finish everything"). The flow computes the tier from the persona and routes: L2 codegen (analyst), L1 certified-analysis+params (junior, no code), L0 blocked (second line). Onboarded synthetic_its (fully synthetic, known +12 effect) and built the L3 broad-sandbox route: wide allowlist, same egress/fs/dyncode deny lists (more rope, same hard limits); benign DiD recovers +11.9, three adversarial requests refused. govflow mode toggle so the tier recomputes per dataset. 316 tests. Deferred: OPA (external server). Not deployed; prod still v0-v3.
 - [2026-07-18-1756-v3-outputs-and-v4-access-policy.md](entries/2026-07-18-1756-v3-outputs-and-v4-access-policy.md) : on `feat/govcodegen-v4`, three slices. The two v3 secondary outputs: a real loadable marimo notebook (generated analysis as a reviewable `def analysis(ctx)` + governance context) and a Quarto `.qmd`/PDF render path (honest fallback where no `quarto` binary). Then two v4 items: the purpose-by-dataset matrix (`CTL-PURP-01` refuses credit-data-for-marketing at Access, wired into the flow) and autonomy tier resolution (`tier = min(class ceiling, person ceiling)`, both binding, demonstrated live in the Access tab). 293 tests, ruff clean. Pushed, no PR yet, prod untouched. Deferred: OPA, L3+synthetic_its, the frozen-L2 flow rewrite + L1/L3 execution routes.

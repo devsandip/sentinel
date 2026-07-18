@@ -272,7 +272,10 @@ _REGISTRY: list[RegistryEntry] = [
         certified_at="2026-05-02",
     ),
     # The differentiator: refused on two independent grounds. Faithfulness is
-    # below the floor, and the author is trying to validate their own work.
+    # below the floor (CTL-EVAL-01), and no independent validator is assigned
+    # (validator is None; the author is also the owner), so the SoD gate fails
+    # too (CTL-SOD-01). Contrast deposit-elasticity below, which passes its evals
+    # and only awaits a validator.
     RegistryEntry(
         id="cohort-retention",
         version="0.3",

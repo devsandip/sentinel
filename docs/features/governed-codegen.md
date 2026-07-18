@@ -400,11 +400,14 @@ Nine stages. Each has an input, a control that can refuse, and an output.
 ### Stage 1: Ask
 
 **In:** free text, dataset, purpose.
-**Does:** binds identity, resolves tier per 4.6, classifies the question.
-**Controls:** `CTL-PURP-01` (purpose not permitted for dataset),
-`CTL-TIER-01` (requested operation exceeds resolved tier).
+**Does:** binds identity, resolves tier per 4.6, classifies the question, and
+binds the purpose to the request.
+**Controls:** `CTL-TIER-01` (requested operation exceeds resolved tier). The
+purpose is *bound* here and *enforced* at Access under `CTL-PURP-01` (Stage 3),
+which still fires before any rows are read.
 **Out:** a `Request` with a frozen tier. The tier cannot change mid-request.
-**Fails when:** purpose is not permitted. Refused before any data is touched.
+**Fails when:** the resolved tier forbids the operation. A disallowed purpose is
+refused at Access (see Stage 3), before any data is touched.
 
 ### Stage 2: Plan
 
@@ -421,8 +424,9 @@ so, rather than improvising.
 **In:** analysis + params.
 **Does:** resolves the column grant, applies row filters, builds a policy-scoped
 view.
-**Controls:** `CTL-RBAC-01` (column denied by role), `CTL-RBAC-02` (row filter
-applied), `CTL-PURP-02` (column outside purpose scope),
+**Controls:** `CTL-PURP-01` (purpose not permitted for dataset; enforced here,
+before any rows are read), `CTL-RBAC-01` (column denied by role),
+`CTL-RBAC-02` (row filter applied), `CTL-PURP-02` (column outside purpose scope),
 `CTL-CONTRACT-01` (dataset drifted since certification).
 
 **On `CTL-CONTRACT-01`.** Stage 2 already refuses when no certified analysis
@@ -763,7 +767,7 @@ the artifact a control tester would ask for.
 
 | ID | Stage | Refuses when |
 |---|---|---|
-| `CTL-PURP-01` | Ask | Purpose not permitted for dataset |
+| `CTL-PURP-01` | Access | Purpose not permitted for dataset (bound at Ask, enforced at Access before any rows are read) |
 | `CTL-PURP-02` | Access | Column outside purpose scope |
 | `CTL-TIER-01` | Ask | Operation exceeds resolved tier |
 | `CTL-RBAC-01` | Access | Column denied by role |
