@@ -50,6 +50,57 @@ PROXY_CANDIDATES = ["credit_amount", "duration_months", "digital_engagement_scor
 FAIR_LENDING_ROW_FILTER = ""
 
 
+# Why each granted column is in the grant (shown at the Access stage).
+GRANT_REASONS = {
+    "age_band": "the protected attribute, banded; the analysis compares across it",
+    "y": "the outcome (derived 0/1 default label); needed to compute rates",
+    "pred": "the model decision under review; the selection rate is over this",
+    "credit_amount": "granted so proxy discovery (CTL-PROXY-01) has features to test",
+    "duration_months": "granted so proxy discovery (CTL-PROXY-01) has features to test",
+    "digital_engagement_score": (
+        "synthetic, disclosed proxy column; exists so CTL-PROXY-01 computes a "
+        "real association on honestly-synthetic data"
+    ),
+}
+
+# Why withheld columns are withheld: specific reasons first, then the
+# data-minimisation default for everything the purpose does not need.
+_WITHHELD_REASONS = {
+    "applicant_email": "synthetic PII; the redaction control's target; never granted",
+    "applicant_ssn": "synthetic PII; the redaction control's target; never granted",
+    "personal_status_sex": "source of the sex protected attribute; not this purpose's axis",
+    "sex": "protected attribute outside this purpose's scope (analysis is by age)",
+    "age_years": "raw age; replaced by the banded age_band (minimisation by banding)",
+    "foreign_worker": "source of a protected attribute; not this purpose's axis",
+    "foreign_worker_label": "derived protected attribute outside this purpose's scope",
+    "credit_risk": "raw label text; only the derived 0/1 target y is granted",
+}
+_MINIMISATION = "not required for fair_lending_review (data minimisation)"
+
+
+def column_inventory() -> list[dict[str, object]]:
+    """Every column of the underlying dataset plus the derived/granted ones,
+    with granted status and the reason. This is the Access show-and-tell: the
+    scoped table is built by construction, so a withheld column does not exist
+    on the object the generated code receives -- this inventory is how the UI
+    shows what that construction removed and why."""
+    ds = load_dataset(PROTECTED_ATTRIBUTE)
+    rows: list[dict[str, object]] = []
+    for col in FAIR_LENDING_GRANT:
+        rows.append({"column": col, "granted": True, "reason": GRANT_REASONS[col]})
+    for col in ds.frame.columns:
+        if col in FAIR_LENDING_GRANT:
+            continue
+        rows.append(
+            {
+                "column": col,
+                "granted": False,
+                "reason": _WITHHELD_REASONS.get(col, _MINIMISATION),
+            }
+        )
+    return rows
+
+
 def _fine_age_band(age: int) -> str:
     """A finer banding than ml.data._age_band, so the oldest band is small enough
     to trip the disclosure floor on the real data (71-75 has 6 applicants)."""

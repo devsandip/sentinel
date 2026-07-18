@@ -21,7 +21,12 @@ from typing import Any
 import pandas as pd
 
 from ..codegen.gate import GateResult
-from ..codegen.generate import CodeGenRequest, GenerationOutcome, generate_and_gate
+from ..codegen.generate import (
+    CodeGenRequest,
+    GenerationOutcome,
+    generate_and_gate,
+    has_scripted_repair,
+)
 from ..datasets.fingerprint import FingerprintError, dataset_sha, live_contract_check
 from ..disclosure import ScreenResult, screen
 from ..evidence import EvidencePack, build_evidence_pack
@@ -43,6 +48,7 @@ from .access import (
     PROTECTED_ATTRIBUTE,
     PROXY_CANDIDATES,
     build_scoped_table,
+    column_inventory,
 )
 from .l1 import L1_ANALYSIS_ID, l1_code_descriptor, resolve_l1_params, run_l1_analysis
 from .purpose_matrix import CTL_PURP_01, evaluate_purpose
@@ -103,6 +109,12 @@ class GovernedRunResult:
     lineage: list[dict] = field(default_factory=list)
     controls_fired: list[str] = field(default_factory=list)
     audit: list[dict] = field(default_factory=list)
+    # Show-and-tell payloads (docs/features/govflow-showtell.md). Additive:
+    # nothing above changes shape.
+    tier_decision: dict[str, Any] = field(default_factory=dict)
+    access: dict[str, Any] = field(default_factory=dict)
+    # The blocked run this run repairs ("Fix it" at the Gate), if any.
+    repaired_from: str = ""
 
     def to_public_dict(self) -> dict[str, Any]:
         return {
@@ -137,6 +149,22 @@ class GovernedRunResult:
             "lineage": self.lineage,
             "controls_fired": self.controls_fired,
             "audit": self.audit,
+            # Show-and-tell payloads (additive; the keys above are pinned by
+            # tests and unchanged).
+            "execution": self.execution.to_dict() if self.execution else None,
+            "generation_attempts": [
+                {
+                    "attempt": a.attempt,
+                    "live": a.codegen.live,
+                    "passed": a.gate.passed,
+                    "controls": a.gate.controls_fired,
+                    "code": a.code,
+                }
+                for a in (self.generation.attempts if self.generation else [])
+            ],
+            "tier_decision": self.tier_decision,
+            "access": self.access,
+            "repaired_from": self.repaired_from,
         }
 
 
@@ -209,6 +237,8 @@ def run_governed_analysis(
     max_attempts: int = 3,
     purpose_key: str = PURPOSE_KEY,
     l1_params: dict[str, Any] | None = None,
+    repair_of: str = "",
+    repair_feedback: str = "",
 ) -> GovernedRunResult:
     """Run one question through the governed flow and return everything the UI
     needs. Scripted gateway by default (free, deterministic); pass a live gateway
@@ -223,7 +253,12 @@ def run_governed_analysis(
     (PRD 4.6), never chosen. A certified analyst resolves to L2 and the model
     writes gated code; an uncertified analyst resolves to L1, where the model
     fills ``l1_params`` for a certified analysis and writes no code. A persona that
-    resolves to L0 may not run."""
+    resolves to L0 may not run.
+
+    ``repair_of`` marks this run as the "Fix it" repair of an earlier
+    gate-blocked run (its run id); ``repair_feedback`` carries that gate's
+    refusal so the model can address it. The repair is a fresh governed run --
+    same stages, same gate, fresh audit -- linked to the blocked one."""
     gateway = gateway or ModelGateway(provider=TEMPLATED)
     persona = persona or default_persona()
     run_id = uuid.uuid4().hex[:12]
@@ -233,6 +268,13 @@ def run_governed_analysis(
 
     stages: list[StageRecord] = []
     controls: list[str] = []
+
+    tier_info = {
+        "tier": tier,
+        "classification_ceiling": tier_decision.classification_ceiling,
+        "person_ceiling": tier_decision.person_ceiling,
+        "rationale": tier_decision.rationale,
+    }
 
     def finish(status: str) -> GovernedRunResult:
         return GovernedRunResult(
@@ -255,6 +297,12 @@ def run_governed_analysis(
             lineage=lineage,
             controls_fired=_dedupe(controls),
             audit=audit.as_dicts(),
+            tier_decision=tier_info,
+            access=access_info,
+            # Linked only when the repair machinery actually engaged (the L2
+            # Generate branch); an L0/L1 route or an upstream block must not
+            # claim a repair it never performed.
+            repaired_from=repair_of if repair_engaged else "",
         )
 
     outcome: GenerationOutcome | None = None
@@ -265,6 +313,8 @@ def run_governed_analysis(
     code_for_evidence = ""
     evidence: EvidencePack | None = None
     lineage: list[dict] = []
+    access_info: dict[str, Any] = {}
+    repair_engaged = False
     started_at = datetime.now(UTC).isoformat()
 
     # Stage 1: Ask -- bind identity, compute the autonomy tier (never chosen),
@@ -410,6 +460,14 @@ def run_governed_analysis(
         return finish(STATUS_BLOCKED)
 
     scoped = build_scoped_table(seed=seed)
+    access_info = {
+        "granted": list(FAIR_LENDING_GRANT),
+        "inventory": column_inventory(),
+        "row_filter": FAIR_LENDING_ROW_FILTER,
+        "rows": int(len(scoped)),
+        "sample": scoped.head(8).to_dict(orient="records"),
+        "protected_attribute": PROTECTED_ATTRIBUTE,
+    }
     audit.record(
         agent="govflow",
         action="access",
@@ -505,6 +563,12 @@ def run_governed_analysis(
         )
     else:
         # L2: the model writes code, a static gate reads it, the sandbox runs it.
+        # A repair engages only where there is something to repair with: live
+        # feedback for the model, or a seeded repaired sample in scripted mode.
+        # A stray repair_of on a plain run stays a plain run (the L3 contract).
+        is_repair = bool(repair_feedback) or (
+            bool(repair_of) and has_scripted_repair(intent)
+        )
         request = CodeGenRequest(
             question=question,
             table=DATASET_ID,
@@ -513,16 +577,34 @@ def run_governed_analysis(
             analysis=PURPOSE,
             intent=intent,
             allowed_tables=[DATASET_ID],
+            repair=is_repair,
         )
-        outcome = generate_and_gate(request, gateway, max_attempts=max_attempts)
-        stages.append(
-            StageRecord(
-                "Generate",
-                "ok",
-                detail=f"{'live' if outcome.live else 'scripted'}, "
-                f"{outcome.attempt_count} attempt(s)",
+        if is_repair:
+            repair_engaged = True
+            audit.record(
+                agent="govflow",
+                action="repair_requested",
+                actor=persona.id,
+                output_summary=(
+                    f"Fix it: repair of gate-blocked run {repair_of or '(unknown)'}; "
+                    + (
+                        "the prior refusal is fed back to the model and the gate "
+                        "re-reads the result"
+                        if gateway.is_live
+                        else "seeded repaired sample substituted and re-gated"
+                    )
+                ),
             )
+        outcome = generate_and_gate(
+            request, gateway, max_attempts=max_attempts, initial_feedback=repair_feedback
         )
+        gen_detail = (
+            f"{'live' if outcome.live else 'scripted'}, "
+            f"{outcome.attempt_count} attempt(s)"
+        )
+        if is_repair:
+            gen_detail += f"; repair of blocked run {repair_of or '(unknown)'}"
+        stages.append(StageRecord("Generate", "ok", detail=gen_detail))
 
         if not outcome.gate.passed:
             controls += outcome.gate.controls_fired
@@ -604,12 +686,12 @@ def run_governed_analysis(
 
         code_for_evidence = outcome.code
         stages.append(
-            StageRecord("Execute", "ok", detail=f"ran in {execution.wall_clock_s}s")
+            StageRecord("Execute", "ok", detail=f"ran in {execution.wall_clock_s:.2f}s")
         )
         audit.record(
             agent="sandbox",
             action="execute_ok",
-            output_summary=f"ran in {execution.wall_clock_s}s (no network, wall-clock capped)",
+            output_summary=f"ran in {execution.wall_clock_s:.2f}s (no network, wall-clock capped)",
         )
 
     # Stage 7: Screen -- suppression, then proxy discovery.

@@ -111,6 +111,52 @@ _TEMPLATED_CODE: dict[str, str] = {
     INTENT_SQL_STAR: _SQL_STAR_CODE,
 }
 
+# -- seeded repairs for scripted mode ---------------------------------------
+# The Gate's "Fix it" path. The Python-intent repairs are the corresponding
+# canned sample minus its one violation, so the diff reads as "the violating
+# line was removed". The sql_star repair is different in kind: SELECT * cannot
+# be fixed by deleting a line, so the repair rewrites the query to the granted
+# grouped selection (a raw column-explicit dump would emit ungrouped rows and
+# fail the Execute shape check anyway). Either way the gate genuinely re-reads
+# and passes real code. In live mode repair is a real regeneration with the
+# gate's feedback; these are only the scripted stand-ins, labeled as seeded in
+# the UI.
+_EXFILTRATE_FIXED = '''\
+import fairlearn.metrics as flm
+df = ctx.table("german_credit")
+mf = flm.MetricFrame(
+    metrics={"selection_rate": flm.selection_rate, "n": flm.count},
+    y_true=df["y"],
+    y_pred=df["pred"],
+    sensitive_features=df["age_band"],
+)
+result = mf.by_group.reset_index().rename(columns={"age_band": "band"})
+ctx.emit(result)
+'''
+
+_DYNAMIC_FIXED = '''\
+import fairlearn.metrics as flm
+df = ctx.table("german_credit")
+mf = flm.MetricFrame(
+    metrics={"selection_rate": flm.selection_rate, "n": flm.count},
+    y_true=df["y"],
+    y_pred=df["pred"],
+    sensitive_features=df["age_band"],
+)
+ctx.emit(mf.by_group.reset_index().rename(columns={"age_band": "band"}))
+'''
+
+_REPAIRED_CODE: dict[str, str] = {
+    INTENT_EXFILTRATE: _EXFILTRATE_FIXED,  # requests.post line removed
+    INTENT_FILE_WRITE: _EXFILTRATE_FIXED,  # open(...,"w") line removed
+    INTENT_DYNAMIC: _DYNAMIC_FIXED,  # eval(...) line removed
+    INTENT_SQL_STAR: _FAIR_LENDING_SQL_CODE,  # SELECT * -> explicit grant columns
+}
+
+
+def has_scripted_repair(intent: str) -> bool:
+    return intent in _REPAIRED_CODE
+
 
 @dataclass
 class CodeGenRequest:
@@ -127,6 +173,10 @@ class CodeGenRequest:
     intent: str = INTENT_FAIR_LENDING
     # Tables the SQL half of the gate allows (CTL-PURP-01). None derives {table}.
     allowed_tables: list[str] | None = None
+    # Repair mode ("Fix it" after a gate block). In scripted mode this selects
+    # the seeded repaired sample for the intent; live mode regenerates with the
+    # prior gate's feedback either way, so the flag only changes scripted runs.
+    repair: bool = False
 
     def tables_in_scope(self) -> list[str]:
         return self.allowed_tables if self.allowed_tables is not None else [self.table]
@@ -160,6 +210,8 @@ class GenerationOutcome:
 
 
 def _scripted_fallback(request: CodeGenRequest) -> str:
+    if request.repair and request.intent in _REPAIRED_CODE:
+        return _REPAIRED_CODE[request.intent]
     return _TEMPLATED_CODE.get(request.intent, _FAIR_LENDING_CODE)
 
 
@@ -190,18 +242,23 @@ def generate_and_gate(
     gateway: ModelGateway,
     *,
     max_attempts: int = 3,
+    initial_feedback: str = "",
 ) -> GenerationOutcome:
     """Generate, gate, and regenerate on refusal up to `max_attempts` (Stage 5).
 
     Returns as soon as the gate passes, or after the last attempt still fails, in
     which case the caller hands to a human. The column grant is enforced by the
     gate via CTL-COL-01 using the request's granted columns.
+
+    ``initial_feedback`` seeds the first prompt with a prior gate refusal: the
+    "Fix it" repair path, where the human asked the model to address the block
+    from an earlier run rather than the loop's own previous attempt.
     """
     attempts: list[GenerationAttempt] = []
     tokens = 0
     cost = 0.0
     live = False
-    feedback = ""
+    feedback = initial_feedback
 
     for i in range(1, max_attempts + 1):
         cg = generate(request, gateway, feedback=feedback)
