@@ -73,6 +73,11 @@ class EvidencePack:
     status: str = STATUS_PENDING
 
     def to_public_dict(self) -> dict[str, Any]:
+        # Local import: outputs.py imports EvidencePack, so importing it at module
+        # scope would be circular. The two audience artifacts (1.10) travel with
+        # the pack so the UI can offer both downloads without the pack object.
+        from .outputs import to_marimo_notebook
+
         return {
             "request_id": self.request_id,
             "finding": self.finding,
@@ -87,6 +92,7 @@ class EvidencePack:
             "signed_at": self.signed_at,
             "status": self.status,
             "markdown": self.to_markdown(),
+            "marimo_notebook": to_marimo_notebook(self),
         }
 
     def to_markdown(self) -> str:

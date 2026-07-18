@@ -9,6 +9,7 @@ bank can file and a chart it cannot.
 
 from __future__ import annotations
 
+from .outputs import QuartoRender, render_quarto, to_marimo_notebook
 from .pack import (
     EvidencePack,
     ProvenanceChain,
@@ -20,7 +21,10 @@ from .pack import (
 __all__ = [
     "EvidencePack",
     "ProvenanceChain",
+    "QuartoRender",
     "SignoffError",
     "build_evidence_pack",
+    "render_quarto",
     "sign_evidence_pack",
+    "to_marimo_notebook",
 ]

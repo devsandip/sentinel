@@ -834,11 +834,32 @@ def _govflow_evidence(pub: dict) -> None:
     )
     st.info(f"Status: **{ev['status']}**. {signoff}")
 
-    st.download_button(
-        "Download evidence pack (Quarto-ready markdown)",
+    st.markdown("#### Two outputs, two audiences")
+    st.caption(
+        "The same governed run produces both: a leadership document and a "
+        "data-scientist notebook, from one signed-or-pending pack (PRD 1.10)."
+    )
+    dl_lead, dl_ds = st.columns(2)
+    dl_lead.download_button(
+        "Leadership: Quarto source (.qmd)",
         data=ev["markdown"],
-        file_name=f"evidence_pack_{ev['request_id']}.md",
+        file_name=f"evidence_pack_{ev['request_id']}.qmd",
         mime="text/markdown",
+        help=(
+            "The leadership document with the negative statement, as Quarto source. "
+            "Renders to the filed PDF where the quarto binary is installed; this "
+            "instance has none, so it ships the .qmd and does not fake a PDF."
+        ),
+    )
+    dl_ds.download_button(
+        "Data scientist: marimo notebook (.py)",
+        data=ev["marimo_notebook"],
+        file_name=f"analysis_{ev['request_id']}.py",
+        mime="text/x-python",
+        help=(
+            "The generated analysis as a plain-.py marimo notebook, so a colleague "
+            "code-reviews it in a pull request like any other change."
+        ),
     )
 
     lineage = pub.get("lineage") or []
