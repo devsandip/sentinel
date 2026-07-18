@@ -13,6 +13,33 @@ STACK="sentinel-eb"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$REPO_ROOT"
 
+# Guard: prod installs from requirements.txt (a uv export), NOT pyproject/uv.lock.
+# If that export drifts from the lock, a dependency added in code but missing from
+# requirements.txt ships a bundle that imports a module the instance never installed,
+# and the app crashes on first render while health still returns 200. This exact drift
+# took prod down once. Regenerate from the lock and refuse to deploy on any mismatch.
+# Header comments (the "# via" body lines stay) differ only in the --output-file arg,
+# so strip column-0 comment lines before comparing.
+echo "==> Checking requirements.txt is in sync with uv.lock"
+if command -v uv >/dev/null 2>&1; then
+  GEN="$(uv export --no-hashes --no-dev --extra pgvector --extra live 2>/dev/null | grep -v '^#')"
+  CUR="$(grep -v '^#' requirements.txt)"
+  if [ "$GEN" != "$CUR" ]; then
+    echo "!! requirements.txt is OUT OF SYNC with uv.lock. Aborting before touching AWS." >&2
+    echo "   Prod pip-installs requirements.txt, so a stale export ships the wrong deps." >&2
+    echo "   Drift (< committed requirements.txt, > uv.lock):" >&2
+    diff <(echo "$CUR") <(echo "$GEN") | sed 's/^/     /' >&2 || true
+    echo "" >&2
+    echo "   Regenerate, commit, then re-run this deploy:" >&2
+    echo "     uv export --no-hashes --no-dev --extra pgvector --extra live --output-file requirements.txt" >&2
+    echo "     git add requirements.txt && git commit -m 'chore(deps): sync requirements.txt with uv.lock'" >&2
+    exit 1
+  fi
+  echo "    in sync."
+else
+  echo "    WARNING: uv not found; cannot verify requirements.txt against the lock. Proceeding." >&2
+fi
+
 ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
 BUCKET="sentinel-eb-deploy-${ACCOUNT_ID}-${REGION}"
 STAMP="$(date +%Y%m%d-%H%M%S)"
