@@ -142,9 +142,12 @@ table (the "before" for Screen).
 ### Stage 8 — Interpret
 
 Step into the model writing. Scripted case: a "Generating..." shimmer, then the
-narration. Live case: real streamed tokens. Then the faithfulness verdict:
-`CTL-EVAL-01`, narration built from screened numbers only so it structurally cannot
-state a rate for the suppressed 71-75 band.
+narration. Live case: real streamed tokens. The narration must be descriptive, not
+a one-liner: three short paragraphs (the finding and the disparity in fair-lending
+terms; the confidence interval and the proxy caveat; then the honest cautions,
+association-not-cause and bands-suppressed-below-the-floor). Then the faithfulness
+verdict: `CTL-EVAL-01`, narration built from screened numbers only so it
+structurally cannot state a rate for the suppressed 71-75 band.
 
 ### Stage 9 — Attest
 
@@ -209,6 +212,21 @@ cells to suppress by design).
 - **Interpret reveal.** Shimmer for scripted, streamed tokens for live.
 - **Chip control panel.** The reimagined header chips: a panel listing every control
   grouped by stage, its fired/idle state on this run, and an admin-only toggle.
+- **Per-stage engine bar (buy the maths, build the governance).** A slim strip at the
+  top of every stage naming the off-the-shelf library doing the work at that stage
+  (the maths we bought) beside the controls governing it (the governance we built).
+  Ask and Plan are policy-only (no external library); Generate and Interpret are
+  Claude; Gate is `ast` + `sqlglot`; Execute is DuckDB; Screen is fairlearn +
+  `scipy.stats`; Attest is OpenLineage + Quarto + marimo. This makes the thesis
+  legible at every step instead of asserted once.
+- **The Stack surface.** A top-bar panel that lays out the whole stack as two columns:
+  bought (the analytical libraries, what each does, at which stage) and built (the
+  controls per stage). The showpiece is the Gate import allowlist rendered as the
+  governed catalogue the model may reach for (numpy, pandas, scikit-learn,
+  statsmodels, fairlearn, scipy, DoWhy, lifelines, SHAP permitted; os, subprocess,
+  requests, socket, pickle, eval/exec denied). Honest footer for what is on the
+  dependency map but not yet wired (Presidio, Evidently, OPA, pandera). Only claim
+  libraries that actually run; the roadmap ones are labelled as such.
 
 ## 6. Polish layer
 

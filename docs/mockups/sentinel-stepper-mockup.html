@@ -304,7 +304,9 @@
   .shimmer.w1{width:92%} .shimmer.w2{width:80%} .shimmer.w3{width:64%}
   @keyframes sh { 0%{background-position:100% 0} 100%{background-position:-100% 0} }
   .narration { font-size:15px; line-height:1.62; }
-  .narration .sup-note { color:var(--muted); font-style:italic; }
+  .narration p { margin:0 0 12px; }
+  .narration p:last-child { margin-bottom:0; }
+  .narration .sup-note, .narration p.sup-note { color:var(--muted); font-style:italic; font-size:13.5px; }
 
   /* footer nav */
   .navbar { position:fixed; bottom:0; left:0; right:0; z-index:35; background:color-mix(in srgb,var(--surface) 88%, transparent); backdrop-filter:blur(8px); border-top:1px solid var(--border); }
@@ -350,6 +352,27 @@
   .legend { display:flex; gap:16px; flex-wrap:wrap; font-size:11.5px; color:var(--muted); margin-top:10px; }
   .legend span { display:inline-flex; align-items:center; gap:6px; }
   .legend .st { width:8px; height:8px; border-radius:50%; }
+
+  /* buy-the-maths engine bar */
+  .enginebar { display:flex; flex-wrap:wrap; align-items:center; gap:7px; margin-bottom:20px; padding:11px 14px; background:var(--surface); border:1px solid var(--border); border-radius:var(--r-md); box-shadow:var(--shadow-sm); }
+  .eb-lab { font-size:9.5px; font-weight:700; letter-spacing:.11em; text-transform:uppercase; color:var(--faint); }
+  .eb-sep { width:1px; align-self:stretch; background:var(--border); margin:0 5px; }
+  .lib { display:inline-flex; align-items:center; gap:6px; font-family:var(--mono); font-size:11.5px; font-weight:600; padding:3px 9px; border-radius:8px; border:1px solid var(--border-strong); background:var(--surface-2); color:var(--ink); cursor:pointer; }
+  .lib:hover { border-color:#2f9c94; }
+  .lib .d { width:6px; height:6px; border-radius:50%; background:#2f9c94; }
+  .lib.none { color:var(--muted); font-family:var(--sans); font-style:italic; cursor:default; border-style:dashed; }
+  .lib.none:hover { border-color:var(--border-strong); }
+
+  /* stack modal columns */
+  .stackcol .sc-h { font-size:12px; font-weight:700; letter-spacing:.02em; margin:0 0 4px; display:flex; align-items:center; gap:8px; }
+  .stackcol .sc-sub { font-size:11.5px; color:var(--muted); margin:0 0 12px; }
+  .stackrow { display:flex; gap:11px; align-items:baseline; padding:9px 0; border-bottom:1px solid var(--border); }
+  .stackrow:last-child { border-bottom:0; }
+  .stackrow .nm { font-family:var(--mono); font-size:12px; font-weight:700; min-width:96px; }
+  .stackrow .ds { flex:1; font-size:12.5px; color:var(--muted); }
+  .stackrow .sg { font-size:10.5px; color:var(--faint); font-family:var(--mono); white-space:nowrap; }
+  .allowbox { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+  .roadmap { font-size:11.5px; color:var(--muted); margin-top:14px; padding-top:12px; border-top:1px dashed var(--border-strong); }
 </style>
 </head>
 <body>
@@ -366,6 +389,7 @@
       <button class="ctx-chip" onclick="showStage(1);showSub(1)" title="Dataset and classification"><span class="k">Data</span> german_credit <span class="badge danger" style="padding:1px 6px;font-size:10px">Restricted</span></button>
       <button class="ctx-chip purpose" onclick="showStage(1);showSub(2)" title="Purpose limitation"><span class="k">Purpose</span> Fair-lending review</button>
       <button class="ctx-chip tier" onclick="openCtl('CTL-TIER-01')" title="How the tier is computed"><span class="k">Tier</span> <span class="tier-badge">L2</span></button>
+      <button class="iconbtn" onclick="openStack()" aria-label="Open the stack">&#9638; Stack</button>
       <button class="iconbtn" onclick="openControls()" aria-label="Open control panel">&#9639; Controls</button>
       <button class="iconbtn" onclick="toggleTheme()" aria-label="Toggle theme" aria-pressed="false" id="themebtn">&#9681;</button>
     </div>
@@ -375,6 +399,7 @@
 
 <main class="stage-wrap" id="stagewrap">
   <h1 class="sr-only">Sentinel governed run walkthrough</h1>
+  <div class="enginebar" id="enginebar"></div>
 
   <!-- STAGE 1 : ASK -->
   <section class="panel" id="stage-1" aria-labelledby="h1">
@@ -853,7 +878,7 @@
           <p style="font-size:12px;color:var(--muted)">Composing from screened numbers&hellip;</p>
         </div>
         <div id="narbody" style="display:none">
-          <p class="narration" id="narpara"></p>
+          <div class="narration" id="narpara"></div>
           <div class="note ok" id="narfaith" style="margin-top:16px;display:none"><span class="ico">&#10003;</span><div><b>Faithful.</b> The narrative asserts no figure for a suppressed band and matches the screened numbers. The runtime check is pass/fail, grounded in the screened result. <button class="ctl pass" onclick="openCtl('CTL-EVAL-01')"><span class="st"></span>CTL-EVAL-01</button></div></div>
         </div>
       </div>
@@ -954,6 +979,60 @@
   </div>
 </div>
 
+<!-- stack modal: buy the maths, build the governance -->
+<div class="modal" id="stackmodal">
+  <div class="scrim show" onclick="closeStack()" style="position:absolute"></div>
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="stack-title" style="position:relative;z-index:1;width:min(840px,96vw)">
+    <div class="modal-h">
+      <div class="brand"><svg viewBox="0 0 24 24" style="width:22px;height:22px" aria-hidden="true"><path d="M12 2 4 5v6c0 5 3.4 8.5 8 11 4.6-2.5 8-6 8-11V5z" fill="var(--accent)"/><path d="M8 12l3 3 5-6" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div><h3 id="stack-title" style="font-size:16px">Buy the maths, build the governance</h3><div style="font-size:12px;color:var(--muted)">The analysis is off-the-shelf. Each library does its work at one stage; a named control governs it. The governance is what we build.</div></div>
+      <button class="drawer-close" style="position:static;margin-left:auto" onclick="closeStack()" aria-label="Close">&times;</button>
+    </div>
+    <div class="modal-b">
+      <div class="grid2">
+        <div class="stackcol">
+          <div class="sc-h"><span class="lib" style="cursor:default"><span class="d"></span>bought</span> The maths</div>
+          <p class="sc-sub">Off-the-shelf. We do not reimplement any of it.</p>
+          <div class="stackrow"><span class="nm">Claude</span><span class="ds">Writes the analysis code, and the narration</span><span class="sg">Generate&middot;Interpret</span></div>
+          <div class="stackrow"><span class="nm">ast</span><span class="ds">Parses generated Python (stdlib)</span><span class="sg">Gate</span></div>
+          <div class="stackrow"><span class="nm">sqlglot</span><span class="ds">Parses the SQL: columns, joins, SELECT *</span><span class="sg">Gate</span></div>
+          <div class="stackrow"><span class="nm">DuckDB</span><span class="ds">Runs the query in the sandbox</span><span class="sg">Access&middot;Execute</span></div>
+          <div class="stackrow"><span class="nm">fairlearn</span><span class="ds">Group fairness metrics (MetricFrame)</span><span class="sg">Screen</span></div>
+          <div class="stackrow"><span class="nm">scipy.stats</span><span class="ds">Proxy association + the Wald interval</span><span class="sg">Screen</span></div>
+          <div class="stackrow"><span class="nm">scikit-learn</span><span class="ds">The underlying credit model</span><span class="sg">upstream</span></div>
+          <div class="stackrow"><span class="nm">SHAP</span><span class="ds">Model explainability</span><span class="sg">model&nbsp;card</span></div>
+          <div class="stackrow"><span class="nm">OpenLineage</span><span class="ds">Provenance events, standards-based</span><span class="sg">Attest</span></div>
+          <div class="stackrow"><span class="nm">Quarto</span><span class="ds">The leadership document render</span><span class="sg">Attest</span></div>
+          <div class="stackrow"><span class="nm">marimo</span><span class="ds">The reviewable analyst notebook</span><span class="sg">Attest</span></div>
+        </div>
+        <div class="stackcol">
+          <div class="sc-h"><span class="badge info">built</span> The governance</div>
+          <p class="sc-sub">Named, observable controls at every transition. This is the product.</p>
+          <div class="stackrow"><span class="sg" style="min-width:64px">Ask</span><span class="ds"><button class="ctl armed" onclick="closeStack();openCtl('CTL-TIER-01')"><span class="st"></span>TIER-01</button> <button class="ctl armed" onclick="closeStack();openCtl('CTL-PURP-01')"><span class="st"></span>PURP-01</button></span></div>
+          <div class="stackrow"><span class="sg" style="min-width:64px">Access</span><span class="ds"><button class="ctl armed" onclick="closeStack();openCtl('CTL-RBAC-01')"><span class="st"></span>RBAC-01</button> <button class="ctl armed" onclick="closeStack();openCtl('CTL-PURP-02')"><span class="st"></span>PURP-02</button> <button class="ctl armed" onclick="closeStack();openCtl('CTL-CONTRACT-01')"><span class="st"></span>CONTRACT-01</button></span></div>
+          <div class="stackrow"><span class="sg" style="min-width:64px">Gate</span><span class="ds"><button class="ctl armed" onclick="closeStack();openCtl('CTL-EGRESS-01')"><span class="st"></span>EGRESS-01</button> <button class="ctl armed" onclick="closeStack();openCtl('CTL-CODE-03')"><span class="st"></span>CODE-03</button> <button class="ctl armed" onclick="closeStack();openCtl('CTL-COL-01')"><span class="st"></span>COL-01</button></span></div>
+          <div class="stackrow"><span class="sg" style="min-width:64px">Execute</span><span class="ds"><button class="ctl armed" onclick="closeStack();openCtl('CTL-TIME-01')"><span class="st"></span>TIME-01</button> <button class="ctl armed" onclick="closeStack();openCtl('CTL-COST-01')"><span class="st"></span>COST-01</button></span></div>
+          <div class="stackrow"><span class="sg" style="min-width:64px">Screen</span><span class="ds"><button class="ctl armed" onclick="closeStack();openCtl('CTL-DISC-02')"><span class="st"></span>DISC-02</button> <button class="ctl armed" onclick="closeStack();openCtl('CTL-PROXY-01')"><span class="st"></span>PROXY-01</button></span></div>
+          <div class="stackrow"><span class="sg" style="min-width:64px">Interpret</span><span class="ds"><button class="ctl armed" onclick="closeStack();openCtl('CTL-EVAL-01')"><span class="st"></span>EVAL-01</button></span></div>
+          <div class="stackrow"><span class="sg" style="min-width:64px">Attest</span><span class="ds"><button class="ctl armed" onclick="closeStack();openCtl('CTL-SOD-01')"><span class="st"></span>SOD-01</button> <button class="ctl armed" onclick="closeStack();openCtl('CTL-LIN-01')"><span class="st"></span>LIN-01</button></span></div>
+        </div>
+      </div>
+      <hr class="hr" />
+      <div class="stackcol">
+        <div class="sc-h">The import allowlist</div>
+        <p class="sc-sub">The Gate's allowlist is the governed catalogue the model may reach for. On it: permitted, and still gate-checked when used. Off it: refused. This is where "buy the maths" is enforced.</p>
+        <div class="allowbox">
+          <span class="lib" style="cursor:default"><span class="d"></span>numpy</span><span class="lib" style="cursor:default"><span class="d"></span>pandas</span><span class="lib" style="cursor:default"><span class="d"></span>scikit-learn</span><span class="lib" style="cursor:default"><span class="d"></span>statsmodels</span><span class="lib" style="cursor:default"><span class="d"></span>fairlearn</span><span class="lib" style="cursor:default"><span class="d"></span>scipy</span><span class="lib" style="cursor:default"><span class="d"></span>dowhy</span><span class="lib" style="cursor:default"><span class="d"></span>lifelines</span><span class="lib" style="cursor:default"><span class="d"></span>shap</span>
+        </div>
+        <div class="allowbox" style="margin-top:8px">
+          <span class="lib" style="cursor:default;border-color:var(--danger-border);background:var(--danger-soft);color:var(--danger-ink)"><span class="d" style="background:var(--danger)"></span>os</span><span class="lib" style="cursor:default;border-color:var(--danger-border);background:var(--danger-soft);color:var(--danger-ink)"><span class="d" style="background:var(--danger)"></span>subprocess</span><span class="lib" style="cursor:default;border-color:var(--danger-border);background:var(--danger-soft);color:var(--danger-ink)"><span class="d" style="background:var(--danger)"></span>requests</span><span class="lib" style="cursor:default;border-color:var(--danger-border);background:var(--danger-soft);color:var(--danger-ink)"><span class="d" style="background:var(--danger)"></span>socket</span><span class="lib" style="cursor:default;border-color:var(--danger-border);background:var(--danger-soft);color:var(--danger-ink)"><span class="d" style="background:var(--danger)"></span>pickle</span><span class="lib" style="cursor:default;border-color:var(--danger-border);background:var(--danger-soft);color:var(--danger-ink)"><span class="d" style="background:var(--danger)"></span>eval / exec</span>
+        </div>
+      </div>
+      <div class="roadmap">On the roadmap (dependency map, not yet wired): Presidio (PII, regex today), Evidently (drift), OPA / Rego (externalized policy), pandera / Great Expectations (data contracts).</div>
+    </div>
+  </div>
+</div>
+
 <script>
 "use strict";
 
@@ -1005,6 +1084,30 @@ const CAPS = [
   'Assemble the evidence pack and route it for independent sign-off.'
 ];
 
+/* buy the maths (off-the-shelf library) vs build the governance (controls), per stage */
+const STAGE_ENGINE = [
+  { buy: [], build: ['CTL-TIER-01','CTL-PURP-01'] },
+  { buy: [], build: ['CTL-CONTRACT-01','CTL-EVAL-01','CTL-SOD-01'] },
+  { buy: ['DuckDB','pandas'], build: ['CTL-RBAC-01','CTL-PURP-01','CTL-PURP-02'] },
+  { buy: ['Claude'], build: [] },
+  { buy: ['ast','sqlglot'], build: ['CTL-EGRESS-01','CTL-CODE-01','CTL-COL-01'] },
+  { buy: ['DuckDB'], build: ['CTL-TIME-01'] },
+  { buy: ['fairlearn','scipy.stats'], build: ['CTL-DISC-02','CTL-PROXY-01'] },
+  { buy: ['Claude'], build: ['CTL-EVAL-01'] },
+  { buy: ['OpenLineage','Quarto','marimo'], build: ['CTL-SOD-01','CTL-LIN-01'] },
+];
+function renderEngine(){
+  const e = STAGE_ENGINE[current-1];
+  const buy = e.buy.length
+    ? e.buy.map(l=>`<span class="lib" onclick="openStack()" title="See the full stack"><span class="d"></span>${l}</span>`).join('')
+    : '<span class="lib none">policy only, no external library</span>';
+  const build = e.build.length
+    ? e.build.map(id=>`<button class="ctl ${FIRED_NOW.has(id)?'pass':'armed'}" onclick="openCtl('${id}')"><span class="st"></span>${id.replace('CTL-','')}</button>`).join('')
+    : '<span class="lib none" style="border:0">generating is safe, nothing to govern here</span>';
+  document.getElementById('enginebar').innerHTML =
+    `<span class="eb-lab">Buy the maths</span>${buy}<span class="eb-sep"></span><span class="eb-lab">Build the governance</span>${build}`;
+}
+
 let current = 1;
 const railEl = document.getElementById('rail');
 
@@ -1033,6 +1136,7 @@ function showStage(n){
     node.innerHTML = idx < current ? '&#10003;' : idx;
   });
   updateNav();
+  renderEngine();
   window.scrollTo({top:0, behavior: reduceMotion() ? 'auto' : 'smooth'});
 }
 function updateNav(){
@@ -1083,8 +1187,11 @@ function fixIt(){
 
 /* Interpret narration: scripted (shimmer) vs live (streamed tokens) */
 let narMode='scripted';
-const NAR_HTML='Across age bands, applicants in <b>18-25</b> are flagged at a <b>0.32</b> selection rate versus <b>0.16</b> for <b>36-45</b>, a <b>2.0&times;</b> gap. <span class="sup-note">Bands below the disclosure floor were suppressed before this summary and are not reflected in it.</span>';
-const NAR_TEXT='Across age bands, applicants in 18-25 are flagged at a 0.32 selection rate versus 0.16 for 36-45, a 2.0x gap. Bands below the disclosure floor were suppressed before this summary and are not reflected in it.';
+const NAR_HTML=`
+<p>Holding income constant, the model's flag rate falls unevenly across age. Applicants aged <b>18-25</b> are flagged at <b>0.32</b>, the highest of any band, against <b>0.16</b> for the <b>36-45</b> band, the lowest. That is a <b>0.16</b> absolute gap and a <b>2.0&times;</b> relative disparity, the kind of spread a fair-lending reviewer opens a file over.</p>
+<p>The gap is unlikely to be noise: the 95% confidence interval on the disparity runs from <b>0.08 to 0.24</b>, clear of zero. It is also not a clean read. <span class="mono">digital_engagement_score</span>, one of the granted features, tracks age closely enough (correlation ratio <b>&eta; 0.92</b>) that the screen flagged it as a candidate proxy: the model may be reading age through the back door.</p>
+<p class="sup-note">Two cautions travel with this finding. It is an association, not a cause; nothing here shows that age drove the decision. And bands whose cell counts fell below the disclosure floor were removed before this summary was written, so they are not reflected in it. Whether the proxy is a legitimate business necessity is Legal's call, and the flag rides in the evidence pack so that call is made in the open.</p>`;
+const NAR_TEXT="Holding income constant, the model's flag rate falls unevenly across age. Applicants aged 18-25 are flagged at 0.32, the highest of any band, against 0.16 for the 36-45 band, the lowest. That is a 0.16 absolute gap and a 2.0x relative disparity, the kind of spread a fair-lending reviewer opens a file over. The gap is unlikely to be noise: the 95% confidence interval on the disparity runs from 0.08 to 0.24, clear of zero. It is also not a clean read. digital_engagement_score, one of the granted features, tracks age closely enough (correlation ratio 0.92) that the screen flagged it as a candidate proxy for age. Two cautions travel with this finding. It is an association, not a cause. And bands whose cell counts fell below the disclosure floor were removed before this summary was written, so they are not reflected in it.";
 function setNarMode(m){
   narMode=m;
   document.getElementById('seg-scripted').classList.toggle('active', m==='scripted');
@@ -1198,6 +1305,10 @@ function renderControls(){
 function openControls(){ renderControls(); document.getElementById('modal').classList.add('show'); }
 function closeControls(){ document.getElementById('modal').classList.remove('show'); }
 
+/* the stack: buy the maths, build the governance */
+function openStack(){ document.getElementById('stackmodal').classList.add('show'); }
+function closeStack(){ document.getElementById('stackmodal').classList.remove('show'); }
+
 /* theme */
 function updateThemeBtn(isDark){
   const b=document.getElementById('themebtn');
@@ -1224,8 +1335,8 @@ function buildAttested(){
 
 document.addEventListener('keydown',e=>{
   const drawerOpen=document.getElementById('drawer').classList.contains('show');
-  const modalOpen=document.getElementById('modal').classList.contains('show');
-  if(e.key==='Escape'){ closeDrawer(); closeControls(); }
+  const modalOpen=document.getElementById('modal').classList.contains('show') || document.getElementById('stackmodal').classList.contains('show');
+  if(e.key==='Escape'){ closeDrawer(); closeControls(); closeStack(); }
   if(e.key==='ArrowRight' && !drawerOpen && !modalOpen) go(1);
   if(e.key==='ArrowLeft' && !drawerOpen && !modalOpen) go(-1);
 });
