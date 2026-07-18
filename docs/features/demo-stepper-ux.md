@@ -328,10 +328,41 @@ incorporate them, all built and clickable in
   Registry a real home and makes Sentinel read as a *platform* in three seconds. Cost:
   adds a layer above the run.
 
-Recommendation: **C as the interview opener** (establish platform depth, then zoom into one
-run) sitting on top of **A's structure** (the surfaces still exist as full workspaces you
-can navigate to). B's contextual drawers are the strongest single-narrative device and can
-be layered onto either. All three reuse the same `render_*` surface bodies, so the choice
-is layout, not new data. The mockup data is real (from `datasets/registry.py`,
-`platform/registry.py`, `platform/certification.py`, `platform/adoption.py`); the
-adoption rates are seeded demo telemetry, labelled as such.
+The A/B/C comparison lives in `docs/mockups/sentinel-platform-surfaces.html` (a chooser
+swaps between them). It is the exploration record.
+
+### 9.1 Decided: C on top of A (built into the unified app)
+
+The chosen direction is **C's command-center dashboard as the landing, sitting on A's
+persistent sidebar**. It is built into the main mockup,
+`docs/mockups/sentinel-stepper-mockup.html`, which is now the unified app, not just the
+run:
+
+- **Login first.** The faux persona-select ("Acting as") is the first screen, before any
+  chrome.
+- **Command-center landing.** After sign-in you land on C's tile dashboard (Datasets 8 by
+  class, Registry 3 by cert status, Platform 5 templates, Adoption 29 runs / 67% promoted)
+  with a "Start a governed run" CTA.
+- **Persistent sidebar on every screen.** A left nav rail (Overview / Workspace·Run /
+  Governance·Datasets·Registry / Platform·Platform·Adoption) stays visible on the dashboard,
+  on all four surfaces, and inside the nine-stage run walkthrough. The topbar command frame
+  spans the full width above it.
+- **Surfaces open across the full content area.** A tile "Open" and its sidebar item both
+  route to the same full-width surface view (no modal); the sidebar stays put.
+- **All sidebar items always shown.** For now navigation is not gated by persona; any
+  identity can open any surface. RBAC-gated navigation is a later pass.
+- **The run is one view.** "Run" (or the CTA) enters the stepper (rail + stages +
+  Back/Next) rendered inside the shell; the Back/Next bar is offset by the sidebar and
+  shown only in the run view; arrow keys only drive stages while in the run.
+
+B's contextual drawers (surface opened from the stage that consumes it) are not in the
+built app yet; they remain the strongest single-narrative device and can be layered on
+later. All views reuse the same surface renderers, so the choice was layout, not new data.
+The mockup data is real (from `datasets/registry.py`, `platform/registry.py`,
+`platform/certification.py`, `platform/adoption.py`); the adoption rates are seeded demo
+telemetry, labelled as such.
+
+For the Streamlit build this maps to: `st.navigation` / a custom sidebar for the shell
+(replacing the section radio), a home page for the command center, and the run walkthrough
+(Section 7 phasing) as one of the pages. The four `render_*` surfaces already exist and
+move under the shell largely unchanged.

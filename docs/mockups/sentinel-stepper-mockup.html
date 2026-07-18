@@ -23,6 +23,8 @@
     --shadow-lg:0 24px 60px -24px rgba(9,17,32,.42);
     --r-sm:7px; --r-md:11px; --r-lg:16px;
     --stage-max:1060px;
+    /* app chrome (topbar / sidebar / rail): theme-aware, unlike the always-dark --rail */
+    --chrome-bg:#ffffff; --chrome-bg-2:#eef2f8; --chrome-ink:#0f1b2d; --chrome-muted:#5b6a82; --chrome-border:#d6deea; --chrome-hover:#e3e9f3; --chrome-abg:#e8eef9; --chrome-aink:#1e50a0; --chrome-aborder:#cddbf1;
   }
   @media (prefers-color-scheme: dark) {
     :root {
@@ -32,6 +34,7 @@
       --accent:#5b8def; --accent-strong:#7aa6f5; --accent-ink:#08121f;
       --accent-soft:#152743; --accent-soft-border:#2a4576;
       --rail:#070e1a; --rail-2:#0c1728; --rail-ink:#eef3fc; --rail-muted:#8194b4; --rail-border:#1b2b47;
+      --chrome-bg:#070e1a; --chrome-bg-2:#0c1728; --chrome-ink:#eef3fc; --chrome-muted:#8194b4; --chrome-border:#1b2b47; --chrome-hover:rgba(255,255,255,.06); --chrome-abg:rgba(91,141,239,.16); --chrome-aink:#cfe0fb; --chrome-aborder:#2f4d7e;
       --ok:#4ec27a; --ok-soft:#122a1c; --ok-border:#1f4a30; --ok-ink:#8fe0a9;
       --warn:#e2a03a; --warn-soft:#2a2110; --warn-border:#4d3a17; --warn-ink:#f0c274;
       --danger:#e5675e; --danger-soft:#2a1513; --danger-border:#552420; --danger-ink:#f2a39c;
@@ -51,6 +54,7 @@
     --danger:#b3261e; --danger-soft:#fdeceb; --danger-border:#f3ccc9; --danger-ink:#8f1d17;
     --shadow-sm:0 1px 2px rgba(15,27,45,.06);
     --shadow-md:0 8px 26px -12px rgba(15,27,45,.22);
+    --chrome-bg:#ffffff; --chrome-bg-2:#eef2f8; --chrome-ink:#0f1b2d; --chrome-muted:#5b6a82; --chrome-border:#d6deea; --chrome-hover:#e3e9f3; --chrome-abg:#e8eef9; --chrome-aink:#1e50a0; --chrome-aborder:#cddbf1;
   }
   :root[data-theme="dark"] {
     --canvas:#0a1220; --surface:#0f1a2c; --surface-2:#14223a;
@@ -61,6 +65,7 @@
     --ok:#4ec27a; --ok-soft:#122a1c; --ok-border:#1f4a30; --ok-ink:#8fe0a9;
     --warn:#e2a03a; --warn-soft:#2a2110; --warn-border:#4d3a17; --warn-ink:#f0c274;
     --danger:#e5675e; --danger-soft:#2a1513; --danger-border:#552420; --danger-ink:#f2a39c;
+    --chrome-bg:#070e1a; --chrome-bg-2:#0c1728; --chrome-ink:#eef3fc; --chrome-muted:#8194b4; --chrome-border:#1b2b47; --chrome-hover:rgba(255,255,255,.06); --chrome-abg:rgba(91,141,239,.16); --chrome-aink:#cfe0fb; --chrome-aborder:#2f4d7e;
   }
 
   * { box-sizing:border-box; }
@@ -79,67 +84,67 @@
   .eyebrow { font-size:11px; font-weight:700; letter-spacing:.13em; text-transform:uppercase; color:var(--faint); }
 
   /* ---------- Command frame ---------- */
-  .frame { position:sticky; top:0; z-index:40; }
   .topbar {
-    background:var(--rail); color:var(--rail-ink);
+    background:var(--chrome-bg); color:var(--chrome-ink);
     display:flex; align-items:center; gap:18px;
-    padding:12px 22px; border-bottom:1px solid var(--rail-border);
+    padding:12px 22px; border-bottom:1px solid var(--chrome-border);
   }
-  .brand { display:flex; align-items:center; gap:11px; }
+  .brand { display:flex; align-items:center; gap:11px; min-width:0; flex:none; }
   .brand svg { width:29px; height:29px; display:block; }
   .brand .wm { font-weight:700; letter-spacing:.22em; font-size:15px; }
-  .brand .sub { color:var(--rail-muted); font-size:11px; letter-spacing:.05em; border-left:1px solid var(--rail-border); padding-left:11px; }
+  .brand .sub { color:var(--chrome-muted); font-size:11px; letter-spacing:.05em; border-left:1px solid var(--chrome-border); padding-left:11px; }
   @media (max-width:720px){ .brand .sub{ display:none; } }
   .topbar .spacer { flex:1; }
-  .ctx { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .ctx { display:flex; align-items:center; gap:8px; flex-wrap:nowrap; min-width:0; overflow-x:auto; scrollbar-width:none; }
+  .ctx::-webkit-scrollbar { display:none; }
   .ctx-chip {
     display:inline-flex; align-items:center; gap:7px;
-    background:var(--rail-2); border:1px solid var(--rail-border); color:var(--rail-ink);
+    background:var(--chrome-bg-2); border:1px solid var(--chrome-border); color:var(--chrome-ink);
     padding:5px 10px; border-radius:999px; font-size:12px; white-space:nowrap;
   }
-  .ctx-chip .k { color:var(--rail-muted); }
+  .ctx-chip .k { color:var(--chrome-muted); }
   .ctx-chip .dot { width:6px; height:6px; border-radius:50%; }
   button.ctx-chip { cursor:pointer; font-family:inherit; }
-  button.ctx-chip:hover { background:#183761; border-color:#2f4d7e; }
-  .ctx-chip.tier { border-color:#2f4d7e; }
-  .tier-badge { font-weight:700; letter-spacing:.04em; color:#8fb4f2; }
+  button.ctx-chip:hover { background:var(--chrome-hover); border-color:var(--chrome-aborder); }
+  .ctx-chip.tier { border-color:var(--chrome-aborder); }
+  .tier-badge { font-weight:700; letter-spacing:.04em; color:var(--accent); }
   .iconbtn {
     display:inline-flex; align-items:center; gap:7px; background:transparent;
-    color:var(--rail-ink); border:1px solid var(--rail-border); border-radius:8px;
+    color:var(--chrome-ink); border:1px solid var(--chrome-border); border-radius:8px;
     padding:6px 11px; font-size:12.5px;
   }
-  .iconbtn:hover { background:var(--rail-2); }
+  .iconbtn:hover { background:var(--chrome-hover); }
   @media (max-width:720px){ .ctx-chip.persona, .ctx-chip.purpose{ display:none; } }
 
   /* ---------- Stepper rail ---------- */
-  .rail { background:var(--rail-2); border-bottom:1px solid var(--rail-border); padding:12px 16px 14px; overflow-x:auto; }
+  .rail { background:var(--chrome-bg-2); border-bottom:1px solid var(--chrome-border); padding:12px 16px 14px; overflow-x:auto; }
   .rail-inner { display:flex; align-items:flex-start; gap:0; min-width:max-content; margin:0 auto; max-width:1180px; }
   .step { position:relative; display:flex; flex-direction:column; align-items:center; gap:7px; padding:0 4px; flex:1 0 auto; min-width:96px; }
-  .step .connector { position:absolute; top:15px; left:calc(-50% + 15px); right:calc(50% + 15px); height:2px; background:var(--rail-border); }
+  .step .connector { position:absolute; top:15px; left:calc(-50% + 15px); right:calc(50% + 15px); height:2px; background:var(--chrome-border); }
   .step.done .connector, .step.active .connector { background:linear-gradient(90deg,#2f6fd0,#2f6fd0); }
   .step:first-child .connector { display:none; }
   .node {
     width:30px; height:30px; border-radius:50%; display:grid; place-items:center;
-    background:var(--rail); border:2px solid var(--rail-border); color:var(--rail-muted);
+    background:var(--chrome-bg); border:2px solid var(--chrome-border); color:var(--chrome-muted);
     font-size:12.5px; font-weight:700; z-index:1; transition:transform .15s ease;
     font-family:var(--mono);
   }
   .step button { all:unset; cursor:pointer; display:flex; flex-direction:column; align-items:center; gap:7px; }
   .step button:focus-visible .node { outline:2px solid var(--accent); outline-offset:2px; }
-  .step.done .node { background:#123a1f; border-color:#1f7a3d; color:#5fdc8a; }
+  .step.done .node { background:var(--ok-soft); border-color:var(--ok-border); color:var(--ok-ink); }
   .step.active .node { background:var(--accent); border-color:var(--accent); color:#fff; box-shadow:0 0 0 4px rgba(47,111,208,.28); transform:scale(1.06); }
-  .step .lbl { font-size:11.5px; color:var(--rail-muted); font-weight:600; letter-spacing:.02em; white-space:nowrap; }
-  .step.active .lbl { color:var(--rail-ink); }
+  .step .lbl { font-size:11.5px; color:var(--chrome-muted); font-weight:600; letter-spacing:.02em; white-space:nowrap; }
+  .step.active .lbl { color:var(--chrome-ink); }
   .step .tag { font-size:9.5px; letter-spacing:.04em; padding:1px 6px; border-radius:6px; font-weight:700; text-transform:uppercase; }
   .tag.fired { background:rgba(226,160,58,.16); color:#e7b45f; border:1px solid rgba(226,160,58,.32); }
   .tag.caught { background:rgba(229,103,94,.16); color:#f0938b; border:1px solid rgba(229,103,94,.3); }
-  .tag.quiet { color:var(--rail-muted); opacity:.65; }
+  .tag.quiet { color:var(--chrome-muted); opacity:.65; }
   .tag.meta { background:rgba(47,111,208,.16); color:#8fb2ec; border:1px solid rgba(47,111,208,.34); }
-  .step.meta .connector { border-top:2px dashed var(--rail-border); background:none; height:0; top:16px; }
+  .step.meta .connector { border-top:2px dashed var(--chrome-border); background:none; height:0; top:16px; }
   .step.meta.active .connector, .step.meta.done .connector { border-top-color:#2f6fd0; }
   .step.meta .node { border-style:dashed; }
-  .step:hover .node { border-color:#3a557f; }
-  .step:hover .lbl { color:var(--rail-ink); }
+  .step:hover .node { border-color:var(--chrome-aborder); }
+  .step:hover .lbl { color:var(--chrome-ink); }
 
   /* ---------- Stage ---------- */
   .stage-wrap { max-width:var(--stage-max); margin:0 auto; padding:26px 22px 120px; }
@@ -224,7 +229,7 @@
 
   /* substeps (Ask) */
   .substeps { display:flex; gap:8px; margin-bottom:18px; flex-wrap:wrap; }
-  .substep { flex:1; min-width:150px; text-align:left; background:var(--surface); border:1px solid var(--border); border-radius:var(--r-md); padding:11px 13px; display:flex; gap:11px; align-items:center; }
+  .substep { flex:1; min-width:150px; text-align:left; color:var(--ink); background:var(--surface); border:1px solid var(--border); border-radius:var(--r-md); padding:11px 13px; display:flex; gap:11px; align-items:center; }
   .substep.active { border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft); }
   .substep.done { border-color:var(--ok-border); }
   .substep .n { width:24px; height:24px; border-radius:50%; display:grid; place-items:center; font-family:var(--mono); font-size:12px; font-weight:700; background:var(--surface-2); color:var(--muted); border:1px solid var(--border-strong); flex:none; }
@@ -247,7 +252,7 @@
 
   /* purpose matrix */
   .pmatrix { display:flex; flex-wrap:wrap; gap:8px; }
-  .pcell { display:flex; align-items:center; gap:8px; padding:9px 12px; border-radius:var(--r-md); border:1px solid var(--border); background:var(--surface); font-size:13px; }
+  .pcell { display:flex; align-items:center; gap:8px; padding:9px 12px; border-radius:var(--r-md); border:1px solid var(--border); background:var(--surface); color:var(--ink); font-size:13px; }
   .pcell .mk { font-family:var(--mono); font-weight:700; }
   .pcell.allow { border-color:var(--ok-border); background:var(--ok-soft); color:var(--ok-ink); }
   .pcell.deny { border-color:var(--danger-border); background:var(--danger-soft); color:var(--danger-ink); }
@@ -313,7 +318,8 @@
   .narration .sup-note, .narration p.sup-note { color:var(--muted); font-style:italic; font-size:13.5px; }
 
   /* footer nav */
-  .navbar { position:fixed; bottom:0; left:0; right:0; z-index:35; background:color-mix(in srgb,var(--surface) 88%, transparent); backdrop-filter:blur(8px); border-top:1px solid var(--border); }
+  .navbar { position:fixed; bottom:0; left:238px; right:0; z-index:35; background:color-mix(in srgb,var(--surface) 88%, transparent); backdrop-filter:blur(8px); border-top:1px solid var(--border); }
+  @media (max-width:860px){ .navbar { left:0; } }
   .navbar-in { max-width:var(--stage-max); margin:0 auto; padding:12px 22px; display:flex; align-items:center; gap:14px; }
   .navbar .cap { flex:1; font-size:12.5px; color:var(--muted); }
   .navbar .cap b { color:var(--ink); font-weight:650; }
@@ -419,10 +425,90 @@
   .trans-verb { font-size:14px; font-weight:700; }
   .trans-msg { font-size:12.5px; color:var(--muted); margin-top:1px; }
   @media (prefers-reduced-motion: reduce){ .spinner { animation:none; } .transition, .pcard { transition:none; } }
+
+  /* ================= APP SHELL (persistent sidebar on every screen) ================= */
+  .shell { display:grid; grid-template-columns:238px minmax(0,1fr); grid-template-rows:auto 1fr; min-height:100vh; }
+  .shell > .topbar { grid-column:1 / -1; position:sticky; top:0; z-index:40; }
+  .sidenav { grid-column:1; grid-row:2; position:sticky; top:var(--topbar-h,54px); align-self:start; max-height:calc(100vh - var(--topbar-h,54px)); overflow-y:auto; background:var(--chrome-bg-2); border-right:1px solid var(--chrome-border); color:var(--chrome-ink); padding:16px 10px 30px; }
+  .content { grid-column:2; grid-row:2; min-width:0; }
+  @media (max-width:860px){
+    .shell { grid-template-columns:minmax(0,1fr); grid-template-rows:auto auto 1fr; }
+    .sidenav { grid-column:1; grid-row:auto; position:static; max-height:none; overflow-x:auto; overflow-y:visible; display:flex; gap:8px; align-items:center; border-right:0; border-bottom:1px solid var(--chrome-border); padding:10px 12px; }
+    .content { grid-column:1; grid-row:auto; }
+  }
+  .navgroup { margin-bottom:14px; }
+  .navgroup .gl { font-size:9.5px; font-weight:700; letter-spacing:.11em; text-transform:uppercase; color:var(--chrome-muted); padding:0 10px; margin-bottom:6px; }
+  @media (max-width:860px){ .navgroup { margin-bottom:0; display:flex; gap:6px; } .navgroup .gl { display:none; } }
+  .navitem { display:flex; align-items:center; gap:10px; width:100%; text-align:left; background:transparent; border:1px solid transparent; border-radius:9px; padding:9px 11px; color:var(--chrome-muted); font-size:13.5px; font-weight:600; white-space:nowrap; font-family:inherit; cursor:pointer; }
+  .navitem:hover { background:var(--chrome-hover); color:var(--chrome-ink); }
+  .navitem.active { background:var(--chrome-abg); color:var(--chrome-aink); border-color:var(--chrome-aborder); }
+  .navitem .ic { width:17px; height:17px; flex:none; opacity:.9; }
+  .navitem .ic svg { width:17px; height:17px; display:block; }
+  .navitem .cnt { margin-left:auto; font-family:var(--mono); font-size:10.5px; font-weight:700; color:var(--chrome-muted); background:var(--chrome-bg); border:1px solid var(--chrome-border); border-radius:6px; padding:0 6px; }
+  @media (max-width:860px){ .navitem .cnt { display:none; } }
+
+  .view { display:none; }
+  .view.show { display:block; }
+  .surfwrap { max-width:1040px; margin:0 auto; padding:24px 30px 60px; }
+  @media (max-width:600px){ .surfwrap { padding:20px 16px 50px; } }
+  .surfhead { margin-bottom:14px; }
+  .h2 { font-size:22px; margin-bottom:5px; }
+  .lede { color:var(--muted); font-size:14px; max-width:72ch; }
+  .subsec { margin-top:22px; }
+  .subsec > .eyebrow { display:block; margin-bottom:9px; }
+  .rowflex { display:flex; gap:14px; flex-wrap:wrap; }
+  .rowflex > * { flex:1; min-width:230px; }
+  .breakrow { display:flex; gap:7px; flex-wrap:wrap; }
+
+  /* classification chips */
+  .cls { font-size:10px; font-weight:800; padding:2px 7px; border-radius:5px; letter-spacing:.03em; text-transform:uppercase; }
+  .cls.public { background:var(--ok-soft); color:var(--ok-ink); border:1px solid var(--ok-border); }
+  .cls.internal { background:var(--accent-soft); color:var(--accent); border:1px solid var(--accent-soft-border); }
+  .cls.confidential { background:var(--warn-soft); color:var(--warn-ink); border:1px solid var(--warn-border); }
+  .cls.restricted { background:var(--danger-soft); color:var(--danger-ink); border:1px solid var(--danger-border); }
+  tbody tr.rowbad td { background:var(--danger-soft); }
+  tbody tr.rowgood td:first-child { box-shadow:inset 3px 0 0 var(--ok); }
+  .note .m { flex:none; font-weight:800; }
+
+  /* metrics + charts */
+  .metrics { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; }
+  @media (max-width:760px){ .metrics { grid-template-columns:repeat(2,1fr); } }
+  .metric { background:var(--surface); border:1px solid var(--border); border-radius:var(--r-md); padding:14px 15px; }
+  .metric .mv { font-size:26px; font-weight:700; font-variant-numeric:tabular-nums; line-height:1.05; }
+  .metric .ml { font-size:11.5px; font-weight:700; color:var(--muted); margin-top:6px; text-transform:uppercase; letter-spacing:.04em; }
+  .metric .md { font-size:11px; color:var(--faint); margin-top:3px; }
+  .barchart { display:flex; align-items:flex-end; gap:14px; height:120px; padding:18px 6px 0; }
+  .barchart .bcol { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%; gap:6px; }
+  .barchart .bar { width:100%; max-width:60px; background:linear-gradient(180deg,var(--accent),var(--accent-strong)); border-radius:5px 5px 0 0; position:relative; min-height:4px; }
+  .barchart .bar .v { position:absolute; top:-17px; left:0; right:0; text-align:center; font-family:var(--mono); font-size:11px; font-weight:700; }
+  .barchart .bcap { font-family:var(--mono); font-size:10.5px; color:var(--muted); }
+
+  /* command-center dashboard (landing) */
+  .dash { max-width:1120px; margin:0 auto; padding:24px 30px 60px; }
+  @media (max-width:600px){ .dash { padding:20px 16px 50px; } }
+  .dashhead { margin-bottom:20px; }
+  .cta-run { display:flex; align-items:center; gap:16px; background:linear-gradient(120deg,var(--rail),var(--rail-2)); color:var(--rail-ink); border-radius:var(--r-lg); padding:20px 24px; margin-bottom:20px; flex-wrap:wrap; }
+  .cta-run .cta-t { font-size:18px; font-weight:650; color:#fff; }
+  .cta-run .cta-d { font-size:12.5px; color:var(--rail-muted); margin-top:3px; }
+  .cta-run .spacer { flex:1; min-width:20px; }
+  .btn.lg { padding:13px 22px; font-size:15px; border-radius:var(--r-md); }
+  .tilegrid { display:grid; grid-template-columns:repeat(2,1fr); gap:16px; }
+  @media (max-width:780px){ .tilegrid { grid-template-columns:1fr; } }
+  .tile { text-align:left; background:var(--surface); border:1px solid var(--border); border-radius:var(--r-lg); box-shadow:var(--shadow-sm); padding:0; overflow:hidden; display:flex; flex-direction:column; }
+  .tile-h { display:flex; align-items:center; gap:10px; padding:14px 18px; border-bottom:1px solid var(--border); }
+  .tile-h .ic { width:19px; height:19px; color:var(--accent); flex:none; }
+  .tile-h .ic svg { width:19px; height:19px; display:block; }
+  .tile-h h3 { font-size:15px; }
+  .tile-h .open { margin-left:auto; font-size:12px; font-weight:600; color:var(--accent); background:transparent; border:0; cursor:pointer; }
+  .tile-h .open:hover { text-decoration:underline; }
+  .tile-b { padding:16px 18px; flex:1; }
+  .tile-stat { display:flex; align-items:baseline; gap:9px; }
+  .tile-stat .big { font-size:30px; font-weight:700; font-variant-numeric:tabular-nums; line-height:1; }
+  .tile-stat .unit { font-size:12.5px; color:var(--muted); }
 </style>
 </head>
 <body>
-<div class="frame">
+<div class="shell">
   <div class="topbar">
     <div class="brand">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 4 5v6c0 5 3.4 8.5 8 11 4.6-2.5 8-6 8-11V5z" fill="#2f6fd0"/><path d="M8 12l3 3 5-6" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -432,19 +518,45 @@
     <div class="spacer"></div>
     <div class="ctx">
       <button class="ctx-chip persona" id="persona-chip" onclick="openControls()" title="Who is running this, and what they may do"><span class="dot" style="background:#5fdc8a"></span><span class="k">Analyst</span> certified</button>
-      <button class="ctx-chip" onclick="showStage(1);showSub(1)" title="Dataset and classification"><span class="k">Data</span> german_credit <span class="badge danger" style="padding:1px 6px;font-size:10px">Restricted</span></button>
-      <button class="ctx-chip purpose" onclick="showStage(1);showSub(2)" title="Purpose limitation"><span class="k">Purpose</span> Fair-lending review</button>
+      <button class="ctx-chip" onclick="goRun(1,1)" title="Dataset and classification"><span class="k">Data</span> german_credit <span class="badge danger" style="padding:1px 6px;font-size:10px">Restricted</span></button>
+      <button class="ctx-chip purpose" onclick="goRun(1,2)" title="Purpose limitation"><span class="k">Purpose</span> Fair-lending review</button>
       <button class="ctx-chip tier" onclick="openCtl('CTL-TIER-01')" title="How the tier is computed"><span class="k">Tier</span> <span class="tier-badge" id="tier-badge">L2</span></button>
-      <button class="iconbtn" onclick="transitionTo(10)" aria-label="Jump to the architecture overview">&#9638; Stack</button>
+      <button class="iconbtn" onclick="goStack()" aria-label="Jump to the architecture overview">&#9638; Stack</button>
       <button class="iconbtn" onclick="openControls()" aria-label="Open control panel">&#9639; Controls</button>
       <button class="iconbtn" onclick="toggleTheme()" aria-label="Toggle theme" aria-pressed="false" id="themebtn">&#9681;</button>
     </div>
   </div>
-  <nav class="rail" aria-label="Pipeline stages"><div class="rail-inner" id="rail"></div></nav>
-</div>
 
-<main class="stage-wrap" id="stagewrap">
-  <h1 class="sr-only">Sentinel governed run walkthrough</h1>
+  <nav class="sidenav" id="sidenav" aria-label="Sections"></nav>
+
+  <div class="content" id="content">
+  <h1 class="sr-only">Sentinel — Governed Agentic Analysis</h1>
+
+  <!-- LANDING: governance command center (the tile dashboard) -->
+  <div class="view show" id="view-home">
+    <div class="dash">
+      <div class="dashhead">
+        <div class="eyebrow">Governance command center</div>
+        <h2 class="h2" style="margin-top:6px">The whole governed platform, at a glance</h2>
+        <p class="lede">Every surface is a live tile: data under classification, analyses under certification, agents under templates, adoption trending up. Start a governed run and watch one request flow through all of it.</p>
+      </div>
+      <div class="cta-run">
+        <div>
+          <div class="cta-t">Start a governed run</div>
+          <div class="cta-d">german_credit &middot; fair-lending review &middot; resolves to L2 &middot; nine controls arm before any code runs</div>
+        </div>
+        <div class="spacer"></div>
+        <button class="btn primary lg" onclick="startRun()">Launch walkthrough &rarr;</button>
+      </div>
+      <div class="tilegrid" id="tilegrid"></div>
+    </div>
+  </div>
+
+  <!-- RUN: the nine-stage governed walkthrough (sidebar stays visible) -->
+  <div class="view" id="view-run">
+  <nav class="rail" aria-label="Pipeline stages"><div class="rail-inner" id="rail"></div></nav>
+
+<main class="stage-wrap" id="stagewrap" aria-label="Governed run walkthrough">
   <div class="idbanner" id="idbanner" style="display:none"><div class="idbanner-in" id="idbanner-in"></div></div>
   <div class="enginebar" id="enginebar"></div>
 
@@ -1039,8 +1151,20 @@
   </section>
 
 </main>
+  </div><!-- /view-run -->
 
-<div class="navbar">
+  <!-- SURFACE: datasets / registry / platform / adoption (full content area, sidebar stays) -->
+  <div class="view" id="view-surface">
+    <div class="surfwrap">
+      <div class="surfhead"><div class="eyebrow" id="surf-eyebrow"></div><h2 class="h2" id="surf-title"></h2></div>
+      <div id="surf-body"></div>
+    </div>
+  </div>
+
+  </div><!-- /content -->
+</div><!-- /shell -->
+
+<div class="navbar" id="navbar" style="display:none">
   <div class="navbar-in">
     <button class="btn" id="backbtn" onclick="go(-1)">&larr; Back</button>
     <div class="cap" id="cap"></div>
@@ -1087,14 +1211,14 @@
 </div>
 
 <!-- faux login / persona select -->
-<div class="login" id="login">
+<div class="login" id="login" role="dialog" aria-modal="true" aria-labelledby="login-h">
   <div class="login-inner">
     <div class="login-brand">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 4 5v6c0 5 3.4 8.5 8 11 4.6-2.5 8-6 8-11V5z" fill="#2f6fd0"/><path d="M8 12l3 3 5-6" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
       <span class="wm">SENTINEL</span><span class="sub">Governed Agentic Analysis</span>
     </div>
     <div class="login-eyebrow">Acting as</div>
-    <h2 class="login-h">Choose an identity</h2>
+    <h2 class="login-h" id="login-h">Choose an identity</h2>
     <p class="login-sub">Every persona is governed differently. Your role and attestations set how much machine autonomy the platform grants, computed as the lower of the two.</p>
     <div class="persona-grid" id="persona-grid"></div>
     <p class="login-foot">Faux sign-in for the demo. No credentials, no auth. Pick anyone to enter.</p>
@@ -1136,7 +1260,7 @@ const CONTROLS = {
 
 /* ---------- stages ---------- */
 const STAGES = [
-  {n:'Ask',tag:'quiet'},{n:'Plan',tag:'quiet'},{n:'Access',tag:'quiet',mark:'4'},{n:'Generate',tag:'quiet'},
+  {n:'Ask',tag:'quiet'},{n:'Plan',tag:'quiet'},{n:'Access',tag:'quiet'},{n:'Generate',tag:'quiet'},
   {n:'Gate',tag:'caught',mark:'1 caught'},{n:'Execute',tag:'quiet'},{n:'Screen',tag:'fired',mark:'3 fired'},
   {n:'Interpret',tag:'quiet'},{n:'Attest',tag:'quiet'},
   {n:'Architecture',tag:'meta',mark:'overview',meta:true,glyph:'&#9638;'}
@@ -1231,7 +1355,7 @@ function pickPersona(id){
   setPersona(p);
   const login = document.getElementById('login');
   login.classList.add('leaving');
-  const done = ()=>{ login.style.display='none'; transitionTo(1); };
+  const done = ()=>{ login.style.display='none'; showView('home'); };
   reduceMotion() ? done() : setTimeout(done, 280);
 }
 
@@ -1473,21 +1597,224 @@ function buildAttested(){
   el.innerHTML=ids.map(id=>`<button class="ctl ${fired.has(id)?'fired':'pass'}" onclick="openCtl('${id}')"><span class="st"></span>${id}</button>`).join('');
 }
 
+/* ================= APP SHELL: sidebar, dashboard, platform surfaces ================= */
+/* Real prod data (datasets/registry.py, platform/{registry,certification,adoption}.py) */
+const DATASETS = [
+  {id:'german_credit', name:'UCI Statlog German Credit', cls:'Restricted', rows:'1,000', tables:1, license:'CC BY 4.0', commercial:'yes', onboarded:'yes'},
+  {id:'uci_taiwan_credit', name:'UCI Default of Credit Card Clients (Taiwan)', cls:'Restricted', rows:'30,000', tables:1, license:'CC BY 4.0', commercial:'yes', onboarded:'registered'},
+  {id:'berka', name:"PKDD'99 Financial (Berka, Czech bank)", cls:'Confidential', rows:'1,090,086', tables:8, license:'research/education', commercial:'flagged', onboarded:'registered'},
+  {id:'ulb_fraud', name:'ULB Credit Card Fraud (OpenML 1597)', cls:'Confidential', rows:'284,807', tables:1, license:'DbCL 1.0', commercial:'yes', onboarded:'registered'},
+  {id:'hillstrom', name:'Hillstrom MineThatData email', cls:'Internal', rows:'64,000', tables:1, license:'no formal license (permissive)', commercial:'flagged', onboarded:'registered'},
+  {id:'lendingclub', name:'LendingClub 2007-2018 (messy)', cls:'Internal', rows:'2,260,000', tables:1, license:'unlicensed / CC BY 4.0', commercial:'flagged', onboarded:'registered'},
+  {id:'uci_bank_marketing', name:'UCI Bank Marketing', cls:'Internal', rows:'41,188', tables:1, license:'CC BY 4.0', commercial:'yes', onboarded:'registered'},
+  {id:'synthetic_its', name:'Semi-synthetic interrupted time series', cls:'Public', rows:'365', tables:1, license:'Apache-2.0 / MIT', commercial:'yes', onboarded:'yes'},
+];
+const CLASS_ORDER = ['Restricted','Confidential','Internal','Public'];
+const CERTS = [
+  {id:'fair-lending', ver:'v1.4', author:'priya.raman', owner:'Dana Okafor', validator:'sam.mendes', contract:'german_credit@sha:188808', faith:0.94, status:'certified',
+   gates:[['Eval floor 0.90','ok','CTL-EVAL-01'],['Owner is a person','ok',''],['Data contract','ok','CTL-CONTRACT-01'],['Independent validator','ok','CTL-SOD-01']]},
+  {id:'deposit-elasticity', ver:'v0.9', author:'marcus.lee', owner:'Dana Okafor', validator:'—', contract:'berka@sha:9b0c2e', faith:0.91, status:'candidate',
+   gates:[['Eval floor 0.90','ok','CTL-EVAL-01'],['Owner is a person','ok',''],['Data contract','ok','CTL-CONTRACT-01'],['Independent validator','bad','CTL-SOD-01']]},
+  {id:'cohort-retention', ver:'v0.3', author:'priya.raman', owner:'priya.raman', validator:'—', contract:'berka@sha:9b0c2e', faith:0.72, status:'refused',
+   gates:[['Eval floor 0.90','bad','CTL-EVAL-01'],['Owner is a person','ok',''],['Data contract','ok','CTL-CONTRACT-01'],['Independent validator','bad','CTL-SOD-01']]},
+];
+const MODELS = [
+  {ver:'credit-lr-000001', q:'build_model', auc:'0.78', dr:'0.57', fair:false, status:'promoted', origin:'seeded'},
+  {ver:'credit-lr-000002', q:'fairness_age', auc:'0.71', dr:'0.52', fair:false, status:'blocked', origin:'seeded'},
+];
+const AGENTS = [
+  {id:'profiler', tpl:'data_analysis', tools:'read_columns, profile_dataset', rbac:'structural columns; PII and proxies withheld'},
+  {id:'eda', tpl:'data_analysis', tools:'read_columns, profile_dataset', rbac:'structural columns; PII and proxies withheld'},
+  {id:'modeler', tpl:'modeling', tools:'read_columns, train_model', rbac:'features only; cannot validate its own model'},
+  {id:'validator', tpl:'validation', tools:'read_columns, compute_fairness, run_eval_gate, retrieve_policy', rbac:'adds the protected attribute, for fairness only; cannot train'},
+];
+const TEMPLATES = [
+  {name:'Data-analysis agent', id:'data_analysis', pattern:'prompt_chaining', status:'live', tools:'read_columns, profile_dataset', rbac:'structural columns; PII and proxies withheld', by:'profiler, eda'},
+  {name:'Modeling agent', id:'modeling', pattern:'evaluator_optimizer', status:'live', tools:'read_columns, train_model', rbac:'features only; cannot validate its own model', by:'modeler'},
+  {name:'Validation agent', id:'validation', pattern:'evaluator_optimizer', status:'live', tools:'read_columns, compute_fairness, run_eval_gate, retrieve_policy', rbac:'adds the protected attribute, for fairness only; cannot train', by:'validator'},
+  {name:'Retrieval-QA agent', id:'retrieval_qa', pattern:'prompt_chaining', status:'available', tools:'read_columns, retrieve_policy', rbac:'corpus read; no dataset PII', by:'lands with the RAG layer'},
+  {name:'Document-summarizer agent', id:'document_summarizer', pattern:'prompt_chaining', status:'available', tools:'read_columns', rbac:'document text only; redaction enforced', by:'not yet realized'},
+];
+const PLAYBOOKS = [
+  {title:'Build a governed credit-risk model', pattern:'prompt_chaining', status:'implemented', by:'the live Sentinel pipeline'},
+  {title:'Onboard a new dataset to the platform', pattern:'prompt_chaining', status:'template', by:'the config-extension path (rbac.yaml, questions.yaml)'},
+  {title:'Stand up a reporting-automation agent', pattern:'prompt_chaining', status:'template', by:'not yet built'},
+];
+const PATTERNS = [
+  {id:'prompt_chaining', status:'in_use'}, {id:'evaluator_optimizer', status:'in_use'},
+  {id:'routing', status:'planned'}, {id:'parallelization', status:'planned'}, {id:'orchestrator_workers', status:'avoided'},
+];
+const WEEKLY = [['2026-W26',6],['2026-W27',9],['2026-W28',14]];
+
+const SICON = {
+  home:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 11l8-6 8 6"/><path d="M6 10v9h12v-9" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  play:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M7 5l12 7-12 7z" stroke-linejoin="round"/></svg>',
+  db:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v12c0 1.7 3.1 3 7 3s7-1.3 7-3V6"/><path d="M5 12c0 1.7 3.1 3 7 3s7-1.3 7-3"/></svg>',
+  check:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="4" width="16" height="16" rx="4"/><path d="M8.5 12.4l2.4 2.4 4.6-5.2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  grid:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></svg>',
+  chart:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 20V4"/><path d="M4 20h16"/><rect x="7" y="12" width="3" height="5"/><rect x="12" y="8" width="3" height="9"/><rect x="17" y="5" width="3" height="12"/></svg>',
+};
+function statusBadge(s){
+  const map={certified:['ok','certified'],candidate:['warn','candidate'],refused:['danger','refused'],promoted:['ok','promoted'],blocked:['danger','blocked'],live:['ok','live'],available:['warn','available'],implemented:['ok','implemented'],template:['warn','template'],in_use:['ok','in use'],planned:['warn','planned'],avoided:['danger','avoided by design']};
+  const [c,t]=map[s]||['neutral',s]; return `<span class="badge ${c}">${t}</span>`;
+}
+
+/* ---------- surface renderers (return HTML) ---------- */
+function renderDatasets(){
+  const rows = DATASETS.map(d=>`<tr${d.id==='german_credit'?' class="rowgood"':''}>
+    <td class="mono">${d.id}</td><td>${d.name}</td>
+    <td><span class="cls ${d.cls.toLowerCase()}">${d.cls}</span></td>
+    <td class="num">${d.rows}</td><td class="num">${d.tables}</td><td>${d.license}</td>
+    <td>${d.commercial==='yes'?'<span class="badge ok">yes</span>':'<span class="badge warn">flagged</span>'}</td>
+    <td>${d.onboarded==='yes'?'<span class="badge ok">onboarded</span>':'<span class="badge neutral">registered</span>'}</td></tr>`).join('');
+  const counts = CLASS_ORDER.map(c=>`<span class="cls ${c.toLowerCase()}">${c} ${DATASETS.filter(d=>d.cls===c).length}</span>`).join(' ');
+  return `<p class="lede" style="margin-bottom:12px">Eight datasets, every one genuinely public. Classification is <b>simulated</b> to exercise the ladder: the tier a run can reach is capped by the data class. Restricted caps at L2, Confidential at L1.</p>
+    <div class="breakrow" style="margin-bottom:12px">${counts}</div>
+    <div class="tbl-wrap"><table><thead><tr><th>id</th><th>name</th><th>class</th><th class="num">rows</th><th class="num">tbl</th><th>license</th><th>commercial</th><th>onboarded</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <div class="note" style="margin-top:12px"><span class="m">i</span><div>Classification lives in the govflow Access stage (<span class="mono">purpose_matrix.py</span>), joined onto the catalogue here. german_credit &times; marketing is refused at Access by <span class="ctl"><span class="st"></span>CTL-PURP-01</span>.</div></div>`;
+}
+function renderRegistry(){
+  const certCards = CERTS.map(c=>{
+    const gates = c.gates.map(g=>`<div style="display:flex;align-items:center;gap:8px;font-size:12px;padding:3px 0">
+      <span style="color:${g[1]==='ok'?'var(--ok)':'var(--danger)'};font-weight:800">${g[1]==='ok'?'✓':'✗'}</span><span>${g[0]}</span>${g[2]?` <span class="ctl"><span class="st"></span>${g[2]}</span>`:''}</div>`).join('');
+    return `<div class="card"><div class="card-h"><h3 class="mono" style="font-size:14px">${c.id} ${c.ver}</h3>${statusBadge(c.status)}</div>
+      <div class="card-b"><dl class="kv" style="margin-bottom:12px">
+        <dt>author</dt><dd class="mono">${c.author}</dd><dt>owner</dt><dd>${c.owner}</dd>
+        <dt>validator</dt><dd class="mono">${c.validator}</dd><dt>contract</dt><dd class="mono">${c.contract}</dd>
+        <dt>faithfulness</dt><dd class="mono" style="color:${c.faith>=0.90?'var(--ok-ink)':'var(--danger-ink)'}">${c.faith.toFixed(2)}</dd></dl>
+        <div class="eyebrow" style="margin-bottom:5px">Certification gates</div>${gates}
+        ${c.status==='candidate'?`<div class="note info" style="margin-top:11px"><span class="m">+</span><div>Assign any validator &ne; author and this flips to <b>certified</b>. Self-signoff is refused by <span class="ctl"><span class="st"></span>CTL-SOD-01</span>.</div></div>`:''}</div></div>`;
+  }).join('');
+  const modelRows = MODELS.map(m=>`<tr class="${m.status==='promoted'?'rowgood':'rowbad'}"><td class="mono">${m.ver}</td><td class="mono">${m.q}</td><td class="num">${m.auc}</td><td class="num">${m.dr}</td>
+    <td>${m.fair?'<span class="badge ok">pass</span>':'<span class="badge danger">fail</span>'}</td><td>${statusBadge(m.status)}</td><td><span class="badge neutral">${m.origin}</span></td></tr>`).join('');
+  const agentRows = AGENTS.map(a=>`<tr><td class="mono">${a.id}</td><td class="mono">${a.tpl}</td><td class="mono" style="font-size:11px">${a.tools}</td><td style="font-size:11.5px;color:var(--muted)">${a.rbac}</td><td><span class="badge ok">passing</span></td></tr>`).join('');
+  return `<p class="lede" style="margin-bottom:14px">The MRM inventory. Status is <b>computed from gates, never stored</b>: eval floor, owner-is-a-person, declared contract, and an independent validator. This is what the Plan stage is gated by.</p>
+    <div class="subsec"><span class="eyebrow">Analysis certification lifecycle</span><div class="rowflex">${certCards}</div></div>
+    <div class="subsec"><span class="eyebrow">Models (MRM inventory)</span><div class="tbl-wrap"><table><thead><tr><th>version</th><th>question</th><th class="num">auc</th><th class="num">disparity</th><th>fairness</th><th>status</th><th>origin</th></tr></thead><tbody>${modelRows}</tbody></table></div></div>
+    <div class="subsec"><span class="eyebrow">Agents (live harness)</span><div class="tbl-wrap"><table><thead><tr><th>agent</th><th>template</th><th>tools</th><th>rbac scope</th><th>eval</th></tr></thead><tbody>${agentRows}</tbody></table></div></div>
+    <div class="note" style="margin-top:14px"><span class="m">&#8593;</span><div><span class="mono">plan_visible_entries()</span> returns only <b>certified</b> analyses, so cohort-retention (refused) can never reach a user through Plan.</div></div>`;
+}
+function renderPlatform(){
+  const tpl = TEMPLATES.map(t=>`<div class="card"><div class="card-h"><h3 style="font-size:14px">${t.name}</h3>${statusBadge(t.status)}</div>
+    <div class="card-b"><dl class="kv"><dt>pattern</dt><dd class="mono">${t.pattern}</dd><dt>tools</dt><dd class="mono" style="font-size:11px">${t.tools}</dd><dt>RBAC</dt><dd style="font-size:11.5px">${t.rbac}</dd><dt>realized by</dt><dd class="mono">${t.by}</dd></dl></div></div>`).join('');
+  const pb = PLAYBOOKS.map(p=>`<tr><td>${p.title}</td><td class="mono">${p.pattern}</td><td>${statusBadge(p.status)}</td><td style="font-size:11.5px;color:var(--muted)">${p.by}</td></tr>`).join('');
+  const pat = PATTERNS.map(p=>`<span class="badge ${p.status==='in_use'?'ok':p.status==='avoided'?'danger':'warn'}">${p.id} &middot; ${p.status.replace('_',' ')}</span>`).join(' ');
+  return `<p class="lede" style="margin-bottom:14px">Reusable agent blueprints (tool allow-list + RBAC scope), the playbooks that assemble them, and the architecture patterns, anchored on Anthropic's Building Effective Agents.</p>
+    <div class="metrics" style="margin-bottom:18px">
+      <div class="metric"><div class="mv">5</div><div class="ml">Templates</div><div class="md">3 live</div></div>
+      <div class="metric"><div class="mv">4/4</div><div class="ml">Agent coverage</div><div class="md">100% of live agents</div></div>
+      <div class="metric"><div class="mv">3</div><div class="ml">Playbooks</div><div class="md">1 implemented, 2 template</div></div>
+      <div class="metric"><div class="mv">5</div><div class="ml">Patterns</div><div class="md">2 in use, 1 avoided by design</div></div></div>
+    <div class="subsec"><span class="eyebrow">Reusable agent templates</span><div class="rowflex">${tpl}</div></div>
+    <div class="subsec"><span class="eyebrow">AI playbooks</span><div class="tbl-wrap"><table><thead><tr><th>job to be done</th><th>pattern</th><th>status</th><th>implemented by</th></tr></thead><tbody>${pb}</tbody></table></div></div>
+    <div class="subsec"><span class="eyebrow">Architecture pattern catalog</span><div class="breakrow">${pat}</div></div>`;
+}
+function renderAdoption(){
+  const max=Math.max(...WEEKLY.map(w=>w[1]));
+  const bars=WEEKLY.map(w=>`<div class="bcol"><div class="bar" style="height:${Math.round(w[1]/max*100)}%"><span class="v">${w[1]}</span></div><div class="bcap">${w[0]}</div></div>`).join('');
+  const use=[['profiler',29],['eda',29],['modeler',29],['validator',26]];
+  const abars=use.map(a=>`<div class="bcol"><div class="bar" style="height:${Math.round(a[1]/29*100)}%;background:linear-gradient(180deg,var(--ok),var(--ok-ink))"><span class="v">${a[1]}</span></div><div class="bcap">${a[0]}</div></div>`).join('');
+  return `<p class="lede" style="margin-bottom:14px">Downstream aggregation over the model registry that every run writes into. Shows the platform is compounding, not just accumulating one-offs.</p>
+    <div class="metrics" style="margin-bottom:20px">
+      <div class="metric"><div class="mv">29</div><div class="ml">Total runs</div><div class="md">seeded W26-W28</div></div>
+      <div class="metric"><div class="mv">67%</div><div class="ml">Promotion rate</div><div class="md">promoted / total</div></div>
+      <div class="metric"><div class="mv">12%</div><div class="ml">Override rate</div><div class="md">human rejected</div></div>
+      <div class="metric"><div class="mv">100%</div><div class="ml">Template coverage</div><div class="md">4/4 agents</div></div></div>
+    <div class="rowflex">
+      <div class="card"><div class="card-h"><h3>Runs per week</h3><span class="eyebrow">seeded demo history</span></div><div class="card-b"><div class="barchart">${bars}</div></div></div>
+      <div class="card"><div class="card-h"><h3>Agent utilization</h3><span class="eyebrow">invocations, all runs</span></div><div class="card-b"><div class="barchart">${abars}</div></div></div></div>
+    <div class="note" style="margin-top:14px"><span class="m">i</span><div>Rates shown are labeled demo telemetry over seeded history. In the enterprise deployment this view reads the platform's real run store.</div></div>`;
+}
+const SURF = {
+  datasets:{eyebrow:'Dataset registry', title:'Datasets', render:renderDatasets},
+  registry:{eyebrow:'Model & agent registry', title:'Registry', render:renderRegistry},
+  platform:{eyebrow:'Templates, playbooks, patterns', title:'Platform', render:renderPlatform},
+  adoption:{eyebrow:'Adoption & utilization', title:'Adoption', render:renderAdoption},
+};
+
+/* ---------- sidebar ---------- */
+const NAV = [
+  {group:'', items:[{sec:'home', label:'Overview', icon:'home'}]},
+  {group:'Workspace', items:[{sec:'run', label:'Run', icon:'play'}]},
+  {group:'Governance', items:[{sec:'datasets', label:'Datasets', icon:'db', cnt:'8'},{sec:'registry', label:'Registry', icon:'check', cnt:'3'}]},
+  {group:'Platform', items:[{sec:'platform', label:'Platform', icon:'grid', cnt:'5'},{sec:'adoption', label:'Adoption', icon:'chart'}]},
+];
+function buildSidebar(){
+  document.getElementById('sidenav').innerHTML = NAV.map(g=>
+    `<div class="navgroup">${g.group?`<div class="gl">${g.group}</div>`:''}${g.items.map(it=>
+      `<button class="navitem" data-sec="${it.sec}" onclick="showView('${it.sec}')"><span class="ic" aria-hidden="true">${SICON[it.icon]}</span>${it.label}${it.cnt?`<span class="cnt">${it.cnt}</span>`:''}</button>`).join('')}</div>`).join('');
+}
+function buildTiles(){
+  const tile=(sec,statHTML,bodyHTML)=>{ const s=SURF[sec];
+    const ic = sec==='datasets'?'db':sec==='registry'?'check':sec==='platform'?'grid':'chart';
+    return `<div class="tile"><div class="tile-h"><span class="ic" aria-hidden="true">${SICON[ic]}</span><h3>${s.title}</h3><button class="open" aria-label="Open ${s.title}" onclick="showView('${sec}')">Open &rarr;</button></div><div class="tile-b">${statHTML}${bodyHTML}</div></div>`; };
+  const dsBreak=CLASS_ORDER.map(c=>`<span class="cls ${c.toLowerCase()}">${c} ${DATASETS.filter(d=>d.cls===c).length}</span>`).join(' ');
+  document.getElementById('tilegrid').innerHTML = [
+    tile('datasets',`<div class="tile-stat"><span class="big">8</span><span class="unit">datasets under classification</span></div>`,`<div class="breakrow" style="margin-top:13px">${dsBreak}</div>`),
+    tile('registry',`<div class="tile-stat"><span class="big">3</span><span class="unit">analyses in the certification lifecycle</span></div>`,`<div class="breakrow" style="margin-top:13px">${statusBadge('certified')} ${statusBadge('candidate')} ${statusBadge('refused')}</div>`),
+    tile('platform',`<div class="tile-stat"><span class="big">5</span><span class="unit">agent templates &middot; 3 live</span></div>`,`<div class="breakrow" style="margin-top:13px"><span class="badge ok">4/4 agents covered</span> <span class="badge warn">2 available</span></div>`),
+    tile('adoption',`<div class="tile-stat"><span class="big">29</span><span class="unit">governed runs &middot; 67% promoted</span></div>`,`<div class="barchart" style="height:70px;padding-top:14px">${WEEKLY.map(w=>`<div class="bcol"><div class="bar" style="height:${Math.round(w[1]/14*100)}%"><span class="v">${w[1]}</span></div><div class="bcap">${w[0].replace('2026-','')}</div></div>`).join('')}</div>`),
+  ].join('');
+}
+
+/* ---------- view switching ---------- */
+let currentView = 'home';
+function showView(name){
+  currentView = name;
+  const isSurf = name in SURF;
+  document.getElementById('view-home').classList.toggle('show', name==='home');
+  document.getElementById('view-run').classList.toggle('show', name==='run');
+  document.getElementById('view-surface').classList.toggle('show', isSurf);
+  if(isSurf){ const s=SURF[name]; document.getElementById('surf-eyebrow').textContent=s.eyebrow; document.getElementById('surf-title').textContent=s.title; document.getElementById('surf-body').innerHTML=s.render(); }
+  document.getElementById('navbar').style.display = name==='run' ? '' : 'none';
+  document.querySelectorAll('#sidenav .navitem').forEach(b=>{ const on=b.dataset.sec===name; b.classList.toggle('active', on); if(on) b.setAttribute('aria-current','page'); else b.removeAttribute('aria-current'); });
+  window.scrollTo({top:0, behavior: reduceMotion()?'auto':'smooth'});
+}
+/* Restore the run's interactive showpieces so a re-launch replays from scratch. */
+function resetRun(){
+  const a1=document.getElementById('gate-attempt1'); if(a1) a1.style.display='';
+  const a2=document.getElementById('gate-attempt2'); if(a2) a2.style.display='none';
+  const fb=document.getElementById('fixbtn'); if(fb){ fb.disabled=false; fb.innerHTML='&#9881; Fix it &mdash; regenerate with the failure fed back'; }
+  const ns=document.getElementById('narstart'); if(ns) ns.style.display='';
+  const np=document.getElementById('narpending'); if(np) np.style.display='none';
+  const nb=document.getElementById('narbody'); if(nb) nb.style.display='none';
+  const par=document.getElementById('narpara'); if(par){ par.classList.remove('caret'); par.textContent=''; }
+  const nf=document.getElementById('narfaith'); if(nf) nf.style.display='none';
+  buildRail(); /* rebuilds the Stage-5 rail tag that fixIt() mutated inline */
+  currentSub=1;
+}
+function startRun(){ showView('run'); resetRun(); transitionTo(1); }
+function goRun(s,sub){ showView('run'); resetRun(); pendingSub = sub || 1; transitionTo(s||1); }
+function goStack(){ showView('run'); transitionTo(10); }
+
 document.addEventListener('keydown',e=>{
   const drawerOpen=document.getElementById('drawer').classList.contains('show');
   const modalOpen=document.getElementById('modal').classList.contains('show');
   if(e.key==='Escape'){ closeDrawer(); closeControls(); }
-  if(e.key==='ArrowRight' && !drawerOpen && !modalOpen) go(1);
-  if(e.key==='ArrowLeft' && !drawerOpen && !modalOpen) go(-1);
+  if(currentView!=='run' || drawerOpen || modalOpen) return;
+  if(e.key==='ArrowRight') go(1);
+  if(e.key==='ArrowLeft') go(-1);
 });
 
 buildRail();
 buildAttested();
 buildPersonas();
+buildSidebar();
+buildTiles();
 updateThemeBtn(currentIsDark());
 applyScreenState();
 showStage(1);
 showSub(1);
+showView('home');
+
+/* publish the real topbar height so the sticky sidebar offset never guesses */
+(function(){
+  const tb=document.querySelector('.topbar'); if(!tb) return;
+  const setH=()=>document.documentElement.style.setProperty('--topbar-h', tb.offsetHeight+'px');
+  setH();
+  if(window.ResizeObserver){ new ResizeObserver(setH).observe(tb); }
+  window.addEventListener('resize', setH);
+})();
 </script>
 </body>
 </html>
