@@ -18,11 +18,21 @@ cd "$REPO_ROOT"
 # requirements.txt ships a bundle that imports a module the instance never installed,
 # and the app crashes on first render while health still returns 200. This exact drift
 # took prod down once. Regenerate from the lock and refuse to deploy on any mismatch.
-# Header comments (the "# via" body lines stay) differ only in the --output-file arg,
-# so strip column-0 comment lines before comparing.
+#
+# The export command (including which extras ship) is read from requirements.txt's own
+# header line, which uv writes when it generates the file. That header is the single
+# source of truth: change the extras, regenerate, and this guard follows the new header
+# with no flags duplicated here. We strip the --output-file arg (compare against stdout)
+# and drop column-0 comment lines so the header itself never counts as drift.
 echo "==> Checking requirements.txt is in sync with uv.lock"
-if command -v uv >/dev/null 2>&1; then
-  GEN="$(uv export --no-hashes --no-dev --extra pgvector --extra live 2>/dev/null | grep -v '^#')"
+REQ_CMD="$(grep -oE 'uv export .*' requirements.txt | head -1 | sed -E 's/ --output-file[= ][^ ]+//')"
+if ! command -v uv >/dev/null 2>&1; then
+  echo "    WARNING: uv not found; cannot verify requirements.txt against the lock. Proceeding." >&2
+elif [ -z "$REQ_CMD" ]; then
+  echo "    WARNING: no 'uv export' command in requirements.txt's header; cannot verify. Proceeding." >&2
+else
+  read -r -a REQ_ARGV <<< "$REQ_CMD"          # split into argv; no word-split/glob surprises
+  GEN="$("${REQ_ARGV[@]}" 2>/dev/null | grep -v '^#')"
   CUR="$(grep -v '^#' requirements.txt)"
   if [ "$GEN" != "$CUR" ]; then
     echo "!! requirements.txt is OUT OF SYNC with uv.lock. Aborting before touching AWS." >&2
@@ -31,13 +41,11 @@ if command -v uv >/dev/null 2>&1; then
     diff <(echo "$CUR") <(echo "$GEN") | sed 's/^/     /' >&2 || true
     echo "" >&2
     echo "   Regenerate, commit, then re-run this deploy:" >&2
-    echo "     uv export --no-hashes --no-dev --extra pgvector --extra live --output-file requirements.txt" >&2
+    echo "     $REQ_CMD --output-file requirements.txt" >&2
     echo "     git add requirements.txt && git commit -m 'chore(deps): sync requirements.txt with uv.lock'" >&2
     exit 1
   fi
   echo "    in sync."
-else
-  echo "    WARNING: uv not found; cannot verify requirements.txt against the lock. Proceeding." >&2
 fi
 
 ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
