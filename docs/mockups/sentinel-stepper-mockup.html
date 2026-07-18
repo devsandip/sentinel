@@ -989,14 +989,14 @@
   <!-- STAGE 10 : ARCHITECTURE (the stack, promoted from a modal to a rail stop) -->
   <section class="panel" id="stage-10" aria-labelledby="h10">
     <div class="phead">
-      <div class="eyebrow"><span>The full stack</span><span class="badge neutral">Buy the maths, build the governance</span></div>
+      <div class="eyebrow"><span>The full stack</span><span class="badge neutral">Framework &amp; tools used, governance implemented</span></div>
       <h2 id="h10">Architecture</h2>
       <p class="lede">Zoom out from the run. The analysis is off-the-shelf: named libraries do the maths, each at one stage, and we do not reimplement any of it. What we build is the governance, the named controls that sit at every transition and can refuse. Every chip below is a control you already watched fire on this run.</p>
     </div>
 
     <div class="grid2">
       <div class="stackcol">
-        <div class="sc-h"><span class="lib" style="cursor:default"><span class="d"></span>bought</span> The maths</div>
+        <div class="sc-h"><span class="lib" style="cursor:default"><span class="d"></span>tools</span> Framework &amp; Tools used</div>
         <p class="sc-sub">Off-the-shelf. We do not reimplement any of it.</p>
         <div class="stackrow"><span class="nm">Claude</span><span class="ds">Writes the analysis code, and the narration</span><span class="sg">Generate&middot;Interpret</span></div>
         <div class="stackrow"><span class="nm">ast</span><span class="ds">Parses generated Python (stdlib)</span><span class="sg">Gate</span></div>
@@ -1011,7 +1011,7 @@
         <div class="stackrow"><span class="nm">marimo</span><span class="ds">The reviewable analyst notebook</span><span class="sg">Attest</span></div>
       </div>
       <div class="stackcol">
-        <div class="sc-h"><span class="badge info">built</span> The governance</div>
+        <div class="sc-h"><span class="badge info">built</span> Governance implemented</div>
         <p class="sc-sub">Named, observable controls at every transition. This is the product.</p>
         <div class="stackrow"><span class="sg" style="min-width:64px">Ask</span><span class="ds"><button class="ctl armed" onclick="openCtl('CTL-TIER-01')"><span class="st"></span>TIER-01</button> <button class="ctl armed" onclick="openCtl('CTL-PURP-01')"><span class="st"></span>PURP-01</button></span></div>
         <div class="stackrow"><span class="sg" style="min-width:64px">Access</span><span class="ds"><button class="ctl armed" onclick="openCtl('CTL-RBAC-01')"><span class="st"></span>RBAC-01</button> <button class="ctl armed" onclick="openCtl('CTL-PURP-02')"><span class="st"></span>PURP-02</button> <button class="ctl armed" onclick="openCtl('CTL-CONTRACT-01')"><span class="st"></span>CONTRACT-01</button></span></div>
@@ -1024,7 +1024,7 @@
     </div>
 
     <div class="card" style="margin-top:18px">
-      <div class="card-h"><h3>The import allowlist</h3><span class="eyebrow">where "buy the maths" is enforced</span></div>
+      <div class="card-h"><h3>The import allowlist</h3><span class="eyebrow">where the framework allowlist is enforced</span></div>
       <div class="card-b">
         <p class="sc-sub" style="margin-top:0">The Gate's allowlist is the governed catalogue the model may reach for. On it: permitted, and still gate-checked when used. Off it: refused.</p>
         <div class="allowbox">
@@ -1154,7 +1154,7 @@ const CAPS = [
   'Zoom out. The whole stack: off-the-shelf maths, and the controls we built.'
 ];
 
-/* buy the maths (off-the-shelf library) vs build the governance (controls), per stage */
+/* framework & tools used (off-the-shelf library) vs governance implemented (controls), per stage */
 const STAGE_ENGINE = [
   { buy: [], build: ['CTL-TIER-01','CTL-PURP-01'] },
   { buy: [], build: ['CTL-CONTRACT-01','CTL-EVAL-01','CTL-SOD-01'] },
@@ -1178,7 +1178,7 @@ function renderEngine(){
     ? e.build.map(id=>`<button class="ctl ${FIRED_NOW.has(id)?'pass':'armed'}" onclick="openCtl('${id}')"><span class="st"></span>${id.replace('CTL-','')}</button>`).join('')
     : '<span class="lib none" style="border:0">generating is safe, nothing to govern here</span>';
   document.getElementById('enginebar').innerHTML =
-    `<span class="eb-lab">Buy the maths</span>${buy}<span class="eb-sep"></span><span class="eb-lab">Build the governance</span>${build}`;
+    `<span class="eb-lab">Framework &amp; Tools used</span>${buy}<span class="eb-sep"></span><span class="eb-lab">Governance implemented</span>${build}`;
 }
 
 /* ---------- faux login / personas ---------- */

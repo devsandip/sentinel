@@ -212,9 +212,10 @@ cells to suppress by design).
 - **Interpret reveal.** Shimmer for scripted, streamed tokens for live.
 - **Chip control panel.** The reimagined header chips: a panel listing every control
   grouped by stage, its fired/idle state on this run, and an admin-only toggle.
-- **Per-stage engine bar (buy the maths, build the governance).** A slim strip at the
-  top of every stage naming the off-the-shelf library doing the work at that stage
-  (the maths we bought) beside the controls governing it (the governance we built).
+- **Per-stage engine bar (Framework & Tools used / Governance implemented).** A slim
+  strip at the top of every stage naming the off-the-shelf library doing the work at
+  that stage (the framework and tools used) beside the controls governing it (the
+  governance implemented).
   Ask and Plan are policy-only (no external library); Generate and Interpret are
   Claude; Gate is `ast` + `sqlglot`; Execute is DuckDB; Screen is fairlearn +
   `scipy.stats`; Attest is OpenLineage + Quarto + marimo. This makes the thesis
