@@ -405,3 +405,28 @@ Append-only session handoff log. Newest entries at the bottom.
 - Made the marimo notebook not auto-run the generated code: reaching data outside the fenced `ctx` would itself be ungoverned, which is the thing the platform refuses. The notebook is the reviewable record + governance context, not a re-execution.
 - Kept the Quarto render honest: produce the `.qmd` always, render the PDF only where the binary is present, never fabricate a PDF. Mirrors the project's stance that a control (or output) you cannot actually produce should be named, not faked.
 - Feature branch + PR for this work, not direct-to-main, because it is a feature (the deploy/docs chores went direct; features get a PR).
+
+## 2026-07-18 (18:44) — finished buildable v4: computed tier, L1, synthetic_its, L3 (Sandip AFK)
+
+**Did:**
+- Sandip said "continue working and finish everything" and went AFK. Finished the buildable v4 in three more commits on `feat/govcodegen-v4`; left only OPA (external server).
+- Computed tier + L1 route (`1f2657e`): personas gained `tier_role` + `attestations` and a new uncertified Junior Analyst; the flow computes `tier = min(class, person)` and routes: L2 codegen (analyst), L1 certified-analysis + typed params via `govflow/l1.py` (junior, no code, nothing to gate), L0 blocked (second line). App tier chip is per-persona; an L1 param editor appears at L1. 13 tests.
+- Onboarded synthetic_its (`da1c973`): `onboard_synthetic_its` generates a fully synthetic interrupted time series with a known +12 effect from day 250; committed the 365-row CSV; flipped `onboarded=True`. It is the only Public dataset, the legal L3 home. 1 test.
+- L3 route (`010970c`): `L3_ALLOWED_IMPORTS` widens the analytical allowlist to whole packages + stdlib compute; `import_verdict`/`gate_code` take an `allowed_imports` param, and the egress/fs/dyncode deny checks run first so widening never widens the deny list. `govflow/l3.py` runs a difference-in-differences estimate in the sandbox on synthetic_its (recovers +11.9, CI 11.6-12.2), with a causal negative statement; three adversarial intents prove egress/fs/dyncode still block at L3. App got a mode toggle (fair lending vs causal impact). 9 tests.
+- Verified in the browser: the tier chip recomputes per persona and per dataset (analyst on synthetic_its caps at L2 without a waiver -> the tier resolver firing live), the marketing refusal, both evidence downloads, the L3 mode's "switch to Admin" guidance. The Streamlit persona selectbox is uncooperative headless, so the admin L3 run was verified by tests + smoke, not a browser click.
+
+**State now:**
+- `feat/govcodegen-v4` at `010970c` (+ this docs commit), five feature commits above `be8b7dd`, all pushed. PR #3 open. 316 tests pass (up from 251 this morning), ruff clean.
+- Prod untouched: still v0-v3 on bundle `sentinel-20260718-073829.zip`. NOT deployed this session.
+- The autonomy ladder is complete and demonstrable end to end: L0 (blocked), L1 (junior), L2 (analyst), L3 (admin on synthetic_its).
+
+**Next:**
+- Sandip reviews/merges PR #3, then decides on a deploy (needs his go-ahead).
+- OPA externalisation is the one remaining v4 fork: it needs an external policy server the public instance would depend on, and is a PRD open question. His call.
+- Weekly summaries W28 + W29 still due (W29 ends Sun 2026-07-19).
+
+**Decisions:**
+- Read "finish everything" as: build the buildable v4 to quality and defer only OPA, which genuinely needs external infra. Did not treat "everything" as license to cram a thin L3 causal-impact vertical; kept it honest (a real DiD, labelled for its parallel-trends assumption, compared to ground truth only because the data is synthetic).
+- Held the prod deploy despite the standing "deploy at milestones" memory. Prod is public, the last deploy crashed while Sandip was watching, and shipping a large change blind while he is AFK is the wrong tradeoff. Left it green and ready instead.
+- L3 governance framing: widen analytical rope (allowlist), never safety rope (deny list). The deny checks run before the allowlist check in `import_verdict`, so this holds by construction and is tested.
+- Added a Junior Analyst persona so L1 is reachable on the same german_credit as L2, making "same person, same data, different attestation -> different autonomy" demonstrable rather than described.

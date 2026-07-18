@@ -1,38 +1,43 @@
 # Sentinel — Journal Index
 
-Last refreshed: 2026-07-18 17:56
+Last refreshed: 2026-07-18 18:44
 
-Latest entry: [2026-07-18-1756-v3-outputs-and-v4-access-policy.md](entries/2026-07-18-1756-v3-outputs-and-v4-access-policy.md)
+Latest entry: [2026-07-18-1844-autonomy-ladder-complete-l0-to-l3.md](entries/2026-07-18-1844-autonomy-ladder-complete-l0-to-l3.md)
 
 ## Where we are now
 
-**v0-v3 are in prod. v4 has started on a branch: the two v3 secondary outputs
-are shipped, and the first two v4 items (purpose matrix + tier resolution) are
-built and verified. Nothing new is deployed; prod is still v0-v3.**
+**v0-v3 are in prod. On the `feat/govcodegen-v4` branch (PR #3, not merged), v4 is
+substantially complete: the two v3 secondary outputs, the purpose matrix, tier
+resolution, the L1 route, synthetic_its onboarding, and the L3 broad-sandbox route.
+The autonomy ladder now works end to end, L0 to L3. Only OPA externalisation is
+deferred (it needs an external server). Nothing new is deployed; prod is still
+v0-v3.**
 
-On 2026-07-18 (afternoon) a new branch `feat/govcodegen-v4` added three slices,
-all off main, all pushed, no PR yet. First, the two deferred v3 secondary
-outputs. The marimo notebook is a real loadable `marimo.App` in plain `.py`: the
-generated analysis as a reviewable `def analysis(ctx)` plus a markdown cell with
-the finding, provenance, controls, and negative statement. The Quarto path writes
-the `.qmd` and renders a PDF only where the `quarto` binary exists (the public
-instance has none, so it ships the source honestly). Both are downloads on the
-evidence pack. This makes the PRD's "three surfaces" claim true instead of
-aspirational.
+The flow computes the tier from the persona and the dataset classification and
+routes on it. A certified analyst on german_credit resolves to L2 (writes gated
+code, the hero path); an uncertified Junior Analyst resolves to L1 (picks the
+certified fair-lending analysis and fills typed params, no code); a second-line
+persona resolves to L0 (may not run). L3 runs broad code in the sandbox on
+synthetic_its, the only Public dataset (now onboarded, generated with a known +12
+effect). The L3 gate widens the analytical allowlist to whole packages and stdlib
+compute but keeps the egress/filesystem/dynamic-code deny lists exactly as at L2:
+more rope, same hard limits. The benign L3 analysis is a difference-in-differences
+estimate that recovers +11.9 (95% CI 11.6-12.2); three adversarial L3 requests are
+refused (CTL-EGRESS-01, CTL-CODE-02, CTL-CODE-03). The govflow surface has a mode
+toggle (fair lending on german_credit, causal impact on synthetic_its), so
+switching dataset recomputes the tier live: the analyst on Public data still caps
+at L2 without a sandbox waiver, which is the tier resolver firing in the UI.
 
-Then two v4 items. The purpose-by-dataset matrix is the showpiece: credit data
-for marketing is refused at Access with `CTL-PURP-01`, before any code is
-generated, because the reason is wrong, not the role. Transcribed cell for cell
-from PRD 4.4, classification labelled simulated, wired into the flow's Access
-stage (a permitted-but-unwired purpose stops honestly, without `CTL-PURP-01`).
-And autonomy tier resolution: `tier = min(ceiling(classification), ceiling(role,
-attestations))`, both ceilings binding, so a permissive dataset never elevates a
-person and a trusted person never elevates a dataset. Built as a tested unit
-against the five PRD worked examples and demonstrated live in the Access tab,
-which now shows both computations: why (purpose) and how much rope (tier). 293
-tests pass, ruff clean. Deferred with reasons: OPA (external server), L3 (needs
-`synthetic_its` onboarded), and rewiring the flow's frozen L2 + the L1/L3
-execution routes (the largest remaining v4 piece).
+Also shipped earlier on this branch: the two v3 secondary outputs (a real loadable
+marimo notebook with the generated analysis as a reviewable `def analysis(ctx)`,
+and a Quarto `.qmd`/PDF render path with an honest fallback where no `quarto`
+binary), and the purpose-by-dataset matrix (credit data for marketing refused at
+Access with `CTL-PURP-01`, the showpiece).
+
+Five feature commits + docs on `feat/govcodegen-v4`, all pushed, PR #3 open. 316
+tests pass (up from 251 at the start of the day), ruff clean. Deferred: OPA
+externalisation (external server, a Sandip call). Not deployed: prod is public and
+the change is large; it waits for review.
 
 Everything below is the prior state: v0-v3 in prod.
 
@@ -215,6 +220,7 @@ out).
 
 ## Recent entries
 
+- [2026-07-18-1844-autonomy-ladder-complete-l0-to-l3.md](entries/2026-07-18-1844-autonomy-ladder-complete-l0-to-l3.md) : finished the buildable v4 (Sandip AFK, said "finish everything"). The flow computes the tier from the persona and routes: L2 codegen (analyst), L1 certified-analysis+params (junior, no code), L0 blocked (second line). Onboarded synthetic_its (fully synthetic, known +12 effect) and built the L3 broad-sandbox route: wide allowlist, same egress/fs/dyncode deny lists (more rope, same hard limits); benign DiD recovers +11.9, three adversarial requests refused. govflow mode toggle so the tier recomputes per dataset. 316 tests. Deferred: OPA (external server). Not deployed; prod still v0-v3.
 - [2026-07-18-1756-v3-outputs-and-v4-access-policy.md](entries/2026-07-18-1756-v3-outputs-and-v4-access-policy.md) : on `feat/govcodegen-v4`, three slices. The two v3 secondary outputs: a real loadable marimo notebook (generated analysis as a reviewable `def analysis(ctx)` + governance context) and a Quarto `.qmd`/PDF render path (honest fallback where no `quarto` binary). Then two v4 items: the purpose-by-dataset matrix (`CTL-PURP-01` refuses credit-data-for-marketing at Access, wired into the flow) and autonomy tier resolution (`tier = min(class ceiling, person ceiling)`, both binding, demonstrated live in the Access tab). 293 tests, ruff clean. Pushed, no PR yet, prod untouched. Deferred: OPA, L3+synthetic_its, the frozen-L2 flow rewrite + L1/L3 execution routes.
 - [2026-07-18-0750-prod-crashed-on-missing-deps-fixed.md](entries/2026-07-18-0750-prod-crashed-on-missing-deps-fixed.md) : the first prod deploy crashed on import (`ModuleNotFoundError: sqlglot`); `requirements.txt` was a stale `uv export` missing `fairlearn`/`sqlglot`/`duckdb`/`openlineage-python`, and health 200 hid it because that endpoint answers before app.py runs. Regenerated `requirements.txt`, redeployed (`8aeccba`, bundle `sentinel-20260718-073829.zip`), and smoke-tested all three surfaces on the live instance: the full flow runs (Execute passes = sqlglot+DuckDB in prod), the evidence pack renders, and the registry's CTL-SOD-01 self-signoff refusal fires live. Lesson: a deploy is verified when a page renders, not when a probe returns 200.
 - [2026-07-18-0723-v0-v3-merged-and-shipped-to-prod.md](entries/2026-07-18-0723-v0-v3-merged-and-shipped-to-prod.md) : both PRs merged to main (PR #1 v0/v1, then PR #2 v2/v3 retargeted onto main), main at `4692c7c`, feature branches deleted, local main synced. Then deployed: prod moved from `9dcd20b` to `4692c7c`, EB green, health 200 over HTTPS, confirmed by source bundle key `bundles/sentinel-20260718-071819.zip`, live-LLM still on. The governed-codegen rethink is now the public artifact. Still out: marimo, Quarto-PDF, all of v4.
