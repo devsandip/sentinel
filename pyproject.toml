@@ -8,6 +8,7 @@ dependencies = [
     "pandas>=2.2",
     "numpy>=1.26",
     "scikit-learn>=1.5",
+    "fairlearn>=0.10",
     "fpdf2>=2.8.7",
     "pyyaml>=6.0.3",
     "streamlit>=1.59.1",

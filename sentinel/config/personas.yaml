@@ -1,8 +1,11 @@
 # Identity personas and their capabilities (ideas.md item 9).
 # No real auth: the UI picks a persona to demonstrate role-aware governance.
-# Least privilege and segregation of duties are the point: only the MRM Approver
-# (and Admin) hold promotion authority at the human gate; the Auditor is
-# read-only; only the Admin may toggle controls in demo mode.
+# Least privilege and segregation of duties are the point. Run authority and
+# promotion authority are held by disjoint personas: the first line (Analyst)
+# and the Admin can run but not approve; only the MRM Approver can promote, and
+# it cannot run. The second line (Model Validator, MRM Approver) never runs, so
+# an approver can never be the author of the run it signs off (CTL-SOD-01). The
+# Auditor is read-only; only the Admin may toggle controls in demo mode.
 
 policy_version: "2026.07-rbac-v1"
 
@@ -21,24 +24,26 @@ personas:
   - id: model_validator
     name: "Model Validator"
     role: "Second line (MRM)"
-    can_run: true
+    can_run: false
     can_approve: false
     can_toggle_controls: false
     read_only: false
     description: >
-      Independently reviews fairness and eval results and flags issues. Validates
-      but does not hold the promotion sign-off, which is the MRM Approver's.
+      Independently reviews fairness and eval results and flags issues. Second
+      line does not run first-line analyses (segregation of duties), and does not
+      hold the promotion sign-off, which is the MRM Approver's.
 
   - id: mrm_approver
     name: "MRM Approver"
     role: "Second line (MRM), approval authority"
-    can_run: true
+    can_run: false
     can_approve: true
     can_toggle_controls: false
     read_only: false
     description: >
       Holds promotion authority at the human gate. Approves or rejects a proposed
-      model. This is the four-eyes control.
+      model, and cannot run analyses itself: the approver is never the author
+      (segregation of duties). This is the four-eyes control.
 
   - id: auditor
     name: "Internal Auditor"
@@ -55,9 +60,11 @@ personas:
     name: "Platform Admin"
     role: "Platform"
     can_run: true
-    can_approve: true
+    can_approve: false
     can_toggle_controls: true
     read_only: false
     description: >
-      Platform administrator. Can run and approve, and is the only role that may
-      toggle a control off in demo mode (every toggle is itself audited).
+      Platform administrator. Can run and is the only role that may toggle a
+      control off in demo mode (every toggle is itself audited). Cannot promote:
+      an admin who approves their own run is a standing audit finding, so
+      promotion authority sits only with the MRM Approver.

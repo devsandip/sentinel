@@ -1,8 +1,15 @@
-"""Group fairness metrics for the credit model.
+"""Group fairness metrics for the credit model, computed with fairlearn.
 
-Implemented directly (no fairlearn dependency) so every number is auditable
-in a few lines. Computed on the held-out test split using the same seed as
-the model, so model performance and fairness reference the same predictions.
+Computed on the held-out test split using the same seed as the model, so model
+performance and fairness reference the same predictions.
+
+This governs fairlearn's MetricFrame rather than hand-rolling the metrics. The
+earlier build reimplemented selection rate, TPR, and FPR "for auditability"; that
+inverts under the platform thesis. If the pitch is "I govern off-the-shelf tools
+inside a controlled fence," reimplementing the one metric a fair lending reviewer
+cares most about undercuts it. Governing the standard library is the point; see
+docs/features/governed-codegen.md section 15.2 and the journal entry for the
+reversal.
 
 Convention: positive prediction (1) = flagged as default risk. A higher
 selection rate means a group is flagged as risky more often.
@@ -14,6 +21,14 @@ from dataclasses import asdict, dataclass
 from typing import Any
 
 import numpy as np
+import pandas as pd
+from fairlearn.metrics import (
+    MetricFrame,
+    count,
+    false_positive_rate,
+    selection_rate,
+    true_positive_rate,
+)
 from sklearn.model_selection import train_test_split
 
 from .data import Dataset, load_dataset
@@ -21,6 +36,18 @@ from .pipeline import run_pipeline
 
 # Four-fifths rule: disparity ratio below this is conventionally a flag.
 DISPARITY_THRESHOLD = 0.8
+
+
+def _base_rate(y_true: np.ndarray, y_pred: np.ndarray) -> float:  # noqa: ARG001
+    """Actual positive (default) rate in a group. A fairlearn-style metric:
+    signature is (y_true, y_pred); it ignores predictions by design."""
+    return float(np.mean(y_true)) if len(y_true) else 0.0
+
+
+def _clean(value: Any) -> float:
+    """Coerce a fairlearn metric to a plain float, mapping an empty-group NaN to
+    0.0 so the report keeps the 0..1 invariant the UI and tests rely on."""
+    return 0.0 if pd.isna(value) else float(value)
 
 
 @dataclass
@@ -46,13 +73,6 @@ class FairnessReport:
     def to_dict(self) -> dict[str, Any]:
         d = asdict(self)
         return d
-
-
-def _rate(mask: np.ndarray, condition: np.ndarray) -> float:
-    denom = int(mask.sum())
-    if denom == 0:
-        return 0.0
-    return float((mask & condition).sum() / denom)
 
 
 def compute_fairness(
@@ -82,20 +102,33 @@ def compute_fairness(
     groups_series = ds.protected.iloc[test_idx].to_numpy()
     preds = (pipe.predict_proba(X_test)[:, 1] >= 0.5).astype(int)
 
+    # fairlearn does the group arithmetic. One MetricFrame, grouped by the
+    # protected attribute, is the whole computation the earlier build hand-rolled.
+    mf = MetricFrame(
+        metrics={
+            "selection_rate": selection_rate,
+            "tpr": true_positive_rate,
+            "fpr": false_positive_rate,
+            "base_rate": _base_rate,
+            "n": count,
+        },
+        y_true=y_test,
+        y_pred=preds,
+        sensitive_features=groups_series,
+    )
+    by_group = mf.by_group
+
     group_metrics: list[GroupMetrics] = []
-    for g in sorted(set(groups_series.tolist())):
-        gmask = groups_series == g
-        actual_pos = y_test == 1
-        actual_neg = y_test == 0
-        pred_pos = preds == 1
+    for g in sorted(by_group.index.tolist()):
+        row = by_group.loc[g]
         group_metrics.append(
             GroupMetrics(
                 group=str(g),
-                n=int(gmask.sum()),
-                selection_rate=_rate(gmask, pred_pos),
-                tpr=_rate(gmask & actual_pos, pred_pos),
-                fpr=_rate(gmask & actual_neg, pred_pos),
-                base_rate=_rate(gmask, actual_pos),
+                n=int(row["n"]),
+                selection_rate=_clean(row["selection_rate"]),
+                tpr=_clean(row["tpr"]),
+                fpr=_clean(row["fpr"]),
+                base_rate=_clean(row["base_rate"]),
             )
         )
 
@@ -106,8 +139,9 @@ def compute_fairness(
 
     note = (
         f"Protected attribute '{protected_attribute}' was excluded from model "
-        f"features ({', '.join(result.excluded_features)}). Disparity ratio is "
-        f"min/max selection rate across groups. "
+        f"features ({', '.join(result.excluded_features)}). Group metrics via "
+        f"fairlearn MetricFrame; disparity ratio is min/max selection rate across "
+        f"groups. "
         + (
             "Within the four-fifths (0.8) threshold."
             if passes

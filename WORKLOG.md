@@ -284,3 +284,28 @@ Append-only session handoff log. Newest entries at the bottom.
 **Decisions:**
 - Live LLM from the start of dev (not mocked fixtures). Feature branch + PR per slice (not direct-to-main).
 - v1 starts with `ctx.table`; `ctx.sql` + sqlglot deferred to v2 (v1 done-when needs no SQL).
+
+## 2026-07-17 (22:30) — v0 shipped and the whole v1 slice built + verified
+
+**Did:**
+- Shipped v0 (segregation of duties): `started_by` on `RunState`, `CTL-SOD-01` in `approve()` (approver may not be author), and the persona model tightened so `can_run` and `can_approve` are held by disjoint personas (second line loses `can_run`, admin loses `can_approve`). Followed the PRD's "second line" over the resume's shorthand.
+- Built the entire v1 vertical slice in nine commits on `feat/governed-codegen`: the `ast` gate + L2 allowlist (`codegen/`), the `ctx` fence and subprocess sandbox (`sandbox/`, `CTL-TIME-01`), the disclosure Screen (`disclosure/`, `CTL-DISC-01/02/03` + `CTL-PROXY-01`), the fairlearn reversal (`ml/fairness.py` now governs a `MetricFrame`; `fairlearn` a base dep), the live code-generation step + gateway repoint, the `govflow` orchestration (Ask -> Interpret), the Console + Gate Streamlit screens, and the seeded adversarial set + section 16 metrics.
+- Verified both done-when properties in a browser: benign request suppresses the n=6 71-75 band before narration and flags the synthetic proxy (0.92); adversarial request blocks at the gate on `CTL-EGRESS-01` (line 10) and never executes.
+- Smoke-tested the live model path once (Sonnet wrote gate-passing code, ~$0.0047).
+- Removed the stale `docs/features/deck.txt`. Updated PR #1 to full v0+v1 scope. Wrote journal entries `2026-07-17-2203` (v0 + core + fairlearn) and `2026-07-17-2230` (v1 complete); refreshed INDEX.
+
+**State now:**
+- `feat/governed-codegen` at `c806523` (+ this handoff), pushed. PR #1 open, nine commits, +3396/-51. 183 tests green, ruff clean.
+- `main` at `3ad7e8c`, untouched. Prod untouched and green at SHA `9dcd20b`; nothing deployed this session.
+- Live path needs `ANTHROPIC_API_KEY` from the main-repo `.env` (present); scripted mode is free and default.
+
+**Next:**
+- Get PR #1 reviewed and merged to `main` (v0+v1). It does not touch prod until deployed.
+- Optional: deploy the v1 slice to prod after merge (needs the `.env` key sourced; do not deploy from a worktree with a bare key).
+- v2 when ready: `ctx.sql` + the sqlglot gate, the registry/certification lifecycle, and the refused-certification demo (reuses `CTL-SOD-01`).
+- Weekly summaries still due: W28 and W29 (W29 ends Sun 2026-07-19).
+
+**Decisions:**
+- The Access stage uses a fine age band (so 71-75 is genuinely n=6) and a disclosed synthetic proxy column (real german_credit features proxy age at most ~0.35). Both are honest-demo constructions in the same spirit as the synthetic PII columns: the control does real arithmetic on data that is labelled synthetic.
+- The gate stays the Python `ast` half only for v1; `ctx.sql`/sqlglot is v2. Attest (Stage 9) and the evidence pack are later; v1 ends at Interpret.
+- The project's real lint gate is `ruff check` (line-length 100), not black/`ruff format` (the repo is not auto-formatter-clean); matched the hand-wrapped style rather than reformatting unrelated files.

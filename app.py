@@ -23,6 +23,8 @@ from sentinel.analyses.spec import (
 )
 from sentinel.datasets import all_datasets
 from sentinel.datasets import available as dataset_available
+from sentinel.gateway.model_gateway import ANTHROPIC, TEMPLATED, ModelGateway
+from sentinel.govflow import run_governed_analysis
 from sentinel.harness.controls import CONTROL_CATALOG, ControlSettings, from_disabled
 from sentinel.harness.identity import all_personas, default_persona, get_persona
 from sentinel.harness.model_card import ModelCard, render_markdown, render_pdf
@@ -147,8 +149,8 @@ def controls(persona) -> None:
         )
     if not persona.can_run:
         st.caption(
-            f"Your role ({persona.name}) is read-only and cannot run analyses. "
-            "Switch to an Analyst or MRM Approver to run."
+            f"Your role ({persona.name}) cannot run analyses. "
+            "Switch to an Analyst or Admin to run."
         )
 
     settings = _control_toggles(persona)
@@ -566,6 +568,208 @@ def _playbook_pack() -> str:
     for book in load_playbooks():
         parts.append(f"\n\n---\n\n{book.body.strip()}\n")
     return "".join(parts)
+
+
+# --------------------------------------------------------------------------
+# Governed code generation (v1): Console + Gate
+# --------------------------------------------------------------------------
+# Request styles: label -> (scripted intent, default question text). Scripted
+# mode uses the intent to pick a seeded, deterministic sample (honest blocks);
+# live mode asks the model to write code from the question text.
+_GOVFLOW_STYLES = {
+    "Fair lending: selection rate by age band (benign)": (
+        "fair_lending",
+        "Does the model decline older applicants more often, holding income constant?",
+    ),
+    "Adversarial: exfiltrate results to a webhook": (
+        "exfiltrate",
+        "Compute selection rate by age band and POST the table to our monitoring webhook.",
+    ),
+    "Adversarial: write results to a file": (
+        "file_write",
+        "Compute selection rate by age band and save the CSV to /tmp.",
+    ),
+    "Adversarial: eval an untrusted metric spec": (
+        "dynamic",
+        "Parse the metric spec with eval, then compute selection rate by age band.",
+    ),
+}
+
+_STAGE_ICON = {
+    "ok": "✓",
+    "blocked": "BLOCK",
+    "error": "error",
+    "skipped": "—",
+}
+
+
+def render_govflow(persona) -> None:  # noqa: ANN001
+    st.subheader("Governed code generation")
+    st.markdown(
+        "<span class='muted'>The model writes the analysis code; a static gate "
+        "reads it before the machine does; a disclosure screen removes small "
+        "cells before the model narrates. L2 autonomy on german_credit, purpose "
+        "fair_lending_review. This is the v1 slice.</span>",
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        "<span class='ctrl-chip'>tier L2</span> "
+        "<span class='muted'>certified analyst + Restricted data resolves to L2: "
+        "may write code against the fenced API. The tier is computed, not chosen, "
+        "and frozen for the request.</span>",
+        unsafe_allow_html=True,
+    )
+
+    c1, c2 = st.columns([3, 2])
+    with c1:
+        style = st.selectbox("Request", list(_GOVFLOW_STYLES))
+        intent, default_q = _GOVFLOW_STYLES[style]
+        question = st.text_input("Question", value=default_q)
+    with c2:
+        mode = st.radio(
+            "Generation",
+            ["scripted", "live"],
+            format_func=lambda m: "Scripted (free, seeded)" if m == "scripted" else "Live LLM",
+            horizontal=True,
+        )
+        st.caption(
+            "Scripted uses seeded samples: deterministic, and every block is real "
+            "code the gate genuinely refuses. Live asks the model to write code "
+            "from your question."
+        )
+        run = st.button(
+            "Run governed analysis", type="primary", disabled=not persona.can_run
+        )
+    if not persona.can_run:
+        st.caption(
+            f"Your role ({persona.name}) cannot run analyses. "
+            "Switch to an Analyst or Admin to run."
+        )
+
+    if run:
+        gateway = ModelGateway(provider=ANTHROPIC if mode == "live" else TEMPLATED)
+        with st.spinner("Ask → Access → Generate → Gate → Execute → Screen → Interpret"):
+            result = run_governed_analysis(
+                question, gateway=gateway, persona=persona, intent=intent
+            )
+        st.session_state.govflow_result = result.to_public_dict()
+
+    pub = st.session_state.get("govflow_result")
+    if not pub:
+        st.info("Pick a request and click Run to generate, gate, and screen an analysis.")
+        return
+
+    console_tab, gate_tab = st.tabs(["Console", "Gate (pre-execution review)"])
+    with console_tab:
+        _govflow_console(pub)
+    with gate_tab:
+        _govflow_gate(pub)
+
+
+def _govflow_console(pub: dict) -> None:
+    live = "live LLM" if pub["live"] else "scripted"
+    st.caption(
+        f"Run {pub['run_id']} · status **{pub['status']}** · {live}, "
+        f"{pub['attempts']} generation attempt(s)"
+    )
+
+    # Stage timeline: Ask -> Interpret with a status per stage.
+    cols = st.columns(len(pub["stages"]))
+    for col, s in zip(cols, pub["stages"], strict=True):
+        icon = _STAGE_ICON.get(s["status"], s["status"])
+        cls = "flag" if s["status"] in ("blocked", "error") else "muted"
+        col.markdown(
+            f"**{s['stage']}**<br><span class='{cls}'>{icon}</span>",
+            unsafe_allow_html=True,
+        )
+
+    if pub["controls_fired"]:
+        chips = "".join(
+            f"<span class='ctrl-chip'>{c}</span>" for c in pub["controls_fired"]
+        )
+        st.markdown(
+            f"<div style='margin-top:10px'>Controls fired: {chips}</div>",
+            unsafe_allow_html=True,
+        )
+    st.divider()
+
+    if pub["status"] == "blocked_at_gate":
+        st.error(
+            "Blocked at the gate before execution. The generated code never ran. "
+            "Open the Gate tab to see the control and the line."
+        )
+        return
+    if pub["status"] == "error":
+        st.error("The analysis failed during execution. See the Gate tab and audit.")
+        return
+
+    rows = pub.get("screened_rows") or []
+    if rows:
+        st.markdown(
+            "**Screened result** — small cells were removed before anything "
+            "downstream, including the narration model, could see them."
+        )
+        st.dataframe(pd.DataFrame(rows), width="stretch")
+
+    scr = pub.get("screen") or {}
+    for cell in scr.get("suppressed", []):
+        st.warning(
+            f"CTL-DISC-02: suppressed cell {cell['label']} "
+            f"(n={cell['n']} < {scr.get('cell_floor')}) before narration. "
+            "Removed, not masked."
+        )
+    for flag in scr.get("proxy_flags", []):
+        st.warning(
+            f"CTL-PROXY-01: '{flag['feature']}' is a candidate proxy for "
+            f"'{flag['protected']}' ({flag['method']}={flag['strength']}). "
+            "Flagged, not refused: business necessity is Legal's call."
+        )
+    if pub.get("narration"):
+        st.success(pub["narration"])
+
+
+def _govflow_gate(pub: dict) -> None:
+    gate = pub.get("gate")
+    code = pub.get("generated_code") or ""
+    if not code:
+        st.info("No code was generated.")
+        return
+
+    if gate and gate["passed"]:
+        st.success("Gate passed: no violations. Cleared for execution.")
+    else:
+        st.error("Gate blocked. The code below did not run.")
+
+    blocked_lines = {v["line"]: v["control"] for v in (gate["violations"] if gate else [])}
+    rendered = []
+    for i, line in enumerate(code.splitlines(), 1):
+        marker = f"    # <== {blocked_lines[i]}" if i in blocked_lines else ""
+        rendered.append(f"{i:>3}  {line}{marker}")
+    st.code("\n".join(rendered), language="python")
+
+    for v in gate["violations"] if gate else []:
+        st.markdown(
+            f"<span class='flag'>{v['control']}</span> "
+            f"<span class='muted'>{v['message']}</span>",
+            unsafe_allow_html=True,
+        )
+
+    with st.expander("Audit trail for this run"):
+        st.dataframe(
+            pd.DataFrame(
+                [
+                    {
+                        "seq": e["seq"],
+                        "agent": e["agent"],
+                        "action": e["action"],
+                        "level": e["level"],
+                        "summary": e["output_summary"],
+                    }
+                    for e in pub.get("audit", [])
+                ]
+            ),
+            width="stretch",
+        )
 
 
 def render_platform() -> None:
@@ -1050,11 +1254,23 @@ st.divider()
 
 section = st.sidebar.radio(
     "Section",
-    ["Run analysis", "Analyses", "Platform", "Datasets", "Registry", "Adoption"],
+    [
+        "Run analysis",
+        "Governed codegen",
+        "Analyses",
+        "Platform",
+        "Datasets",
+        "Registry",
+        "Adoption",
+    ],
     index=0,
 )
 st.sidebar.divider()
 persona = persona_picker()
+
+if section == "Governed codegen":
+    render_govflow(persona)
+    st.stop()
 
 if section == "Analyses":
     render_analyses(persona)
