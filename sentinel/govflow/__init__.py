@@ -11,5 +11,21 @@ fair_lending_review.
 from __future__ import annotations
 
 from .flow import GovernedRunResult, StageRecord, run_governed_analysis
+from .purpose_matrix import (
+    CTL_PURP_01,
+    PURPOSE_MATRIX,
+    PurposeDecision,
+    evaluate_purpose,
+    matrix_rows,
+)
 
-__all__ = ["GovernedRunResult", "StageRecord", "run_governed_analysis"]
+__all__ = [
+    "CTL_PURP_01",
+    "GovernedRunResult",
+    "PURPOSE_MATRIX",
+    "PurposeDecision",
+    "StageRecord",
+    "evaluate_purpose",
+    "matrix_rows",
+    "run_governed_analysis",
+]

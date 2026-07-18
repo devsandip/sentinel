@@ -44,9 +44,11 @@ from .access import (
     PROXY_CANDIDATES,
     build_scoped_table,
 )
+from .purpose_matrix import CTL_PURP_01, evaluate_purpose
 
 TIER_L2 = "L2"
-PURPOSE = "fair_lending_review"
+PURPOSE = "fair_lending_review"  # the analysis/display label
+PURPOSE_KEY = "fair_lending"  # the purpose-matrix key for this flow (PRD 4.4)
 # The certified agent Plan binds for this purpose. Only certified agents are
 # visible to Plan (section 11), so if this is not certified the flow refuses.
 PLAN_AGENT_ID = "fair-lending"
@@ -203,10 +205,16 @@ def run_governed_analysis(
     cell_floor: int = 10,
     proxy_threshold: float = 0.5,
     max_attempts: int = 3,
+    purpose_key: str = PURPOSE_KEY,
 ) -> GovernedRunResult:
     """Run one question through the governed flow and return everything the UI
     needs. Scripted gateway by default (free, deterministic); pass a live gateway
-    to generate with the model."""
+    to generate with the model.
+
+    ``purpose_key`` names the purpose-matrix cell (PRD 4.4) the request declares.
+    It defaults to this flow's purpose (fair_lending); passing a purpose that the
+    matrix refuses for german_credit (e.g. ``marketing``) is refused at Access
+    with CTL-PURP-01 before any code is generated -- the showpiece refusal."""
     gateway = gateway or ModelGateway(provider=TEMPLATED)
     persona = persona or default_persona()
     run_id = uuid.uuid4().hex[:12]
@@ -327,17 +335,65 @@ def run_governed_analysis(
         )
     )
 
-    # Stage 3: Access -- resolve the grant, build the policy-scoped table.
+    # Stage 3: Access -- purpose limitation first (CTL-PURP-01), then the grant.
+    # The purpose gate asks not who but why: german_credit may be used for fair
+    # lending, not for marketing. A refused purpose stops here, before any code is
+    # generated. The refusal names the reason, not the role.
+    purpose_decision = evaluate_purpose(DATASET_ID, purpose_key)
+    if not purpose_decision.permitted:
+        controls.append(CTL_PURP_01)
+        audit.record(
+            agent="govflow",
+            action="access_block",
+            level=LEVEL_BLOCKED,
+            actor=persona.id,
+            output_summary=purpose_decision.reason,
+            extra={"control": CTL_PURP_01},
+        )
+        stages.append(
+            StageRecord("Access", "blocked", controls=[CTL_PURP_01], detail=purpose_decision.reason)
+        )
+        for s in ("Generate", "Gate", "Execute", "Screen", "Interpret", "Attest"):
+            stages.append(StageRecord(s, "skipped", detail="purpose refused at Access"))
+        return finish(STATUS_BLOCKED)
+
+    # Permitted by the matrix, but this build wires only the fair_lending analysis
+    # on german_credit. An honest stop that is not a policy refusal: a different
+    # permitted purpose is allowed by policy but has no analysis here.
+    if purpose_key != PURPOSE_KEY:
+        detail = (
+            f"{purpose_key} is permitted for {DATASET_ID} by the matrix, but no "
+            f"analysis is wired for it in this build (only {PURPOSE_KEY})."
+        )
+        audit.record(
+            agent="govflow",
+            action="access_unwired",
+            level=LEVEL_BLOCKED,
+            actor=persona.id,
+            output_summary=detail,
+        )
+        stages.append(StageRecord("Access", "blocked", detail=detail))
+        for s in ("Generate", "Gate", "Execute", "Screen", "Interpret", "Attest"):
+            stages.append(StageRecord(s, "skipped", detail="no analysis wired for this purpose"))
+        return finish(STATUS_BLOCKED)
+
     scoped = build_scoped_table(seed=seed)
     audit.record(
         agent="govflow",
         action="access",
         actor=persona.id,
         data_touched=FAIR_LENDING_GRANT,
-        output_summary=f"scoped view built: {len(FAIR_LENDING_GRANT)} granted columns",
+        output_summary=(
+            f"purpose {purpose_key} permitted; scoped view built: "
+            f"{len(FAIR_LENDING_GRANT)} granted columns"
+        ),
     )
     stages.append(
-        StageRecord("Access", "ok", detail=f"granted: {', '.join(FAIR_LENDING_GRANT)}")
+        StageRecord(
+            "Access",
+            "ok",
+            detail=f"purpose {purpose_key} permitted; granted: {', '.join(FAIR_LENDING_GRANT)}",
+        )
     )
 
     # Stage 4 + 5: Generate then Gate (with the regenerate loop).
