@@ -373,6 +373,48 @@
   .stackrow .sg { font-size:10.5px; color:var(--faint); font-family:var(--mono); white-space:nowrap; }
   .allowbox { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
   .roadmap { font-size:11.5px; color:var(--muted); margin-top:14px; padding-top:12px; border-top:1px dashed var(--border-strong); }
+
+  /* faux login */
+  .login { position:fixed; inset:0; z-index:100; background:radial-gradient(1100px 560px at 50% -8%, #16274a, var(--rail)); color:var(--rail-ink); display:flex; align-items:center; justify-content:center; padding:34px 22px; overflow-y:auto; }
+  .login.leaving { opacity:0; transition:opacity .28s ease; pointer-events:none; }
+  .login-inner { width:100%; max-width:860px; text-align:center; }
+  .login-brand { display:flex; align-items:center; justify-content:center; gap:11px; margin-bottom:32px; }
+  .login-brand svg { width:30px; height:30px; }
+  .login-brand .wm { font-weight:700; letter-spacing:.24em; font-size:16px; }
+  .login-brand .sub { color:var(--rail-muted); font-size:11px; letter-spacing:.05em; border-left:1px solid var(--rail-border); padding-left:11px; }
+  .login-eyebrow { font-size:11px; font-weight:700; letter-spacing:.16em; text-transform:uppercase; color:#7fa6e6; }
+  .login-h { font-size:28px; margin:8px 0 8px; color:#fff; }
+  .login-sub { color:var(--rail-muted); font-size:14px; max-width:54ch; margin:0 auto 30px; line-height:1.55; }
+  .persona-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; }
+  @media (max-width:680px){ .persona-grid { grid-template-columns:repeat(2,1fr); } }
+  @media (max-width:440px){ .persona-grid { grid-template-columns:1fr; } }
+  .pcard { position:relative; text-align:left; background:rgba(255,255,255,.04); border:1px solid var(--rail-border); border-radius:14px; padding:18px 16px; cursor:pointer; color:var(--rail-ink); transition:transform .12s ease, border-color .12s ease, background .12s ease; font-family:inherit; }
+  .pcard:hover { transform:translateY(-3px); border-color:#3f6bb0; background:rgba(255,255,255,.07); }
+  .pcard:focus-visible { outline:2px solid #5b8def; outline-offset:3px; }
+  .pcard .picon { width:46px; height:46px; border-radius:12px; display:grid; place-items:center; background:rgba(91,141,239,.14); border:1px solid var(--rail-border); color:#9dc0f5; margin-bottom:13px; }
+  .pcard .picon svg { width:24px; height:24px; }
+  .pcard .pname { display:block; font-size:15px; font-weight:650; color:#fff; }
+  .pcard .prole { display:block; font-size:11.5px; color:var(--rail-muted); margin-top:2px; }
+  .pcard .pcap { display:block; font-size:12px; color:#b9c8e2; margin-top:10px; line-height:1.45; }
+  .pcard .ptier { position:absolute; top:16px; right:16px; font-family:var(--mono); font-size:11px; font-weight:700; padding:3px 8px; border-radius:8px; background:rgba(91,141,239,.16); border:1px solid #2f4d7e; color:#9dc0f5; }
+  .pcard.hero { border-color:#3f6bb0; background:rgba(91,141,239,.1); }
+  .pcard .phero-tag { display:block; margin-top:11px; font-size:10px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:#5fdc8a; }
+  .login-foot { color:var(--rail-muted); font-size:11.5px; margin-top:26px; }
+
+  /* identity banner (shown when the viewer is not the L2 Analyst) */
+  .idbanner { margin-bottom:16px; }
+  .idbanner-in { display:flex; gap:10px; align-items:flex-start; padding:9px 13px; border-radius:var(--r-md); font-size:12.5px; border:1px solid var(--warn-border); background:var(--warn-soft); color:var(--warn-ink); }
+  .idbanner-in .m { font-weight:800; }
+
+  /* stage transition overlay */
+  .transition { position:fixed; inset:0; z-index:70; display:flex; align-items:center; justify-content:center; background:color-mix(in srgb, var(--canvas) 55%, transparent); backdrop-filter:blur(3px); opacity:0; pointer-events:none; transition:opacity .16s ease; }
+  .transition.show { opacity:1; pointer-events:auto; }
+  .trans-card { display:flex; align-items:center; gap:15px; background:var(--surface); border:1px solid var(--border); border-radius:var(--r-md); box-shadow:var(--shadow-md); padding:16px 22px; }
+  .spinner { width:26px; height:26px; border-radius:50%; border:2.5px solid var(--border); border-top-color:var(--accent); animation:spin .7s linear infinite; flex:none; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  .trans-verb { font-size:14px; font-weight:700; }
+  .trans-msg { font-size:12.5px; color:var(--muted); margin-top:1px; }
+  @media (prefers-reduced-motion: reduce){ .spinner { animation:none; } .transition, .pcard { transition:none; } }
 </style>
 </head>
 <body>
@@ -385,10 +427,10 @@
     </div>
     <div class="spacer"></div>
     <div class="ctx">
-      <button class="ctx-chip persona" onclick="openControls()" title="Who is running this, and what they may do"><span class="dot" style="background:#5fdc8a"></span><span class="k">Analyst</span> certified</button>
+      <button class="ctx-chip persona" id="persona-chip" onclick="openControls()" title="Who is running this, and what they may do"><span class="dot" style="background:#5fdc8a"></span><span class="k">Analyst</span> certified</button>
       <button class="ctx-chip" onclick="showStage(1);showSub(1)" title="Dataset and classification"><span class="k">Data</span> german_credit <span class="badge danger" style="padding:1px 6px;font-size:10px">Restricted</span></button>
       <button class="ctx-chip purpose" onclick="showStage(1);showSub(2)" title="Purpose limitation"><span class="k">Purpose</span> Fair-lending review</button>
-      <button class="ctx-chip tier" onclick="openCtl('CTL-TIER-01')" title="How the tier is computed"><span class="k">Tier</span> <span class="tier-badge">L2</span></button>
+      <button class="ctx-chip tier" onclick="openCtl('CTL-TIER-01')" title="How the tier is computed"><span class="k">Tier</span> <span class="tier-badge" id="tier-badge">L2</span></button>
       <button class="iconbtn" onclick="openStack()" aria-label="Open the stack">&#9638; Stack</button>
       <button class="iconbtn" onclick="openControls()" aria-label="Open control panel">&#9639; Controls</button>
       <button class="iconbtn" onclick="toggleTheme()" aria-label="Toggle theme" aria-pressed="false" id="themebtn">&#9681;</button>
@@ -399,6 +441,7 @@
 
 <main class="stage-wrap" id="stagewrap">
   <h1 class="sr-only">Sentinel governed run walkthrough</h1>
+  <div class="idbanner" id="idbanner" style="display:none"><div class="idbanner-in" id="idbanner-in"></div></div>
   <div class="enginebar" id="enginebar"></div>
 
   <!-- STAGE 1 : ASK -->
@@ -1033,6 +1076,29 @@
   </div>
 </div>
 
+<!-- stage transition overlay -->
+<div class="transition" id="transition" aria-hidden="true">
+  <div class="trans-card">
+    <div class="spinner"></div>
+    <div><div class="trans-verb" id="trans-verb">Governing</div><div class="trans-msg" id="trans-msg"></div></div>
+  </div>
+</div>
+
+<!-- faux login / persona select -->
+<div class="login" id="login">
+  <div class="login-inner">
+    <div class="login-brand">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 4 5v6c0 5 3.4 8.5 8 11 4.6-2.5 8-6 8-11V5z" fill="#2f6fd0"/><path d="M8 12l3 3 5-6" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span class="wm">SENTINEL</span><span class="sub">Governed Agentic Analysis</span>
+    </div>
+    <div class="login-eyebrow">Acting as</div>
+    <h2 class="login-h">Choose an identity</h2>
+    <p class="login-sub">Every persona is governed differently. Your role and attestations set how much machine autonomy the platform grants, computed as the lower of the two.</p>
+    <div class="persona-grid" id="persona-grid"></div>
+    <p class="login-foot">Faux sign-in for the demo. No credentials, no auth. Pick anyone to enter.</p>
+  </div>
+</div>
+
 <script>
 "use strict";
 
@@ -1108,6 +1174,75 @@ function renderEngine(){
     `<span class="eb-lab">Buy the maths</span>${buy}<span class="eb-sep"></span><span class="eb-lab">Build the governance</span>${build}`;
 }
 
+/* ---------- faux login / personas ---------- */
+const ICON = {
+  analyst:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="7.5" r="3.5"/><path d="M5 20c0-3.9 3.1-6.5 7-6.5s7 2.6 7 6.5"/><path d="M15.6 4.4l1.3 1.3 2.5-2.8"/></svg>`,
+  person:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="7.5" r="3.5"/><path d="M5 20c0-3.9 3.1-6.5 7-6.5s7 2.6 7 6.5"/></svg>`,
+  magnifier:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l5.5 5.5"/></svg>`,
+  stamp:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="4"/><path d="M8.5 12.4l2.4 2.4 4.6-5.2"/></svg>`,
+  eye:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="2.6"/></svg>`,
+  gear:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M18.4 5.6l-1.8 1.8M7.4 16.6l-1.8 1.8"/></svg>`
+};
+const PERSONAS = [
+  { id:'analyst', name:'Data Scientist', role:'First line · certified', tier:'L2', cap:'Writes gated code against the fenced API. Runs this walkthrough.', hero:true, short:'Analyst', qual:'certified', dot:'#5fdc8a', resolved:'L2', icon:ICON.analyst },
+  { id:'junior', name:'Junior Analyst', role:'First line · uncertified', tier:'L1', cap:'Picks a certified analysis and fills typed params. Writes no code.', short:'Junior Analyst', qual:'L1', dot:'#9dc0f5', resolved:'L1', icon:ICON.person },
+  { id:'validator', name:'Model Validator', role:'Second line · MRM', tier:'L0', cap:'Independently reviews fairness and evals. Does not run.', short:'Model Validator', qual:'reviews', dot:'#e7b45f', resolved:'L0', icon:ICON.magnifier },
+  { id:'approver', name:'MRM Approver', role:'Second line · sign-off', tier:'L0', cap:'Holds the promotion sign-off. Four-eyes, never self-approves.', short:'MRM Approver', qual:'approves', dot:'#e7b45f', resolved:'L0', icon:ICON.stamp },
+  { id:'auditor', name:'Internal Auditor', role:'Third line', tier:'L0', cap:'Read-only across the audit trail, evidence, and lineage.', short:'Internal Auditor', qual:'read-only', dot:'#93a4c2', resolved:'L0', icon:ICON.eye },
+  { id:'admin', name:'Platform Admin', role:'Platform', tier:'L3', cap:'May toggle a control (audited). L3 on Public data, caps at L2 here.', short:'Platform Admin', qual:'admin', dot:'#c98bf0', resolved:'L2', icon:ICON.gear }
+];
+let activePersona = PERSONAS[0];
+
+function buildPersonas(){
+  document.getElementById('persona-grid').innerHTML = PERSONAS.map(p=>`
+    <button class="pcard${p.hero?' hero':''}" onclick="pickPersona('${p.id}')" aria-label="Act as ${p.name}, tier ${p.tier}">
+      <span class="ptier">${p.tier}</span>
+      <span class="picon">${p.icon}</span>
+      <span class="pname">${p.name}</span>
+      <span class="prole">${p.role}</span>
+      <span class="pcap">${p.cap}</span>
+      ${p.hero?'<span class="phero-tag">Runs this walkthrough</span>':''}
+    </button>`).join('');
+}
+function setPersona(p){
+  activePersona = p;
+  document.getElementById('persona-chip').innerHTML =
+    `<span class="dot" style="background:${p.dot}"></span><span class="k">${p.short}</span> ${p.qual}`;
+  document.getElementById('tier-badge').textContent = p.resolved;
+  const bn = document.getElementById('idbanner');
+  if(p.id!=='analyst' && p.resolved!=='L2'){
+    document.getElementById('idbanner-in').innerHTML =
+      `<span class="m">!</span><div>Acting as <b>${p.name}</b>, who resolves to <b>${p.resolved}</b> on german_credit. This walkthrough follows the certified Analyst's <b>L2</b> run, which every reviewing identity is entitled to inspect.</div>`;
+    bn.style.display='';
+  } else {
+    bn.style.display='none';
+  }
+  demoAdmin = (p.id==='admin');
+}
+function pickPersona(id){
+  const p = PERSONAS.find(x=>x.id===id); if(!p) return;
+  setPersona(p);
+  const login = document.getElementById('login');
+  login.classList.add('leaving');
+  const done = ()=>{ login.style.display='none'; transitionTo(1); };
+  reduceMotion() ? done() : setTimeout(done, 280);
+}
+
+/* ---------- stage transition ("Governing" / "Thinking") ---------- */
+const TRANS = ['Binding identity','Selecting a certified analysis','Scoping the data','Writing the analysis','Reading the code','Running the sandbox','Screening the result','Composing the narration','Sealing the evidence'];
+let pendingSub = null, transTimer = null;
+function transitionTo(n){
+  n = Math.max(1, Math.min(9, n));
+  const applySub = ()=>{ if(n===1) showSub(pendingSub || 1); pendingSub = null; };
+  if(reduceMotion()){ showStage(n); applySub(); return; }
+  const isLLM = (n===4 || n===8);
+  document.getElementById('trans-verb').textContent = isLLM ? 'Thinking' : 'Governing';
+  document.getElementById('trans-msg').textContent = TRANS[n-1];
+  document.getElementById('transition').classList.add('show');
+  clearTimeout(transTimer);
+  transTimer = setTimeout(()=>{ document.getElementById('transition').classList.remove('show'); showStage(n); applySub(); }, isLLM ? 950 : 620);
+}
+
 let current = 1;
 const railEl = document.getElementById('rail');
 
@@ -1116,7 +1251,7 @@ function buildRail(){
     const idx=i+1;
     const tag = s.mark ? `<span class="tag ${s.tag}">${s.mark}</span>` : `<span class="tag quiet">&middot;</span>`;
     return `<div class="step" data-idx="${idx}"><div class="connector"></div>
-      <button onclick="showStage(${idx})" aria-label="Go to stage ${idx}, ${s.n}">
+      <button onclick="transitionTo(${idx})" aria-label="Go to stage ${idx}, ${s.n}">
         <span class="node">${idx}</span><span class="lbl">${s.n}</span>${tag}
       </button></div>`;
   }).join('');
@@ -1156,8 +1291,8 @@ function go(d){
   if(current===1 && d<0 && currentSub>1){ showSub(currentSub-1); return; }
   const target = current + d;
   if(target<1 || target>9) return;
-  showStage(target);
-  if(target===1) showSub(d<0 ? 3 : 1);
+  pendingSub = (target===1) ? (d<0 ? 3 : 1) : null;
+  transitionTo(target);
 }
 
 /* Ask sub-steps */
@@ -1343,6 +1478,7 @@ document.addEventListener('keydown',e=>{
 
 buildRail();
 buildAttested();
+buildPersonas();
 updateThemeBtn(currentIsDark());
 applyScreenState();
 showStage(1);

@@ -219,6 +219,21 @@ cells to suppress by design).
   Claude; Gate is `ast` + `sqlglot`; Execute is DuckDB; Screen is fairlearn +
   `scipy.stats`; Attest is OpenLineage + Quarto + marimo. This makes the thesis
   legible at every step instead of asserted once.
+- **Persona-select entry ("Acting as").** A faux sign-in before the walkthrough:
+  the six personas as clickable icon cards (Analyst, Junior, Validator, Approver,
+  Auditor, Admin), each showing its role and its resolved tier. No auth; selecting
+  one sets the top-bar identity and tier chips and enters the walkthrough. The
+  Analyst is the highlighted L2 hero path; picking a non-L2 identity shows a banner
+  ("you resolve to L1/L0 here; this walkthrough follows the Analyst's L2 run, which
+  every reviewing identity may inspect") rather than faking six flows. Selecting the
+  Admin also unlocks the control toggles. This puts the autonomy ladder at the door.
+- **Inter-stage transition ("Governing" / "Thinking").** Every stage change plays a
+  brief overlay so the platform visibly does work, even on the scripted path. The
+  verb is **Governing** for the deterministic stages (the controls really are
+  running) and **Thinking** only for Generate and Interpret, where the model
+  reasons and Live mode genuinely loads. Under the verb, a stage-specific line
+  (Scoping the data, Reading the code, Screening the result...). Skipped under
+  `prefers-reduced-motion`.
 - **The Stack surface.** A top-bar panel that lays out the whole stack as two columns:
   bought (the analytical libraries, what each does, at which stage) and built (the
   controls per stage). The showpiece is the Gate import allowlist rendered as the
