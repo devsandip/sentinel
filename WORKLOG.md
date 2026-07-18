@@ -449,3 +449,24 @@ Append-only session handoff log. Newest entries at the bottom.
 **Decisions:**
 - Verified the deploy by loading a page and running a flow, per the 07:50 lesson (health 200 answers before app.py runs). A governed run completing on the instance is the check that a probe cannot give.
 - Deployed from main after the merge (not from the feature branch), so the deployed code and the deployed SHA both trace to main. Confirmed by the SourceBundle S3Key, not the reused VersionLabel.
+
+## 2026-07-19 (01:25) — overnight: the show-and-tell stepper, then the mockup's design system
+
+**Did:**
+- Built the docs/more_ideas.md brief end to end on branch `claude/resume-review-build-20aab7` (commit `ef78c25`): the govflow surface is a nine-stage stepper. Ask split into three sub-steps (dataset table, purpose with live CTL-PURP-01 preview, prebuilt questions), Plan with model pick + populated params, Access showing the scoped sample plus every source column (withheld ones struck red, values masked, reason each), Gate with the parser-check table and the "Fix it" repair (live: refusal fed back to the model; scripted: seeded repaired sample, labeled; the same gate re-reads either way, `repaired_from` links the runs), Execute with the sandbox spelled out, Screen before/after with the suppressed band struck through, Interpret with the typed-out narration + CTL-EVAL-01 verdict, Attest with per-control drill-downs. New `sentinel/govflow/controls_info.py` gives every control a plain-language identity; `to_public_dict` grew execution/generation_attempts/tier_decision/access/repaired_from (additive).
+- Ran a 25-agent adversarial review of the diff; 18 confirmed findings (honesty-of-copy, session-state bugs, markdown mangling of dunders, missing coverage), all fixed. Notables: `repaired_from` set iff the repair engaged; scripted repairs never claim the model fixed them; L1 never described as sandboxed; tier recomputed from the current persona; stale Admin toggles cannot degrade other personas.
+- Mid-build Sandip pointed at the unified-app mockup + `docs/ui-spec.md` (drafted in the continuing-work worktree). Adopted the design system (commit `1612740`): full token set, hidden Streamlit chrome, topbar command frame (SENTINEL lockup + live persona/data/purpose/tier chips + one Controls popover replacing the six static chips), sidebar as nav rail, the stage radio CSS-transformed into the numbered node rail, per-stage phead + In/Does/Out + engine bar, spec code blocks with violation rows, and the Architecture tenth stop. Spec docs + mockups committed onto this branch.
+- Tests 316 -> 355 (new: showtell feature suite, stepper walks incl. refusal/L1/L3-repair, admin toggle). Ruff clean. Browser-verified all routes and the redesign; no server/console errors. W28 weekly journal summary written (first one); journal entry + INDEX updated.
+
+**State now:**
+- Branch pushed with 3 commits (feature, redesign, docs); PR open for morning review. Prod untouched, still v4 and healthy.
+- The govflow surface looks and behaves per the mockup within Streamlit's limits (rail = styled radio; control drawer = popover; deviations recorded in docs/features/govflow-showtell.md).
+
+**Next:**
+- Sandip reviews the PR. Then the unified-app plan's remaining phases in order (docs/features/unified-app-build.md): D0+D1 datasets, H seeded history, S1 login gate, S2 grouped sidebar, S3 command-center landing, dark mode.
+- W29 weekly summary due Monday. OPA externalisation still Sandip's call.
+
+**Decisions:**
+- No deploy: large unreviewed UI change on a public instance overnight is the wrong tradeoff; the PR is the review vehicle.
+- The rail stays a styled radio because custom HTML links would drop the Streamlit session (and the run with it).
+- Deferred S1-S3 rather than building them at 1am: they restructure the app entry flow and the build plan sequences them after the data workstreams anyway.
