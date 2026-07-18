@@ -360,3 +360,23 @@ Append-only session handoff log. Newest entries at the bottom.
 - Fixed the crash forward (regenerate `requirements.txt` + redeploy) rather than rolling back, since prod was already down on the new bundle, the fix is a one-line dependency sync, and Sandip was live and watching.
 - Regenerated `requirements.txt` from the lock rather than hand-adding `sqlglot`, so transitive deps of the new packages come along and the file stays a faithful `uv export` (its stated purpose per its own header).
 - Treat the smoke test as a required post-deploy step, not optional: health 200 is necessary but not sufficient because it does not run `app.py`. Loading a page and running a flow is the check that matters.
+
+## 2026-07-18 (08:55) — added a deploy-time drift guard so the missing-deps crash cannot recur
+
+**Did:**
+- Closed the open follow-up from the 07:50 entry. Added a pre-flight guard to `deploy/aws/deploy.sh`: before any AWS call it regenerates the dependency list from `uv.lock` and refuses to deploy if it differs from the committed `requirements.txt`, printing the drift and the exact fix command. Fails closed on drift; warns and proceeds only if `uv` is absent. Committed `e2f3e50`.
+- Refined it after spotting that the first version hardcoded `--extra pgvector --extra live` (would report false drift if the shipped extras ever changed). Now reads the export command from `requirements.txt`'s own header line (uv writes the exact invocation there), strips `--output-file`, and runs it via a `read -r -a` argv array. The header is the single source of truth. Committed `cde19fc`.
+- Tested both ways under bash: passes clean on the current file, fires on a simulated `requirements.txt` missing `sqlglot`/`duckdb`/`openlineage-python`. `bash -n` syntax-clean. (First test failed only because the Bash tool runs zsh, which does not word-split unquoted vars; the array split makes the script independent of that.)
+- Refreshed the session resume (`resume/RESUME_2026-07-18-0848.md`, gitignored) to the true end state.
+
+**State now:**
+- main at `cde19fc` (the guard refinement) on `e2f3e50` (the guard) on `e2d2af4` (docs) on `8aeccba` (the deployed requirements fix). Clean, pushed, in sync. No open PRs, no `feat/*` branches.
+- Prod unchanged and healthy on bundle `sentinel-20260718-073829.zip`. The two guard commits and the docs commits are deploy-script and docs only; they do not change the running app and are intentionally not deployed.
+- 251 tests green, ruff clean (no app code touched this session).
+
+**Next:**
+- The drift-guard follow-up is done. Remaining: marimo notebook + Quarto PDF render (secondary v3 surfaces), weekly summaries W28 + W29 (W29 ends Sun 2026-07-19), and v4 (breadth; a Sandip decision, OPA + L3 are forks).
+
+**Decisions:**
+- Put the guard at deploy time rather than in CI because this repo has no CI. The deploy script is the last gate before prod, so it is the right place to make stale-`requirements.txt` unshippable.
+- Made `requirements.txt`'s header the single source of truth for which extras ship, instead of duplicating the flags in the script. This removes the one way the guard itself could rot.
