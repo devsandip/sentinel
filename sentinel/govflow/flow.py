@@ -44,7 +44,9 @@ from .access import (
     PROXY_CANDIDATES,
     build_scoped_table,
 )
+from .l1 import L1_ANALYSIS_ID, l1_code_descriptor, resolve_l1_params, run_l1_analysis
 from .purpose_matrix import CTL_PURP_01, evaluate_purpose
+from .tiers import resolve_tier_for_dataset
 
 TIER_L2 = "L2"
 PURPOSE = "fair_lending_review"  # the analysis/display label
@@ -206,6 +208,7 @@ def run_governed_analysis(
     proxy_threshold: float = 0.5,
     max_attempts: int = 3,
     purpose_key: str = PURPOSE_KEY,
+    l1_params: dict[str, Any] | None = None,
 ) -> GovernedRunResult:
     """Run one question through the governed flow and return everything the UI
     needs. Scripted gateway by default (free, deterministic); pass a live gateway
@@ -214,11 +217,19 @@ def run_governed_analysis(
     ``purpose_key`` names the purpose-matrix cell (PRD 4.4) the request declares.
     It defaults to this flow's purpose (fair_lending); passing a purpose that the
     matrix refuses for german_credit (e.g. ``marketing``) is refused at Access
-    with CTL-PURP-01 before any code is generated -- the showpiece refusal."""
+    with CTL-PURP-01 before any code is generated -- the showpiece refusal.
+
+    The autonomy tier is computed from the persona and the dataset classification
+    (PRD 4.6), never chosen. A certified analyst resolves to L2 and the model
+    writes gated code; an uncertified analyst resolves to L1, where the model
+    fills ``l1_params`` for a certified analysis and writes no code. A persona that
+    resolves to L0 may not run."""
     gateway = gateway or ModelGateway(provider=TEMPLATED)
     persona = persona or default_persona()
     run_id = uuid.uuid4().hex[:12]
     audit = audit or AuditLog(run_id=run_id, persist=False, policy_version=policy_version())
+    tier_decision = resolve_tier_for_dataset(DATASET_ID, persona.tier_role, persona.attestations)
+    tier = tier_decision.tier
 
     stages: list[StageRecord] = []
     controls: list[str] = []
@@ -227,7 +238,7 @@ def run_governed_analysis(
         return GovernedRunResult(
             run_id=run_id,
             question=question,
-            tier=TIER_L2,
+            tier=tier,
             persona=persona.name,
             dataset=DATASET_ID,
             purpose=PURPOSE,
@@ -251,23 +262,44 @@ def run_governed_analysis(
     scr: ScreenResult | None = None
     narration = ""
     plan_agent = ""
+    code_for_evidence = ""
     evidence: EvidencePack | None = None
     lineage: list[dict] = []
     started_at = datetime.now(UTC).isoformat()
 
-    # Stage 1: Ask -- bind identity, freeze the tier, classify.
+    # Stage 1: Ask -- bind identity, compute the autonomy tier (never chosen),
+    # classify. The tier is min(class ceiling, person ceiling); see PRD 4.6.
     audit.record(
         agent="govflow",
         action="ask",
         actor=persona.id,
         inputs_summary=f"purpose={PURPOSE}, dataset={DATASET_ID}",
-        output_summary=f"tier resolved {TIER_L2} (frozen for the request)",
+        output_summary=f"tier resolved {tier}: {tier_decision.rationale}",
     )
+    # A persona that resolves to L0 reads finished numbers; it may not run an
+    # analysis. The tier gate enforces this, not just the persona's can_run flag.
+    if tier not in ("L1", "L2", "L3"):
+        detail = f"tier {tier} is explain-only (L0); {persona.name} may not run an analysis"
+        audit.record(
+            agent="govflow",
+            action="tier_block",
+            level=LEVEL_BLOCKED,
+            actor=persona.id,
+            output_summary=detail,
+        )
+        stages.append(StageRecord("Ask", "blocked", detail=detail))
+        for s in ("Plan", "Access", "Generate", "Gate", "Execute", "Screen", "Interpret", "Attest"):
+            stages.append(StageRecord(s, "skipped", detail="explain-only tier (L0)"))
+        return finish(STATUS_BLOCKED)
     stages.append(
         StageRecord(
             "Ask",
             "ok",
-            detail=f"purpose={PURPOSE}, tier={TIER_L2} (frozen), persona={persona.name}",
+            detail=(
+                f"purpose={PURPOSE}, tier={tier} (computed: min(class "
+                f"{tier_decision.classification_ceiling}, person "
+                f"{tier_decision.person_ceiling})), persona={persona.name}"
+            ),
         )
     )
 
@@ -396,112 +428,189 @@ def run_governed_analysis(
         )
     )
 
-    # Stage 4 + 5: Generate then Gate (with the regenerate loop).
-    request = CodeGenRequest(
-        question=question,
-        table=DATASET_ID,
-        granted_columns=FAIR_LENDING_GRANT,
-        protected_attribute=PROTECTED_ATTRIBUTE,
-        analysis=PURPOSE,
-        intent=intent,
-        allowed_tables=[DATASET_ID],
-    )
-    outcome = generate_and_gate(request, gateway, max_attempts=max_attempts)
-    stages.append(
-        StageRecord(
-            "Generate",
-            "ok",
-            detail=f"{'live' if outcome.live else 'scripted'}, "
-            f"{outcome.attempt_count} attempt(s)",
-        )
-    )
-
-    if not outcome.gate.passed:
-        controls += outcome.gate.controls_fired
-        for v in outcome.gate.violations:
+    # Stages 4-6 branch on the resolved tier. At L2 the model writes code and the
+    # gate reads it before the sandbox runs it. At L1 the model writes no code: it
+    # selects a certified analysis and fills typed params, so there is nothing to
+    # generate and nothing to statically gate, and the analysis runs in-process
+    # because it is trusted platform code, not model-written.
+    if tier == "L1":
+        try:
+            params = resolve_l1_params(l1_params)
+        except ValueError as exc:
             audit.record(
-                agent="gate",
-                action="gate_block",
+                agent="l1",
+                action="param_error",
                 level=LEVEL_BLOCKED,
                 actor=persona.id,
-                output_summary=v.message,
-                extra={"control": v.control, "line": v.line},
+                output_summary=str(exc),
             )
+            stages.append(StageRecord("Generate", "error", detail=str(exc)))
+            for s in ("Gate", "Execute", "Screen", "Interpret", "Attest"):
+                stages.append(StageRecord(s, "skipped", detail="invalid L1 parameters"))
+            return finish(STATUS_ERROR)
+
+        code_for_evidence = l1_code_descriptor(params)
+        stages.append(
+            StageRecord(
+                "Generate",
+                "skipped",
+                detail=(
+                    f"L1: the model selects the certified analysis {L1_ANALYSIS_ID!r} "
+                    "and fills typed params; it writes no code."
+                ),
+            )
+        )
         stages.append(
             StageRecord(
                 "Gate",
-                "blocked",
-                controls=outcome.gate.controls_fired,
-                detail=outcome.gate.refusal_summary(),
+                "skipped",
+                detail="L1: no generated code to gate; the reviewed surface is the params.",
             )
         )
-        for s in ("Execute", "Screen", "Interpret", "Attest"):
-            stages.append(StageRecord(s, "skipped", detail="upstream gate block"))
-        return finish(STATUS_BLOCKED)
-
-    audit.record(
-        agent="gate",
-        action="gate_pass",
-        level=LEVEL_GATE,
-        output_summary=f"gate passed on attempt {outcome.attempt_count}",
-    )
-    stages.append(StageRecord("Gate", "ok", detail="no violations; cleared for execution"))
-
-    # Stage 6: Execute in the sandbox. The grant and row filter back ctx.sql: the
-    # runtime backstop for columns, and the injected identity filter.
-    execution = run_sandboxed(
-        outcome.code,
-        tables={DATASET_ID: scoped},
-        granted_columns=FAIR_LENDING_GRANT,
-        row_filter_sql=FAIR_LENDING_ROW_FILTER,
-        wall_clock_s=15,
-    )
-    if not execution.ok:
-        ctl = [execution.control] if execution.control else []
-        controls += ctl
         audit.record(
-            agent="sandbox",
-            action="execute_error",
-            level=LEVEL_BLOCKED,
-            output_summary=execution.error or "execution failed",
-            extra={"control": execution.control},
+            agent="l1",
+            action="select_and_fill",
+            actor=persona.id,
+            output_summary=f"certified analysis {L1_ANALYSIS_ID!r}, params {params}",
         )
-        stages.append(
-            StageRecord(
-                "Execute", "error", controls=ctl, detail=execution.error or "failed"
+        try:
+            emitted = run_l1_analysis(scoped, params)
+            execution = ExecutionResult(ok=True, emitted=emitted, has_emitted=True)
+        except Exception as exc:  # noqa: BLE001 - report any analysis failure
+            execution = ExecutionResult(ok=False, error=f"{type(exc).__name__}: {exc}")
+            audit.record(
+                agent="l1",
+                action="analysis_error",
+                level=LEVEL_BLOCKED,
+                output_summary=execution.error or "L1 analysis failed",
             )
-        )
-        for s in ("Screen", "Interpret", "Attest"):
-            stages.append(StageRecord(s, "skipped", detail="execution failed"))
-        return finish(STATUS_ERROR)
-
-    emitted = execution.emitted
-    if not isinstance(emitted, pd.DataFrame) or "n" not in emitted.columns:
-        audit.record(
-            agent="sandbox",
-            action="execute_ok_bad_shape",
-            level=LEVEL_BLOCKED,
-            output_summary="emitted result is not a grouped table with an 'n' column",
-        )
+            stages.append(StageRecord("Execute", "error", detail=execution.error or "failed"))
+            for s in ("Screen", "Interpret", "Attest"):
+                stages.append(StageRecord(s, "skipped", detail="L1 analysis failed"))
+            return finish(STATUS_ERROR)
         stages.append(
             StageRecord(
                 "Execute",
-                "error",
-                detail="emitted result must be a DataFrame with an 'n' count column",
+                "ok",
+                detail=(
+                    f"ran certified analysis {L1_ANALYSIS_ID!r} in-process with typed "
+                    "params (trusted, not model-written)"
+                ),
             )
         )
-        for s in ("Screen", "Interpret", "Attest"):
-            stages.append(StageRecord(s, "skipped", detail="unusable result shape"))
-        return finish(STATUS_ERROR)
+        audit.record(
+            agent="l1",
+            action="analysis_ok",
+            output_summary=f"certified analysis produced {len(emitted)} group(s)",
+        )
+    else:
+        # L2: the model writes code, a static gate reads it, the sandbox runs it.
+        request = CodeGenRequest(
+            question=question,
+            table=DATASET_ID,
+            granted_columns=FAIR_LENDING_GRANT,
+            protected_attribute=PROTECTED_ATTRIBUTE,
+            analysis=PURPOSE,
+            intent=intent,
+            allowed_tables=[DATASET_ID],
+        )
+        outcome = generate_and_gate(request, gateway, max_attempts=max_attempts)
+        stages.append(
+            StageRecord(
+                "Generate",
+                "ok",
+                detail=f"{'live' if outcome.live else 'scripted'}, "
+                f"{outcome.attempt_count} attempt(s)",
+            )
+        )
 
-    stages.append(
-        StageRecord("Execute", "ok", detail=f"ran in {execution.wall_clock_s}s")
-    )
-    audit.record(
-        agent="sandbox",
-        action="execute_ok",
-        output_summary=f"ran in {execution.wall_clock_s}s (no network, wall-clock capped)",
-    )
+        if not outcome.gate.passed:
+            controls += outcome.gate.controls_fired
+            for v in outcome.gate.violations:
+                audit.record(
+                    agent="gate",
+                    action="gate_block",
+                    level=LEVEL_BLOCKED,
+                    actor=persona.id,
+                    output_summary=v.message,
+                    extra={"control": v.control, "line": v.line},
+                )
+            stages.append(
+                StageRecord(
+                    "Gate",
+                    "blocked",
+                    controls=outcome.gate.controls_fired,
+                    detail=outcome.gate.refusal_summary(),
+                )
+            )
+            for s in ("Execute", "Screen", "Interpret", "Attest"):
+                stages.append(StageRecord(s, "skipped", detail="upstream gate block"))
+            return finish(STATUS_BLOCKED)
+
+        audit.record(
+            agent="gate",
+            action="gate_pass",
+            level=LEVEL_GATE,
+            output_summary=f"gate passed on attempt {outcome.attempt_count}",
+        )
+        stages.append(StageRecord("Gate", "ok", detail="no violations; cleared for execution"))
+
+        # Execute in the sandbox. The grant and row filter back ctx.sql: the
+        # runtime backstop for columns, and the injected identity filter.
+        execution = run_sandboxed(
+            outcome.code,
+            tables={DATASET_ID: scoped},
+            granted_columns=FAIR_LENDING_GRANT,
+            row_filter_sql=FAIR_LENDING_ROW_FILTER,
+            wall_clock_s=15,
+        )
+        if not execution.ok:
+            ctl = [execution.control] if execution.control else []
+            controls += ctl
+            audit.record(
+                agent="sandbox",
+                action="execute_error",
+                level=LEVEL_BLOCKED,
+                output_summary=execution.error or "execution failed",
+                extra={"control": execution.control},
+            )
+            stages.append(
+                StageRecord(
+                    "Execute", "error", controls=ctl, detail=execution.error or "failed"
+                )
+            )
+            for s in ("Screen", "Interpret", "Attest"):
+                stages.append(StageRecord(s, "skipped", detail="execution failed"))
+            return finish(STATUS_ERROR)
+
+        emitted = execution.emitted
+        if not isinstance(emitted, pd.DataFrame) or "n" not in emitted.columns:
+            audit.record(
+                agent="sandbox",
+                action="execute_ok_bad_shape",
+                level=LEVEL_BLOCKED,
+                output_summary="emitted result is not a grouped table with an 'n' column",
+            )
+            stages.append(
+                StageRecord(
+                    "Execute",
+                    "error",
+                    detail="emitted result must be a DataFrame with an 'n' count column",
+                )
+            )
+            for s in ("Screen", "Interpret", "Attest"):
+                stages.append(StageRecord(s, "skipped", detail="unusable result shape"))
+            return finish(STATUS_ERROR)
+
+        code_for_evidence = outcome.code
+        stages.append(
+            StageRecord("Execute", "ok", detail=f"ran in {execution.wall_clock_s}s")
+        )
+        audit.record(
+            agent="sandbox",
+            action="execute_ok",
+            output_summary=f"ran in {execution.wall_clock_s}s (no network, wall-clock capped)",
+        )
 
     # Stage 7: Screen -- suppression, then proxy discovery.
     band_cols = [_band_column(emitted)] if _band_column(emitted) else None
@@ -579,10 +688,10 @@ def run_governed_analysis(
         analysis=plan_agent,
         dataset=DATASET_ID,
         dataset_sha=ds_sha,
-        tier=TIER_L2,
+        tier=tier,
         purpose=PURPOSE,
         author=persona.id,
-        code=outcome.code,
+        code=code_for_evidence,
         screened=scr.screened,
         controls_attested=attested,
         suppressed=scr.suppressed,

@@ -14,14 +14,22 @@ from sentinel.orchestrator import STATUS_AWAITING, STATUS_COMPLETED, Orchestrato
 def test_personas_load_with_capabilities():
     personas = all_personas()
     ids = {p.id for p in personas}
-    assert ids == {"analyst", "model_validator", "mrm_approver", "auditor", "admin"}
+    assert ids == {
+        "analyst",
+        "junior_analyst",
+        "model_validator",
+        "mrm_approver",
+        "auditor",
+        "admin",
+    }
     # Only the MRM Approver holds promotion authority (admin dropped can_approve).
     approvers = {p.id for p in personas if p.can_approve}
     assert approvers == {"mrm_approver"}
     # Run authority and promotion authority are held by disjoint personas: the
-    # approver can never be the author of the run (segregation of duties).
+    # approver can never be the author of the run (segregation of duties). Both
+    # the certified Analyst and the uncertified Junior Analyst can run.
     runners = {p.id for p in personas if p.can_run}
-    assert runners == {"analyst", "admin"}
+    assert runners == {"analyst", "junior_analyst", "admin"}
     assert runners.isdisjoint(approvers)
     # Only the Admin may toggle controls.
     togglers = {p.id for p in personas if p.can_toggle_controls}

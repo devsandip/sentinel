@@ -30,6 +30,7 @@ from sentinel.govflow import (
     resolve_tier_for_dataset,
     run_governed_analysis,
 )
+from sentinel.govflow.l1 import L1_PARAMS
 from sentinel.govflow.purpose_matrix import PURPOSE_LABEL, PURPOSES, SHOWPIECE
 from sentinel.govflow.tiers import (
     ATT_CERTIFIED,
@@ -643,21 +644,76 @@ _STAGE_ICON = {
 }
 
 
+_TIER_NOTE = {
+    "L2": "may write code against the fenced API; a static gate reads it before it runs",
+    "L1": "picks a certified analysis and fills typed params; writes no code",
+    "L0": "explain-only; may not run an analysis",
+    "L3": "writes near-arbitrary code in a broad sandbox, reviewed before it runs",
+}
+
+
+def _l1_param_editor() -> dict:
+    """Render the typed params for the certified L1 analysis and return overrides.
+    This is the reviewed surface at L1: params, not code."""
+    st.markdown(
+        "<span class='muted'>At L1 the model does not write code. It selects the "
+        "certified fair-lending analysis and fills these typed parameters, which "
+        "are what a reviewer checks.</span>",
+        unsafe_allow_html=True,
+    )
+    overrides: dict = {}
+    for p in L1_PARAMS:
+        key = f"l1_{p.name}"
+        if p.kind == P_INT:
+            overrides[p.name] = st.number_input(
+                p.label,
+                value=int(p.default),
+                min_value=int(p.minimum) if p.minimum is not None else None,
+                max_value=int(p.maximum) if p.maximum is not None else None,
+                step=1,
+                help=p.help,
+                key=key,
+            )
+        elif p.kind == P_FLOAT:
+            overrides[p.name] = st.number_input(
+                p.label, value=float(p.default), help=p.help, key=key
+            )
+        elif p.kind == P_BOOL:
+            overrides[p.name] = st.checkbox(p.label, value=bool(p.default), help=p.help, key=key)
+        elif p.kind == P_CHOICE:
+            choices = list(p.choices)
+            overrides[p.name] = st.selectbox(
+                p.label, choices, index=choices.index(p.default), help=p.help, key=key
+            )
+        else:
+            overrides[p.name] = st.text_input(p.label, value=str(p.default), help=p.help, key=key)
+    return overrides
+
+
 def render_govflow(persona) -> None:  # noqa: ANN001
     st.subheader("Governed code generation")
     st.markdown(
         "<span class='muted'>The model writes the analysis code; a static gate "
         "reads it before the machine does; a disclosure screen removes small "
-        "cells before the model narrates. L2 autonomy on german_credit, purpose "
-        "fair_lending_review. Plan binds a certified agent; the SQL requests run "
-        "through ctx.sql, gated by sqlglot and executed on DuckDB.</span>",
+        "cells before the model narrates. The autonomy tier is computed from the "
+        "persona and the data classification, and the flow routes on it: L2 writes "
+        "gated code, L1 fills typed params for a certified analysis. Purpose "
+        "fair_lending_review on german_credit.</span>",
         unsafe_allow_html=True,
     )
+
+    # The tier is computed from the persona and the dataset classification (4.6),
+    # never chosen. Switching persona in the sidebar changes the route.
+    tier_decision = resolve_tier_for_dataset(
+        "german_credit", persona.tier_role, persona.attestations
+    )
+    tier = tier_decision.tier
     st.markdown(
-        "<span class='ctrl-chip'>tier L2</span> "
-        "<span class='muted'>certified analyst + Restricted data resolves to L2: "
-        "may write code against the fenced API. The tier is computed, not chosen, "
-        "and frozen for the request.</span>",
+        f"<span class='ctrl-chip'>tier {tier}</span> "
+        f"<span class='muted'>{persona.name} on german_credit (Restricted) resolves to "
+        f"{tier} = min(class {tier_decision.classification_ceiling}, person "
+        f"{tier_decision.person_ceiling}): {_TIER_NOTE.get(tier, '')}. "
+        f"Computed, not chosen.</span>",
         unsafe_allow_html=True,
     )
 
@@ -666,6 +722,10 @@ def render_govflow(persona) -> None:  # noqa: ANN001
         style = st.selectbox("Request", list(_GOVFLOW_STYLES))
         intent, default_q, purpose_key = _GOVFLOW_STYLES[style]
         question = st.text_input("Question", value=default_q)
+        l1_params = None
+        if tier == "L1":
+            with st.expander("L1 typed parameters (the reviewed surface)", expanded=True):
+                l1_params = _l1_param_editor()
     with c2:
         mode = st.radio(
             "Generation",
@@ -697,6 +757,7 @@ def render_govflow(persona) -> None:  # noqa: ANN001
                 persona=persona,
                 intent=intent,
                 purpose_key=purpose_key,
+                l1_params=l1_params,
             )
         st.session_state.govflow_result = result.to_public_dict()
 

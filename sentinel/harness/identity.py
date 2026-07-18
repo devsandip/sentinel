@@ -27,6 +27,11 @@ class Persona:
     can_toggle_controls: bool
     read_only: bool
     description: str
+    # Autonomy tier inputs (governed-codegen 4.6). tier_role maps the display
+    # persona to a resolution role (data_scientist, model_validator, ...) and
+    # attestations are the credentials that lift a data scientist above L1.
+    tier_role: str = ""
+    attestations: tuple[str, ...] = ()
 
     @property
     def label(self) -> str:
@@ -48,6 +53,8 @@ def all_personas() -> list[Persona]:
             can_toggle_controls=bool(p.get("can_toggle_controls", False)),
             read_only=bool(p.get("read_only", False)),
             description=str(p.get("description", "")).strip(),
+            tier_role=str(p.get("tier_role", "")),
+            attestations=tuple(p.get("attestations", []) or []),
         )
         for p in load_personas()["personas"]
     ]
