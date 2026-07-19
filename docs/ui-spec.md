@@ -150,6 +150,15 @@ Row: `[brand] [spacer] [ctx-chip: persona] [ctx-chip: dataset+classification] [c
   certified), dataset name + a classification `.badge.danger` inline, purpose,
   and tier (accent-colored badge). All chips are clickable buttons that jump to
   the relevant stage/control.
+  **As built (2026-07-19), the chips are run-scoped.** Data and Purpose describe
+  a run, so they render only on a screen that has one in scope: the Run
+  walkthrough (from the published run, else the draft config) and the credit
+  pipeline once a run has started (Data only; an orchestrator run declares no
+  purpose). The dashboard and the catalog screens show no chips rather than
+  inheriting a german_credit / fair-lending default that describes nothing on
+  the page. Persona and tier left the topbar earlier: identity is the header's
+  "Acting as" popover, and the tier is run-scope, shown in the Run flow. The
+  only always-on element is the UNGOVERNED warning badge, which is global state.
 - **Icon buttons** (`.iconbtn`): transparent bg, chrome-border outline, 8px
   radius. Three: "▦ Stack" (jumps to the Architecture stop), "▤ Controls" (opens
   the control-plane modal), and a theme toggle (◑/◐ depending on state,

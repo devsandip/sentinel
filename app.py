@@ -679,26 +679,60 @@ def _controls_plane(persona) -> None:  # noqa: ANN001
     )
 
 
-def header(persona) -> None:  # noqa: ANN001
+def _run_scope(section: str) -> tuple[str, str] | None:
+    """The (dataset, purpose) the current screen is scoped to, or None when the
+    screen has no run in scope. Data and Purpose describe a run, so they cannot
+    be read off a screen that has no run: the catalog screens and the dashboard
+    were inheriting a german_credit / fair-lending default that described
+    nothing on the page. Purpose is "" when the run carries no declared one."""
+    if section == "Run":
+        pub = st.session_state.get("govflow_result") or {}
+        draft = st.session_state.get("govflow_draft") or {}
+        # The Ask stage renders after the header, so on the very first frame the
+        # draft is still empty; fall back to the same defaults Ask will pick.
+        return (
+            pub.get("dataset") or draft.get("dataset") or "german_credit",
+            pub.get("purpose") or draft.get("purpose") or "fair_lending",
+        )
+    if section == "Pipeline":
+        run_id = st.session_state.get("run_id")
+        state = orch.get_run(run_id) if run_id else None
+        # Pre-run, the Pipeline screen is an empty stage: nothing to scope to.
+        # An orchestrator run carries a dataset but no declared purpose.
+        return (state.dataset_id, "") if state is not None else None
+    return None
+
+
+def header(persona, section: str) -> None:  # noqa: ANN001
     """The topbar command frame (ui-spec 2.1): brand lockup, run-context chips,
     the identity switcher, and the Controls popover. Identity lives here only
     (the sidebar block was removed). The resolved tier is run-scope, so it lives
     in the Run flow rather than on this global bar, and the governed badge shows
-    only as a warning when a control is toggled off."""
-    draft = st.session_state.get("govflow_draft") or {}
-    pub = st.session_state.get("govflow_result") or {}
-    dataset = pub.get("dataset") or draft.get("dataset") or "german_credit"
-    purpose = pub.get("purpose") or draft.get("purpose") or "fair_lending"
+    only as a warning when a control is toggled off. The Data/Purpose chips are
+    run-scope too, so they render only on a screen that has a run in scope."""
     from sentinel.govflow import matrix_rows
     from sentinel.govflow.purpose_matrix import PURPOSE_LABEL
 
-    classification = next(
-        (r["classification"] for r in matrix_rows() if r["dataset"] == dataset), ""
-    )
-    cls_kind = classification.lower() if classification else "internal"
-    purpose_label = PURPOSE_LABEL.get(purpose, purpose)
+    ctx = ""
+    scope = _run_scope(section)
+    if scope:
+        dataset, purpose = scope
+        classification = next(
+            (r["classification"] for r in matrix_rows() if r["dataset"] == dataset), ""
+        )
+        cls_kind = classification.lower() if classification else "internal"
+        ctx = (
+            f"<span class='ctx-chip'><span class='k'>Data</span> {dataset} "
+            f"<span class='cls {cls_kind}'>{classification or 'n/a'}</span></span>"
+        )
+        if purpose:
+            ctx += (
+                "<span class='ctx-chip'><span class='k'>Purpose</span> "
+                f"{PURPOSE_LABEL.get(purpose, purpose)}</span>"
+            )
     # The governed badge earns its place only as a warning: shown when a control
     # is disabled for the next run, and nothing (not a decorative green) when on.
+    # It is global state, not run scope, so it shows on every screen.
     gov_badge = (
         "<span class='badge warn'>UNGOVERNED next run</span>"
         if _control_settings(persona).any_disabled
@@ -714,12 +748,7 @@ def header(persona) -> None:  # noqa: ANN001
                 <span class='sub'>Governed Agentic Analysis</span>
               </div>
               <div class='spacer'></div>
-              <div class='ctx'>
-                <span class='ctx-chip'><span class='k'>Data</span> {dataset}
-                  <span class='cls {cls_kind}'>{classification or "n/a"}</span></span>
-                <span class='ctx-chip'><span class='k'>Purpose</span> {purpose_label}</span>
-                {gov_badge}
-              </div>
+              <div class='ctx'>{ctx}{gov_badge}</div>
             </div>
             """,
             unsafe_allow_html=True,
@@ -813,14 +842,14 @@ def controls(persona) -> None:
     settings = _control_settings(persona)
     if settings.any_disabled:
         st.error(
-            "Controls disabled via the header chips: "
+            "Controls disabled via the header's Controls popover: "
             + ", ".join(settings.disabled_names())
             + ". The next run executes UNGOVERNED and the disabling is audited."
         )
     elif persona.can_toggle_controls:
         st.caption(
-            "Admin: click a governance chip in the header to disable a control "
-            "for the next run and watch the failure it prevents."
+            "Admin: open Controls in the header to disable a control for the "
+            "next run and watch the failure it prevents."
         )
 
     if run_clicked:
@@ -828,6 +857,10 @@ def controls(persona) -> None:
             qid, narration_mode=mode, controls=settings, actor=persona
         )
         st.session_state.run_id = state.run_id
+        # The header renders above this call, so it read the pre-run scope and
+        # would show no Data chip until the next interaction. Rerun so the topbar
+        # picks up the run; the run itself is already stored in the orchestrator.
+        st.rerun()
 
 
 # --------------------------------------------------------------------------
@@ -1962,7 +1995,7 @@ for _glabel, _items in _NAV_GROUPS:
 
 persona = get_persona(st.session_state.persona_id)
 
-header(persona)
+header(persona, section)
 st.divider()
 
 if section == "Overview":
