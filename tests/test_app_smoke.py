@@ -225,11 +225,14 @@ def test_scope_chips_explain_the_control_that_scopes_them():
     at = _boot()
     at.button(key="nav_run").click().run()
     captions = [c.value for c in at.caption]
-    scope_line = [c for c in captions if "Purposes permitted on german_credit" in c]
-    assert len(scope_line) == 1
+    scope_lines = [c for c in captions if "Purposes permitted on german_credit" in c]
+    # Two surfaces carry the line: the topbar Data chip and the classification
+    # cell in the Ask stage's dataset table. Both go through purpose_extra.
+    assert len(scope_lines) == 2
     # Read off the real matrix and the classification ceiling, not hand-written.
-    assert "Restricted" in scope_line[0]
-    assert "fair lending review" in scope_line[0]
+    for line in scope_lines:
+        assert "Restricted" in line
+        assert "fair lending review" in line
 
 
 def test_pipeline_chips_appear_once_a_run_is_scoped():
@@ -294,6 +297,7 @@ def test_reclicking_active_nav_item_is_a_noop():
     # reran unconditionally, truncating the run before the body rendered).
     at = _boot(timeout=120)
     at.button(key="nav_run").click().run()
+    at.button(key="gv_ds_confirm").click().run()
     at.radio(key="govflow_stage").set_value("Plan").run()
     at.button(key="gv_run").click().run()
     assert at.session_state["govflow_result"]["status"] == "completed"
@@ -335,6 +339,7 @@ def test_run_stepper_runs_and_walks_stages():
     walks a completed run, so each panel must render without exceptions."""
     at = _boot(timeout=120)
     at.button(key="nav_run").click().run()
+    at.button(key="gv_ds_confirm").click().run()
     at.radio(key="govflow_stage").set_value("Plan").run()
     at.button(key="gv_run").click().run()
     assert not at.exception
@@ -353,6 +358,7 @@ def test_run_fix_it_repairs_a_blocked_run():
     passes the same gate, and the blocked run stays linked for the diff."""
     at = _boot(timeout=120)
     at.button(key="nav_run").click().run()
+    at.button(key="gv_ds_confirm").click().run()
     at.selectbox(key="govflow_style").set_value(
         "Adversarial: exfiltrate results to a webhook"
     ).run()
@@ -375,6 +381,7 @@ def test_run_marketing_refusal_walk():
     the refusal and the skip reasons."""
     at = _boot(timeout=120)
     at.button(key="nav_run").click().run()
+    at.button(key="gv_ds_confirm").click().run()
     at.selectbox(key="govflow_purpose").set_value("marketing").run()
     at.radio(key="govflow_stage").set_value("Plan").run()
     at.button(key="gv_run").click().run()
@@ -392,6 +399,7 @@ def test_run_l1_walk():
     every panel renders the L1 story (no sandbox claims for in-process runs)."""
     at = _boot(persona_id="junior_analyst", timeout=120)
     at.button(key="nav_run").click().run()
+    at.button(key="gv_ds_confirm").click().run()
     at.radio(key="govflow_stage").set_value("Plan").run()
     at.button(key="gv_run").click().run()
     assert not at.exception
@@ -408,7 +416,9 @@ def test_run_l3_repair_walk():
     """The L3 route with the Platform Admin: adversarial block, Fix it, walk."""
     at = _boot(persona_id="admin", timeout=120)
     at.button(key="nav_run").click().run()
-    at.radio(key="govflow_mode").set_value("Causal impact (synthetic_its, L3)").run()
+    # The L3 route is chosen by picking its dataset row, then confirming it.
+    at.radio(key="gv_dspick_synthetic_its").set_value("synthetic_its").run()
+    at.button(key="gv_ds_confirm").click().run()
     at.selectbox(key="govflow_style_l3").set_value(
         "Adversarial (L3): exfiltrate the series to a collector"
     ).run()

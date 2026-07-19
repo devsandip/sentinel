@@ -9,7 +9,6 @@ a real model behind a cost cap.
 
 from __future__ import annotations
 
-import html
 import re
 
 import pandas as pd
@@ -52,7 +51,13 @@ from sentinel.platform.certification import evaluate as evaluate_cert
 from sentinel.platform.patterns import AVOIDED, IN_USE, PLANNED
 from sentinel.platform.templates import AVAILABLE, LIVE
 from sentinel.rag import corpus_summary
-from sentinel.ui.govflow import control_popover, render_govflow
+from sentinel.ui.govflow import (
+    cls_label,
+    control_popover,
+    purpose_extra,
+    render_govflow,
+)
+from sentinel.ui.tables import table_head, table_row, td
 
 st.set_page_config(page_title="Sentinel — Governed Agentic Analysis", layout="wide")
 
@@ -235,6 +240,41 @@ st.markdown(
       div[class*="st-key-tblhead_"] button[data-testid="stPopoverButton"] p {
         font-family:inherit; font-size:10.5px; font-weight:700;
         letter-spacing:.07em; text-transform:uppercase; }
+      /* A selectable row: the mockup's .row-sel accent tint plus the .rowgood
+         left bar, on the row the user has picked. The key carries the state
+         because CSS cannot reach a Streamlit container any other way. */
+      div[class*="st-key-tblrow_sel_"] { background:var(--accent-soft);
+        box-shadow:inset 3px 0 0 var(--accent); }
+      div[class*="st-key-tblrow_sel_"]:hover { background:var(--accent-soft); }
+      /* The per-row radio is the select control: no label, no gap, and the
+         option text is the dataset id, so the cell reads as one thing. */
+      div[class*="st-key-tblrow_"] div[data-testid="stRadio"] { margin:0; }
+      div[class*="st-key-tblrow_"] div[data-testid="stRadio"] label { padding:0; }
+      div[class*="st-key-tblrow_"] div[data-testid="stRadio"] code {
+        font-size:11.5px; }
+
+      /* ---------- purpose grid + scope notes (Ask stage, ui-spec 3.3) ------ */
+      /* The mockup's .pmatrix: every purpose in the matrix for one dataset,
+         permitted or refused, shown before the dataset is committed to. */
+      .pgrid { display:flex; flex-wrap:wrap; gap:7px; margin:2px 0 4px; }
+      .pcell { display:inline-flex; align-items:center; gap:7px; padding:5px 10px;
+        border-radius:var(--r-md); border:1px solid var(--border);
+        background:var(--surface); font-size:12px; }
+      .pcell .mk { font-family:var(--mono); font-weight:700; }
+      .pcell.allow { border-color:var(--ok-border); background:var(--ok-soft);
+        color:var(--ok-ink); }
+      .pcell.deny { border-color:var(--danger-border); background:var(--danger-soft);
+        color:var(--danger-ink); }
+      /* A definition block for "what this is / what it is not": the same shape
+         serves a purpose's scope and an analysis's method. */
+      .scope { border:1px solid var(--border); border-left:3px solid var(--accent);
+        border-radius:var(--r-md); background:var(--surface-2);
+        padding:9px 13px; margin:8px 0 2px; }
+      .scope .r { display:grid; grid-template-columns:96px 1fr; gap:10px;
+        padding:3px 0; align-items:baseline; }
+      .scope .k { font-size:9.5px; font-weight:700; letter-spacing:.09em;
+        text-transform:uppercase; color:var(--faint); }
+      .scope .v { font-size:12.5px; color:var(--ink); }
 
       /* ---------- cards ---------- */
       div[data-testid="stVerticalBlockBorderWrapper"] {
@@ -767,16 +807,6 @@ def _run_scope(section: str) -> tuple[str, str] | None:
     return None
 
 
-# The .cls classification palette, as Streamlit markdown colours: a popover
-# trigger's label is markdown, so the inline badge cannot be a styled <span>.
-_CLS_MD = {
-    "public": "green",
-    "internal": "blue",
-    "confidential": "orange",
-    "restricted": "red",
-}
-
-
 # --------------------------------------------------------------------------
 # Catalog tables (ui-spec 4.4)
 # --------------------------------------------------------------------------
@@ -784,29 +814,9 @@ _CLS_MD = {
 # .badge chips ui-spec 4.2 specifies, and it certainly cannot carry a popover.
 # So the catalog tables are laid out by hand -- a header band plus one
 # st.columns row per record -- which is what lets a status chip be the thing
-# you click to find out why the status is what it is.
-
-
-def _table_head(labels: tuple[str, ...], widths: tuple[float, ...], key: str) -> None:
-    head = st.container(key=f"tblhead_{key}")
-    for col, label in zip(
-        head.columns(widths, vertical_alignment="center"), labels, strict=True
-    ):
-        col.markdown(f"<span class='th'>{label}</span>", unsafe_allow_html=True)
-
-
-def _table_row(widths: tuple[float, ...], key: str) -> list:
-    row = st.container(key=f"tblrow_{key}")
-    return row.columns(widths, vertical_alignment="center")
-
-
-def _td(col, value: object, mono: bool = False, num: bool = False) -> None:  # noqa: ANN001
-    cls = "td mono" if mono or num else "td"
-    style = "text-align:right" if num else ""
-    col.markdown(
-        f"<span class='{cls}' style='{style}'>{html.escape(str(value))}</span>",
-        unsafe_allow_html=True,
-    )
+# you click to find out why the status is what it is. The helpers live in
+# sentinel/ui/tables.py because the Ask stage's dataset picker needs the same
+# table; the skin below is keyed off the container names they use.
 
 
 def _md_lit(text: str) -> str:
@@ -820,38 +830,6 @@ def _classification_of(dataset: str) -> str:
     return next(
         (r["classification"] for r in matrix_rows() if r["dataset"] == dataset), ""
     )
-
-
-def _purpose_extra(dataset: str) -> str:
-    """One factual line about a dataset: its classification, the tier ceiling
-    that classification alone imposes, and the purposes the matrix permits on
-    it. Read off the real policy, not written by hand, and shared by every
-    surface that shows a classification chip (topbar, dataset registry)."""
-    from sentinel.govflow import matrix_rows
-    from sentinel.govflow.purpose_matrix import PURPOSE_LABEL, PURPOSES
-    from sentinel.govflow.tiers import CLASSIFICATION_CEILING
-
-    row = next((r for r in matrix_rows() if r["dataset"] == dataset), None)
-    classification = row["classification"] if row else ""
-    permitted = [PURPOSE_LABEL.get(p, p) for p in PURPOSES if row and row.get(p)]
-    ceiling = CLASSIFICATION_CEILING.get(classification, "")
-    return (
-        f"This dataset is classified {classification or 'n/a'}"
-        + (f", which alone caps the run at {ceiling}" if ceiling else "")
-        + ". The tier is the lower of that ceiling and the person's. "
-        + (
-            f"Purposes permitted on {dataset}: {', '.join(permitted)}."
-            if permitted
-            else f"No purpose is permitted on {dataset}."
-        )
-    )
-
-
-def _cls_label(classification: str) -> str:
-    """A classification as a markdown badge. Popover labels are markdown, not
-    HTML, so the mockup's .cls span becomes Streamlit's colour syntax."""
-    kind = _CLS_MD.get(classification.lower(), "gray")
-    return f":{kind}-background[{classification.upper()}]"
 
 
 def _scope_chips(dataset: str, purpose: str) -> None:
@@ -871,9 +849,9 @@ def _scope_chips(dataset: str, purpose: str) -> None:
     # beside it) is what keeps the topbar on one row at the 1120px content cap.
     label = f":gray[Data] {_md_lit(dataset)}"
     if classification:
-        label += f" {_cls_label(classification)}"
+        label += f" {cls_label(classification)}"
     control_popover(
-        "CTL-PURP-01", pub, label=label, key="ctx_data", extra=_purpose_extra(dataset)
+        "CTL-PURP-01", pub, label=label, key="ctx_data", extra=purpose_extra(dataset)
     )
     if purpose:
         control_popover(
@@ -1573,15 +1551,15 @@ def render_registry() -> None:
     st.markdown("### Models")
     mv = model_versions()
     if mv:
-        _table_head(_MV_HEAD, _MV_COLS, "mv")
+        table_head(_MV_HEAD, _MV_COLS, "mv")
         for m in mv:
             d = m.to_dict()
             origin = "seeded" if m.seeded else ("ungoverned" if m.ungoverned else "live")
-            cols = _table_row(_MV_COLS, f"mv_{d['version']}")
-            _td(cols[0], d["version"], mono=True)
-            _td(cols[1], d["question_id"])
-            _td(cols[2], f"{d['auc']:.4f}" if d["auc"] is not None else "-", num=True)
-            _td(
+            cols = table_row(_MV_COLS, f"mv_{d['version']}")
+            td(cols[0], d["version"], mono=True)
+            td(cols[1], d["question_id"])
+            td(cols[2], f"{d['auc']:.4f}" if d["auc"] is not None else "-", num=True)
+            td(
                 cols[3],
                 f"{d['disparity_ratio']:.3f}" if d["disparity_ratio"] is not None else "-",
                 num=True,
@@ -1597,8 +1575,8 @@ def render_registry() -> None:
                     key=f"mvst_{d['version']}",
                     extra=_model_status_extra(d),
                 )
-            _td(cols[6], origin)
-            _td(cols[7], d["created_at"][:10])
+            td(cols[6], origin)
+            td(cols[7], d["created_at"][:10])
         st.caption(
             "Status comes from the eval gate and the human decision: promoted, "
             "blocked, or rejected. 'seeded' rows are labeled demo history; 'live' "
@@ -1614,12 +1592,12 @@ def render_registry() -> None:
     _agent_table_head()
     for a in agent_registry():
         d = a.to_dict()
-        cols = _table_row(_AG_COLS, f"ag_{d['agent_id']}")
-        _td(cols[0], d["agent_id"], mono=True)
-        _td(cols[1], d["template"])
-        _td(cols[2], d["version"], mono=True)
-        _td(cols[3], d["tools"])
-        _td(cols[4], d["rbac_scope"])
+        cols = table_row(_AG_COLS, f"ag_{d['agent_id']}")
+        td(cols[0], d["agent_id"], mono=True)
+        td(cols[1], d["template"])
+        td(cols[2], d["version"], mono=True)
+        td(cols[3], d["tools"])
+        td(cols[4], d["rbac_scope"])
     st.caption(
         "Each agent is derived from a template and carries its tool scope and RBAC "
         "scope. This is where new agents built from templates would be inventoried."
@@ -1771,12 +1749,12 @@ def render_datasets() -> None:
         ),
         unsafe_allow_html=True,
     )
-    _table_head(_DS_HEAD, _DS_COLS, "ds")
+    table_head(_DS_HEAD, _DS_COLS, "ds")
     for d in all_datasets():
         classification = _classification_of(d.id)
-        cols = _table_row(_DS_COLS, f"ds_{d.id}")
-        _td(cols[0], d.id, mono=True)
-        _td(cols[1], d.name)
+        cols = table_row(_DS_COLS, f"ds_{d.id}")
+        td(cols[0], d.id, mono=True)
+        td(cols[1], d.name)
         with cols[2]:
             # The classification is the one cell here that is a governance
             # decision rather than a fact about the file, so it is the cell that
@@ -1784,13 +1762,13 @@ def render_datasets() -> None:
             # carrying this dataset's ceiling and permitted purposes.
             control_popover(
                 "CTL-PURP-01",
-                label=_cls_label(classification) if classification else "n/a",
+                label=cls_label(classification) if classification else "n/a",
                 key=f"dscls_{d.id}",
-                extra=_purpose_extra(d.id),
+                extra=purpose_extra(d.id),
             )
-        _td(cols[3], f"{d.rows:,}", num=True)
-        _td(cols[4], d.tables, num=True)
-        _td(cols[5], d.license)
+        td(cols[3], f"{d.rows:,}", num=True)
+        td(cols[4], d.tables, num=True)
+        td(cols[5], d.license)
         cols[6].markdown(
             "<span class='badge ok'>yes</span>"
             if d.commercial_ok

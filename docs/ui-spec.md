@@ -377,6 +377,35 @@ built from the shared component set in Section 4), inside `.card` containers.
 Ask (stage 1) additionally has a 3-item `.substeps` row (Import dataset / Select
 purpose / Pick question) with its own `.subpane` panels underneath — see 4.3.
 
+**As built (2026-07-19), Ask is three sequential steps, not three tabs.** The
+`.substeps` selector row is not built; the three panels render down the page as
+"Step N of 3", and step 1 gates the other two.
+
+- **Step 1, "Import a dataset."** A hand-laid table (4.4) of the two datasets
+  the walkthrough offers. The first cell of each row is a one-option radio whose
+  label is the dataset id, which makes the row itself the select control;
+  exclusivity across rows is enforced in a callback because Streamlit has no
+  radio group that spans containers. The selected row wears the `.row-sel` tint
+  and the `.rowgood` left bar. The classification cell is a `CTL-PURP-01`
+  popover per 4.3. Below the table, a `.pgrid` of permit/refuse chips (the
+  mockup's `.pmatrix`) shows every purpose the matrix allows on the picked
+  dataset, and a **Confirm Dataset** button commits it. Steps 2 and 3 do not
+  render until it is pressed, and changing the pick drops the confirmation and
+  clears the drafted question.
+- **Step 2, "Declare the purpose."** The dropdown's options are sentence case.
+  Under the permitted/refused verdict, a `.scope` block states what the selected
+  purpose covers and what it does not, from `PURPOSE_SCOPE` in
+  `govflow/purpose_matrix.py`.
+- **Step 3, "Select the Analysis."** Under the question, a `.scope` block states
+  what the analysis is, the method or model it uses, and the libraries that
+  actually run. Where the analysis is adversarial, the control that refuses it
+  renders as a popover beneath, per 4.3. A test re-derives that control from the
+  real gate, so the copy cannot drift from the code it describes.
+
+The `.scope` block is a two-column definition list (uppercase 9.5px key,
+12.5px value) on `--surface-2` with a 3px accent left border. It is the shared
+shape for "what this is / what it is not" wherever that question is answered.
+
 The 10th stop (Architecture) reuses the same `.phead`/`.card` shell but the
 engine bar is hidden (the panel *is* the full engine) and its content is the two-
 column bought/built stack described in Section 4.6.
@@ -447,6 +476,12 @@ popover hangs off the column header rather than repeating on every row; a
 dotted underline marks the header as explainable. All of it routes through
 `_control_popover`, which is the only place what/why copy lives.
 
+The rule also runs forward, into configuration: where the Ask stage offers an
+adversarial analysis, the control that will refuse it renders as a popover
+beside the description. It is armed rather than fired, which is the `.armed`
+state, and it is a real catalogue id verified against the gate by test, not a
+label written to fill the slot.
+
 ### 4.4 Tables (`.tbl-wrap` + `<table>`)
 
 Bordered, radius-clipped wrapper with internal horizontal scroll. Uppercase
@@ -460,14 +495,23 @@ selected row), `.rowgood`/`.rowbad` (a left accent bar or full-row danger tint
 for e.g. the selected dataset or a failed model).
 
 **As built (2026-07-19), tables come in two kinds.** Inside the run walkthrough
-they are real HTML tables (`_html_table`, `.gv-table`), because the cells are
-text and the row states above need CSS classes. The three catalog tables
-(Datasets, Registry Models, Registry Agents) are instead laid out by hand as a
-header band plus one `st.columns` row per record, keyed `tblhead_*` / `tblrow_*`
-and skinned to the same look. The reason is 4.3: `st.dataframe` renders every
+they are mostly real HTML tables (`_html_table`, `.gv-table`), because the cells
+are text and the row states above need CSS classes. The catalog tables
+(Datasets, Registry Models, Registry Agents) and the Ask stage's dataset picker
+are instead laid out by hand as a header band plus one `st.columns` row per
+record, keyed `tblhead_*` / `tblrow_*` and skinned to the same look; the helpers
+live in `sentinel/ui/tables.py`. The reason is 4.3: `st.dataframe` renders every
 cell as plain text, so it can carry neither a `.cls` chip nor a popover, and
 those tables need both. The trade is that they lose `st.dataframe`'s sorting and
-column resizing; at 8, 3 and 4 rows that was judged worth it.
+column resizing; at 8, 3, 4 and 2 rows that was judged worth it.
+
+A hand-laid row can also be **selectable**: the Ask picker puts a one-option
+radio in the first cell and marks the chosen row by keying its container
+`tblrow_sel_*`, which is what the `.row-sel` tint and `.rowgood` left bar hang
+off. A container key is the only hook CSS has on a Streamlit block, so row state
+has to be encoded there. `st.dataframe`'s own `selection_mode="single-row"` is
+the alternative and was rejected: it is a real row click, but it would cost the
+classification popover that 4.3 requires.
 
 ### 4.5 In/Does/Out card row (`.iodid`)
 
