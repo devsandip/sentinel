@@ -191,6 +191,16 @@ Platform          Platform [5]   Adoption
   cylinder), check (rounded square + checkmark), grid (2×2 squares), bar-chart
   (axis + three bars).
 
+**As built (2026-07-19).** Rail width is 222px, not 238px: left-aligning the
+labels under their group headers freed the difference. Rows stack flush (the
+9px/11px padding is the row height, ~37px); the only vertical air in the rail is
+the 14px above a group label and the 6px under it. Streamlit's 16px default gap
+between block elements is zeroed inside the sidebar, since it doubled that
+rhythm and left the rail loose. Icons are Material Symbols at 16px rather than
+inline SVG, since the nav items are `st.button(icon=...)`. An in-app Back
+control sits above Overview, pinned (`position:sticky`) to the top of the
+scrolling rail with a 1px rule under it, so it stays reachable on a long screen.
+
 ### 2.3 Stepper rail (`.rail`, inside the Run view only)
 
 A horizontal 10-node rail (nine governed stages + the Architecture overview

@@ -119,26 +119,6 @@ st.markdown(
         background:var(--chrome-bg-2); border-right:1px solid var(--chrome-border);
         width:222px !important; min-width:222px !important; max-width:222px !important;
       }
-      section[data-testid="stSidebar"] div[role="radiogroup"] label {
-        display:flex; width:100%; padding:8px 11px; border-radius:9px;
-        border:1px solid transparent; margin:1px 0;
-      }
-      section[data-testid="stSidebar"] div[role="radiogroup"] label:hover {
-        background:var(--chrome-hover);
-      }
-      section[data-testid="stSidebar"] div[role="radiogroup"] label[data-selected="true"] {
-        background:var(--chrome-abg); border-color:var(--chrome-aborder);
-      }
-      section[data-testid="stSidebar"] div[role="radiogroup"] label[data-selected="true"] p {
-        color:var(--chrome-aink); font-weight:650;
-      }
-      section[data-testid="stSidebar"] div[role="radiogroup"] label > div > div
-        > div:nth-of-type(1) {
-        display:none;  /* hide the radio circle; the row itself is the affordance */
-      }
-      section[data-testid="stSidebar"] div[role="radiogroup"] label p {
-        font-size:13.5px; font-weight:600; color:var(--chrome-muted);
-      }
 
       /* ---------- type + text utilities ---------- */
       .eyebrow { font-size:11px; font-weight:700; letter-spacing:.13em;
@@ -343,10 +323,14 @@ st.markdown(
       .stage-status { margin:6px 0 10px 0; }
 
       /* ---------- sidebar nav groups (ui-spec 2.2) ---------- */
+      /* Rhythm from the mockup's .sidenav: rows stack flush (the padding is the
+         row height), and the only vertical air is between groups. Streamlit's
+         default 16px block gap doubled that and left the rail loose. */
+      section[data-testid="stSidebar"] [data-testid="stVerticalBlock"] { gap:0; }
       .gl { font-size:9.5px; font-weight:700; letter-spacing:.11em; text-transform:uppercase;
-            color:var(--chrome-muted); padding:0 10px; margin:14px 0 4px 0; }
+            color:var(--chrome-muted); padding:0 11px; margin:14px 0 6px 0; }
       section[data-testid="stSidebar"] .stButton button {
-        display:flex; justify-content:flex-start; width:100%; padding:8px 11px;
+        display:flex; justify-content:flex-start; width:100%; padding:9px 11px;
         border-radius:9px; border:1px solid transparent; background:transparent;
         color:var(--chrome-muted); font-size:13.5px; font-weight:600; min-height:0;
       }
@@ -357,14 +341,16 @@ st.markdown(
         background:var(--chrome-abg); color:var(--chrome-aink);
         border:1px solid var(--chrome-aborder);
       }
-      section[data-testid="stSidebar"] .stButton button p { font-size:13.5px; }
+      section[data-testid="stSidebar"] .stButton button p { font-size:13.5px; line-height:1.25; }
       /* icon buttons wrap icon+label in an inner flex div that centers by
          default; left-align it so each link sits under its group header */
       section[data-testid="stSidebar"] .stButton button > div { justify-content:flex-start; }
-      /* keep Back reachable: pin it to the top of the scrolling rail */
+      /* keep Back reachable: pin it to the top of the scrolling rail, with a
+         rule under it so the pinned control reads as separate from the nav */
       section[data-testid="stSidebar"] .st-key-nav_back {
         position:sticky; top:0; z-index:10; background:var(--chrome-bg-2);
-        padding-bottom:6px; margin-bottom:2px;
+        border-bottom:1px solid var(--chrome-border);
+        padding-bottom:10px; margin-bottom:10px;
       }
 
       /* ---------- command-center dashboard (ui-spec 3.2) ---------- */
