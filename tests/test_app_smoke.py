@@ -8,6 +8,7 @@ every top-level section.
 from __future__ import annotations
 
 import os
+import re
 
 import pytest
 
@@ -115,12 +116,48 @@ def test_platform_section_renders():
 
 
 def test_datasets_section_shows_8_of_8_onboarded():
+    """The dataset registry is a hand-laid table now, not st.dataframe, so each
+    row can carry a real classification chip. All 8 datasets ship onboarded, so
+    no row shows the 'registered' badge."""
+    from sentinel.datasets import all_datasets
+
     at = _boot()
     at.button(key="nav_datasets").click().run()
     assert not at.exception
-    df = at.dataframe[0].value
-    assert len(df) == 8
-    assert (df["onboarded"] == "yes").all()
+    body = " ".join(m.value for m in at.markdown)
+    for d in all_datasets():
+        assert d.id in body, d.id
+    assert "<span class='badge neutral'>registered</span>" not in body
+
+
+def test_dataset_classification_chips_are_clickable():
+    """Classification is the one dataset cell that is a governance decision, so
+    it is a control popover: one per row, each carrying that dataset's ceiling
+    and permitted purposes off the real matrix."""
+    from sentinel.datasets import all_datasets
+
+    at = _boot()
+    at.button(key="nav_datasets").click().run()
+    chips = [x for x in _popover_labels(at) if _MD_COLOUR.fullmatch(x)]
+    assert len(chips) == len(all_datasets())
+    captions = " ".join(c.value for c in at.caption)
+    for d in all_datasets():
+        assert f"Purposes permitted on {d.id}" in captions, d.id
+
+
+def test_model_status_chips_explain_the_eval_gate():
+    """A model's status is the eval gate's verdict plus the human decision, so
+    the status chip opens the eval gate and states that model's own numbers."""
+    from sentinel.platform import model_versions
+
+    at = _boot(timeout=120)
+    at.button(key="nav_registry").click().run()
+    assert not at.exception
+    body = " ".join(m.value for m in at.markdown)
+    captions = " ".join(c.value for c in at.caption)
+    for m in model_versions():
+        assert m.version in body, m.version
+        assert f"Here: {m.version}" in captions, m.version
 
 
 def test_adoption_section_renders_seeded_history():
@@ -135,28 +172,64 @@ def test_adoption_section_renders_seeded_history():
     # layer in test_adoption.py::test_per_dataset_matches_the_store.
 
 
+def _popover_labels(at) -> list[str]:  # noqa: ANN001
+    """Every popover trigger label on the current screen. A control chip that
+    explains itself is a popover, so this is how the tests below tell a wired
+    chip from a decorative span."""
+    return [p.proto.popover.label for p in at.get("popover")]
+
+
+_MD_COLOUR = re.compile(r":(?:gray|red|orange|blue|green)(?:-background)?\[([^\]]*)\]")
+
+
+def _scope_chips(at) -> list[str]:  # noqa: ANN001
+    """The topbar Data/Purpose chips, as plain text. Their labels are markdown
+    (the muted key and the classification badge are Streamlit colour syntax,
+    since a popover label cannot carry the mockup's HTML spans), so strip the
+    colour markers and the emphasis escaping before matching."""
+    return [
+        _MD_COLOUR.sub(r"\1", x).replace("\\", "")
+        for x in _popover_labels(at)
+        # The muted-key prefix is what marks a scope chip. Matching the plain
+        # text instead would also catch the identity chip, whose label happens
+        # to start "Data Scientist / Analyst".
+        if x.startswith((":gray[Data]", ":gray[Purpose]"))
+    ]
+
+
 def test_context_chips_are_run_scoped():
     """Data/Purpose describe a run, so they must not follow the user onto
     screens that have no run in scope (the dashboard and the catalogs were
     inheriting a german_credit / fair-lending default that described nothing)."""
-    def _topbar(at):
-        return next(m.value for m in at.markdown if "class='topbar'" in m.value)
-
     at = _boot()
     # Overview: no run, no chips.
-    assert "ctx-chip" not in _topbar(at)
+    assert not _scope_chips(at)
     # Pipeline pre-run: still no run, still no chips.
     at.button(key="nav_pipeline").click().run()
-    assert "ctx-chip" not in _topbar(at)
+    assert not _scope_chips(at)
     # The Run screen is run-scoped: both chips, from the config defaults.
     at.button(key="nav_run").click().run()
-    bar = _topbar(at)
-    assert "german_credit" in bar
-    assert bar.count("ctx-chip") == 2
+    chips = _scope_chips(at)
+    assert len(chips) == 2
+    assert any("german_credit" in c for c in chips)
     # Leaving the run screen drops them again, even with a draft in session.
     at.button(key="nav_datasets").click().run()
     assert at.session_state["govflow_draft"]["dataset"] == "german_credit"
-    assert "ctx-chip" not in _topbar(at)
+    assert not _scope_chips(at)
+
+
+def test_scope_chips_explain_the_control_that_scopes_them():
+    """The topbar chips are clickable (ui-spec 2.1), not inert spans: both open
+    CTL-PURP-01, the dataset-by-purpose rule they name the two axes of, and the
+    Data chip carries this dataset's classification and permitted purposes."""
+    at = _boot()
+    at.button(key="nav_run").click().run()
+    captions = [c.value for c in at.caption]
+    scope_line = [c for c in captions if "Purposes permitted on german_credit" in c]
+    assert len(scope_line) == 1
+    # Read off the real matrix and the classification ceiling, not hand-written.
+    assert "Restricted" in scope_line[0]
+    assert "fair lending review" in scope_line[0]
 
 
 def test_pipeline_chips_appear_once_a_run_is_scoped():
@@ -168,10 +241,51 @@ def test_pipeline_chips_appear_once_a_run_is_scoped():
     next(b for b in at.button if b.label == "Run" and not b.key).click().run()
     assert not at.exception
     assert at.session_state["run_id"]
-    bar = next(m.value for m in at.markdown if "class='topbar'" in m.value)
-    assert "german_credit" in bar
-    assert bar.count("ctx-chip") == 1
-    assert "Purpose" not in bar
+    chips = _scope_chips(at)
+    assert chips == [c for c in chips if c.startswith("Data ")]
+    assert any("german_credit" in c for c in chips)
+
+
+def test_engine_bar_controls_are_clickable():
+    """The engine bar's 'Governance implemented' half used to render inert
+    <span class='ctlchip'> markup next to the popover mechanism that already
+    worked. Every id it names must now be a real control popover."""
+    at = _boot(timeout=120)
+    at.button(key="nav_run").click().run()
+    # Ask: the one control that acts before any data is touched.
+    assert "CTL-PURP-01" in _popover_labels(at)
+    # Gate: the parser controls, including CTL-CODE-00 (code must parse), which
+    # the checks table named but the engine bar previously omitted.
+    at.radio(key="govflow_stage").set_value("Gate").run()
+    labels = _popover_labels(at)
+    for cid in ("CTL-CODE-00", "CTL-CODE-01", "CTL-EGRESS-01", "CTL-COMPLEX-01"):
+        assert cid in labels, cid
+
+
+def test_architecture_stop_wires_its_controls_and_import_rows():
+    """The Architecture stop lists every control by stage, and the import
+    allowlist rows each carry the control that decides the row (a module name
+    is not a control, so the module chips themselves stay inert)."""
+    at = _boot(timeout=120)
+    at.button(key="nav_run").click().run()
+    at.radio(key="govflow_stage").set_value("Architecture").run()
+    assert not at.exception
+    labels = _popover_labels(at)
+    assert "CTL-SOD-01" in labels
+    # One popover per deny/allow row: allowlist, egress, filesystem, dyncode.
+    for cid in ("CTL-CODE-01", "CTL-EGRESS-01", "CTL-CODE-02", "CTL-CODE-03"):
+        assert cid in labels, cid
+
+
+def test_certification_gates_explain_their_control():
+    """A certification gate that names a catalogue control explains it through
+    the same popover the run walkthrough uses, not a static .ctrl-chip span."""
+    at = _boot(timeout=120)
+    at.button(key="nav_registry").click().run()
+    assert not at.exception
+    labels = _popover_labels(at)
+    assert "CTL-SOD-01" in labels
+    assert "CTL-EVAL-01" in labels
 
 
 def test_reclicking_active_nav_item_is_a_noop():

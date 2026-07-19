@@ -9,6 +9,9 @@ a real model behind a cost cap.
 
 from __future__ import annotations
 
+import html
+import re
+
 import pandas as pd
 import streamlit as st
 
@@ -49,7 +52,7 @@ from sentinel.platform.certification import evaluate as evaluate_cert
 from sentinel.platform.patterns import AVOIDED, IN_USE, PLANNED
 from sentinel.platform.templates import AVAILABLE, LIVE
 from sentinel.rag import corpus_summary
-from sentinel.ui.govflow import render_govflow
+from sentinel.ui.govflow import control_popover, render_govflow
 
 st.set_page_config(page_title="Sentinel — Governed Agentic Analysis", layout="wide")
 
@@ -90,18 +93,43 @@ st.markdown(
       h1, h2, h3, h4 { letter-spacing:-0.011em; font-weight:650; }
 
       /* ---------- topbar ---------- */
-      .topbar {
-        display:flex; align-items:center; gap:18px; background:var(--chrome-bg);
+      /* The topbar is a horizontal container, not a markdown blob: its scope
+         chips are real popover triggers so they can explain themselves, and a
+         popover cannot live inside raw HTML. Skin per ui-spec 2.1. */
+      .st-key-topbar { align-items:center; gap:12px; background:var(--chrome-bg);
         border:1px solid var(--chrome-border); border-radius:var(--r-md);
-        padding:10px 16px; box-shadow:var(--shadow-sm);
-      }
-      .topbar .brand { display:flex; align-items:center; gap:11px; }
-      .topbar .brand svg { width:26px; height:26px; display:block; }
-      .topbar .wm { font-weight:700; letter-spacing:.22em; font-size:15px;
+        padding:10px 16px; box-shadow:var(--shadow-sm); }
+      /* nowrap + margin-left:auto keeps the four context/menu buttons together
+         and right-aligned. If they ever stop fitting beside the brand, the
+         cluster drops to a tidy second row rather than splitting mid-cluster
+         with one lonely button underneath. */
+      .st-key-topbarctx { align-items:center; gap:7px; flex-wrap:nowrap;
+        margin-left:auto; }
+      .st-key-topbar .brand { display:flex; align-items:center; gap:11px; }
+      .st-key-topbar .brand svg { width:26px; height:26px; display:block; }
+      .st-key-topbar .wm { font-weight:700; letter-spacing:.22em; font-size:15px;
         color:var(--chrome-ink); }
-      .topbar .sub { color:var(--chrome-muted); font-size:11px; letter-spacing:.05em;
+      .st-key-topbar .sub { color:var(--chrome-muted); font-size:11px;
+                     letter-spacing:.05em;
                      border-left:1px solid var(--chrome-border); padding-left:11px; }
-      .topbar .spacer { flex:1; }
+      /* Scope chips wear the neutral chrome pill, not the accent control-chip
+         skin: on the topbar they read as context, and the classification badge
+         next to them carries the only colour that means something. */
+      div[class*="st-key-ctx_"] button[data-testid="stPopoverButton"] {
+        background:var(--chrome-bg-2); color:var(--chrome-ink);
+        border:1px solid var(--chrome-border); border-radius:999px;
+        font-family:inherit; font-size:12px; padding:3px 9px;
+      }
+      div[class*="st-key-ctx_"] button[data-testid="stPopoverButton"] p {
+        font-family:inherit; font-size:12px; font-weight:400;
+      }
+      div[class*="st-key-ctx_"] button[data-testid="stPopoverButton"]::before {
+        display:none;
+      }
+      /* No dropdown chevron: these read as chips, not menus (the Acting-as and
+         Controls buttons next to them keep theirs, because they are menus). */
+      div[class*="st-key-ctx_"] button[data-testid="stPopoverButton"]
+        span[data-testid="stIconMaterial"] { display:none; }
       .ctx { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
       .ctx-chip {
         display:inline-flex; align-items:center; gap:7px; background:var(--chrome-bg-2);
@@ -169,6 +197,45 @@ st.markdown(
       .pill-avoided { background:var(--danger-soft); color:var(--danger-ink); border:1px solid
         var(--danger-border); }
 
+      /* ---------- hand-laid catalog tables (ui-spec 4.4) ---------- */
+      /* Bordered, radius-clipped, uppercase muted headers on a --surface-2
+         band. Built from st.columns rows rather than st.dataframe so a cell can
+         hold a chip and a chip can be a popover. */
+      div[class*="st-key-tblhead_"] { background:var(--surface-2);
+        border:1px solid var(--border); border-radius:var(--r-md) var(--r-md) 0 0;
+        padding:7px 12px; margin-bottom:0; }
+      div[class*="st-key-tblrow_"] { background:var(--surface);
+        border:1px solid var(--border); border-top:none; padding:6px 12px; }
+      div[class*="st-key-tblrow_"]:hover { background:var(--surface-2); }
+      .th { font-size:10.5px; font-weight:700; letter-spacing:.07em;
+            text-transform:uppercase; color:var(--faint); }
+      .td { font-size:12.5px; color:var(--ink); display:block; }
+      .td.mono { font-family:var(--mono); font-variant-numeric:tabular-nums;
+                 font-size:11.5px; }
+      /* Chips living in a table cell: tighter than a standalone control chip,
+         and no dropdown chevron (they read as cell values, not menus). */
+      div[class*="st-key-tblrow_"] button[data-testid="stPopoverButton"],
+      div[class*="st-key-tblhead_"] button[data-testid="stPopoverButton"] {
+        padding:1px 8px; min-height:1.4rem; }
+      div[class*="st-key-tblrow_"] button[data-testid="stPopoverButton"]::before,
+      div[class*="st-key-tblhead_"] button[data-testid="stPopoverButton"]::before {
+        display:none; }
+      div[class*="st-key-tblrow_"] button[data-testid="stPopoverButton"]
+        span[data-testid="stIconMaterial"],
+      div[class*="st-key-tblhead_"] button[data-testid="stPopoverButton"]
+        span[data-testid="stIconMaterial"] { display:none; }
+      /* A column header that explains itself keeps the header's own type, but
+         earns a dotted underline so it does not read as inert like its
+         neighbours. */
+      div[class*="st-key-tblhead_"] button[data-testid="stPopoverButton"] {
+        background:transparent; border-color:transparent;
+        border-bottom:1px dotted var(--faint); border-radius:0; padding:1px 2px; }
+      div[class*="st-key-tblhead_"] button[data-testid="stPopoverButton"]:hover {
+        border-bottom-color:var(--accent); transform:none; box-shadow:none; }
+      div[class*="st-key-tblhead_"] button[data-testid="stPopoverButton"] p {
+        font-family:inherit; font-size:10.5px; font-weight:700;
+        letter-spacing:.07em; text-transform:uppercase; }
+
       /* ---------- cards ---------- */
       div[data-testid="stVerticalBlockBorderWrapper"] {
         background:var(--surface); border:1px solid var(--border) !important;
@@ -218,10 +285,21 @@ st.markdown(
                    text-transform:uppercase; color:var(--faint); margin-bottom:5px; }
       .iocard .v { font-size:12.5px; color:var(--ink); }
       .iocard.does { background:var(--accent-soft); border-color:var(--accent-soft-border); }
-      .enginebar { display:flex; flex-wrap:wrap; align-items:center; gap:7px;
+      /* The engine bar's governance chips are real popovers (they have to be, to
+         be clickable), so the strip is a horizontal container rather than one
+         markdown blob. Skin per ui-spec 4.6. */
+      div[class*="st-key-gv_eb_"] { flex-wrap:wrap; align-items:center; gap:7px;
                    margin:0 0 14px; padding:10px 13px; background:var(--surface);
                    border:1px solid var(--border); border-radius:var(--r-md);
                    box-shadow:var(--shadow-sm); }
+      div[class*="st-key-gv_eb_"] .eb-sep { display:inline-block; width:1px; height:15px;
+                   vertical-align:middle; margin:0 5px 0 0; }
+      /* Chip rows that are label + control popovers (Architecture stop, the
+         import allowlist, the certification gates): no card skin, just a tight
+         inline row. */
+      div[class*="st-key-gv_arch_"], div[class*="st-key-gv_imp_"],
+      div[class*="st-key-cert_gate_"] { flex-wrap:wrap; align-items:center; gap:7px;
+                   margin:0; padding:0; }
       .eb-lab { font-size:9.5px; font-weight:700; letter-spacing:.11em;
                 text-transform:uppercase; color:var(--faint); }
       .eb-sep { width:1px; align-self:stretch; background:var(--border); margin:0 5px; }
@@ -689,33 +767,132 @@ def _run_scope(section: str) -> tuple[str, str] | None:
     return None
 
 
+# The .cls classification palette, as Streamlit markdown colours: a popover
+# trigger's label is markdown, so the inline badge cannot be a styled <span>.
+_CLS_MD = {
+    "public": "green",
+    "internal": "blue",
+    "confidential": "orange",
+    "restricted": "red",
+}
+
+
+# --------------------------------------------------------------------------
+# Catalog tables (ui-spec 4.4)
+# --------------------------------------------------------------------------
+# st.dataframe renders every cell as plain text: it cannot carry the .cls and
+# .badge chips ui-spec 4.2 specifies, and it certainly cannot carry a popover.
+# So the catalog tables are laid out by hand -- a header band plus one
+# st.columns row per record -- which is what lets a status chip be the thing
+# you click to find out why the status is what it is.
+
+
+def _table_head(labels: tuple[str, ...], widths: tuple[float, ...], key: str) -> None:
+    head = st.container(key=f"tblhead_{key}")
+    for col, label in zip(
+        head.columns(widths, vertical_alignment="center"), labels, strict=True
+    ):
+        col.markdown(f"<span class='th'>{label}</span>", unsafe_allow_html=True)
+
+
+def _table_row(widths: tuple[float, ...], key: str) -> list:
+    row = st.container(key=f"tblrow_{key}")
+    return row.columns(widths, vertical_alignment="center")
+
+
+def _td(col, value: object, mono: bool = False, num: bool = False) -> None:  # noqa: ANN001
+    cls = "td mono" if mono or num else "td"
+    style = "text-align:right" if num else ""
+    col.markdown(
+        f"<span class='{cls}' style='{style}'>{html.escape(str(value))}</span>",
+        unsafe_allow_html=True,
+    )
+
+
+def _md_lit(text: str) -> str:
+    """Escape markdown emphasis so a dataset id renders literally in a label."""
+    return re.sub(r"([_*`\[\]])", r"\\\1", text)
+
+
+def _classification_of(dataset: str) -> str:
+    from sentinel.govflow import matrix_rows
+
+    return next(
+        (r["classification"] for r in matrix_rows() if r["dataset"] == dataset), ""
+    )
+
+
+def _purpose_extra(dataset: str) -> str:
+    """One factual line about a dataset: its classification, the tier ceiling
+    that classification alone imposes, and the purposes the matrix permits on
+    it. Read off the real policy, not written by hand, and shared by every
+    surface that shows a classification chip (topbar, dataset registry)."""
+    from sentinel.govflow import matrix_rows
+    from sentinel.govflow.purpose_matrix import PURPOSE_LABEL, PURPOSES
+    from sentinel.govflow.tiers import CLASSIFICATION_CEILING
+
+    row = next((r for r in matrix_rows() if r["dataset"] == dataset), None)
+    classification = row["classification"] if row else ""
+    permitted = [PURPOSE_LABEL.get(p, p) for p in PURPOSES if row and row.get(p)]
+    ceiling = CLASSIFICATION_CEILING.get(classification, "")
+    return (
+        f"This dataset is classified {classification or 'n/a'}"
+        + (f", which alone caps the run at {ceiling}" if ceiling else "")
+        + ". The tier is the lower of that ceiling and the person's. "
+        + (
+            f"Purposes permitted on {dataset}: {', '.join(permitted)}."
+            if permitted
+            else f"No purpose is permitted on {dataset}."
+        )
+    )
+
+
+def _cls_label(classification: str) -> str:
+    """A classification as a markdown badge. Popover labels are markdown, not
+    HTML, so the mockup's .cls span becomes Streamlit's colour syntax."""
+    kind = _CLS_MD.get(classification.lower(), "gray")
+    return f":{kind}-background[{classification.upper()}]"
+
+
+def _scope_chips(dataset: str, purpose: str) -> None:
+    """The topbar Data/Purpose chips, as control popovers (ui-spec 2.1).
+
+    Both open CTL-PURP-01: the purpose matrix is dataset-by-purpose, and these
+    two chips name its two axes, so one control explains both. The explanation
+    body comes from the ControlInfo catalogue like everywhere else; the only
+    chip-specific text is one factual line about this dataset, read off the
+    matrix and the classification ceiling rather than written by hand.
+    """
+    from sentinel.govflow.purpose_matrix import PURPOSE_LABEL
+
+    pub = st.session_state.get("govflow_result") or {}
+    classification = _classification_of(dataset)
+    # Keeping the classification badge inside the pill (rather than as a span
+    # beside it) is what keeps the topbar on one row at the 1120px content cap.
+    label = f":gray[Data] {_md_lit(dataset)}"
+    if classification:
+        label += f" {_cls_label(classification)}"
+    control_popover(
+        "CTL-PURP-01", pub, label=label, key="ctx_data", extra=_purpose_extra(dataset)
+    )
+    if purpose:
+        control_popover(
+            "CTL-PURP-01",
+            pub,
+            label=f":gray[Purpose] {_md_lit(PURPOSE_LABEL.get(purpose, purpose))}",
+            key="ctx_purpose",
+        )
+
+
 def header(persona, section: str) -> None:  # noqa: ANN001
     """The topbar command frame (ui-spec 2.1): brand lockup, run-context chips,
     the identity switcher, and the Controls popover. Identity lives here only
     (the sidebar block was removed). The resolved tier is run-scope, so it lives
     in the Run flow rather than on this global bar, and the governed badge shows
     only as a warning when a control is toggled off. The Data/Purpose chips are
-    run-scope too, so they render only on a screen that has a run in scope."""
-    from sentinel.govflow import matrix_rows
-    from sentinel.govflow.purpose_matrix import PURPOSE_LABEL
-
-    ctx = ""
+    run-scope too, so they render only on a screen that has a run in scope, and
+    they are clickable: see _scope_chips."""
     scope = _run_scope(section)
-    if scope:
-        dataset, purpose = scope
-        classification = next(
-            (r["classification"] for r in matrix_rows() if r["dataset"] == dataset), ""
-        )
-        cls_kind = classification.lower() if classification else "internal"
-        ctx = (
-            f"<span class='ctx-chip'><span class='k'>Data</span> {dataset} "
-            f"<span class='cls {cls_kind}'>{classification or 'n/a'}</span></span>"
-        )
-        if purpose:
-            ctx += (
-                "<span class='ctx-chip'><span class='k'>Purpose</span> "
-                f"{PURPOSE_LABEL.get(purpose, purpose)}</span>"
-            )
     # The governed badge earns its place only as a warning: shown when a control
     # is disabled for the next run, and nothing (not a decorative green) when on.
     # It is global state, not run scope, so it shows on every screen.
@@ -724,27 +901,41 @@ def header(persona, section: str) -> None:  # noqa: ANN001
         if _control_settings(persona).any_disabled
         else ""
     )
-    left, right = st.columns([9, 3], vertical_alignment="center")
-    with left:
+    # The scope chips are popover triggers, not spans: ui-spec 2.1 and
+    # demo-stepper-ux both specified "clickable to the relevant control" and the
+    # build never wired it. Both chips open CTL-PURP-01, because purpose
+    # limitation is exactly the dataset-by-purpose rule these two chips name the
+    # two halves of. That forces the topbar out of a single markdown blob into a
+    # horizontal container carrying the topbar skin. It also drops the old
+    # 9:3 st.columns split for the mockup's actual structure (2.1): one flex row,
+    # brand left, everything else right, each item sized to its content. The
+    # split had been squeezing the identity popover's label into an ellipsis.
+    bar = st.container(
+        horizontal=True,
+        horizontal_alignment="distribute",
+        vertical_alignment="center",
+        key="topbar",
+    )
+    with bar:
         st.markdown(
             f"""
-            <div class='topbar'>
-              <div class='brand'>{_SHIELD_SVG}
-                <span class='wm'>SENTINEL</span>
-                <span class='sub'>Governed Agentic Analysis</span>
-              </div>
-              <div class='spacer'></div>
-              <div class='ctx'>{ctx}{gov_badge}</div>
+            <div class='brand'>{_SHIELD_SVG}
+              <span class='wm'>SENTINEL</span>
+              <span class='sub'>Governed Agentic Analysis</span>
             </div>
             """,
             unsafe_allow_html=True,
         )
-    with right:
-        who, ctrl = st.columns(2)
-        with who:
+        ctx = st.container(
+            horizontal=True, vertical_alignment="center", key="topbarctx"
+        )
+        with ctx:
+            if scope:
+                _scope_chips(*scope)
+            if gov_badge:
+                st.markdown(gov_badge, unsafe_allow_html=True)
             _persona_switcher(persona)
-        with ctrl:
-            with st.popover("Controls", use_container_width=True):
+            with st.popover("Controls"):
                 _controls_plane(persona)
 
 
@@ -762,7 +953,11 @@ def _persona_switcher(persona) -> None:  # noqa: ANN001
         caps.append("read-only")
     if persona.can_toggle_controls:
         caps.append("toggle-controls")
-    with st.popover(f"Acting as: {persona.name}", use_container_width=True):
+    # The trigger is the persona name behind the accent dot, which is the
+    # mockup's persona chip (ui-spec 2.1); "Acting as" reads as the selectbox
+    # label inside. Spelling it out on the trigger too cost ~60px and was what
+    # pushed the topbar onto a second row once the scope chips became buttons.
+    with st.popover(persona.name):
         chosen = st.selectbox(
             "Acting as",
             options=ids,
@@ -1311,6 +1506,61 @@ def render_platform() -> None:
         st.write("")
 
 
+_MV_COLS = (2.6, 2.0, 1.2, 1.5, 1.4, 1.6, 1.3, 1.5)
+_MV_HEAD = (
+    "version",
+    "question",
+    "auc",
+    "disparity",
+    "fairness",
+    "status",
+    "origin",
+    "created",
+)
+# Status words as markdown badges (a popover label cannot carry a .badge span).
+_STATUS_MD = {
+    "promoted": ":green-background[promoted]",
+    "blocked": ":red-background[blocked]",
+    "rejected": ":red-background[rejected]",
+}
+_FAIR_BADGE = {
+    True: "<span class='badge ok'>pass</span>",
+    False: "<span class='badge danger'>fail</span>",
+    None: "<span class='badge neutral'>n/a</span>",
+}
+_AG_COLS = (1.8, 2.0, 1.0, 4.2, 4.4)
+
+
+def _model_status_extra(d: dict) -> str:
+    """This model's own numbers, stated under the eval gate's catalogue entry.
+    Read off the registry row so the popover cannot drift from the table."""
+    if d["fairness_pass"] is None:
+        return (
+            f"Here: {d['version']} computed no fairness verdict (the "
+            f"{d['question_id']} question trains no model), so there was nothing "
+            f"for the gate to pass; the run was {d['status']}."
+        )
+    verdict = "passed" if d["fairness_pass"] else "failed"
+    return (
+        f"Here: {d['version']} scored auc {d['auc']:.4f} with a disparity ratio of "
+        f"{d['disparity_ratio']:.3f}, so the fairness check {verdict}. Status: "
+        f"{d['status']}. A failed fairness check is recorded, not hidden: whether "
+        "it blocks promotion is the human gate's call, and this registry shows "
+        "what was actually decided."
+    )
+
+
+def _agent_table_head() -> None:
+    head = st.container(key="tblhead_ag")
+    cols = head.columns(_AG_COLS, vertical_alignment="center")
+    for col, label in zip(cols[:3], ("agent", "template", "version"), strict=True):
+        col.markdown(f"<span class='th'>{label}</span>", unsafe_allow_html=True)
+    with cols[3]:
+        control_popover("guardrails", label=":gray[tools]", key="agtools")
+    with cols[4]:
+        control_popover("rbac", label=":gray[rbac scope]", key="agrbac")
+
+
 def render_registry() -> None:
     st.subheader("Model & agent registry")
     st.markdown(
@@ -1323,24 +1573,32 @@ def render_registry() -> None:
     st.markdown("### Models")
     mv = model_versions()
     if mv:
-        rows = []
+        _table_head(_MV_HEAD, _MV_COLS, "mv")
         for m in mv:
             d = m.to_dict()
-            d["origin"] = "seeded" if m.seeded else ("ungoverned" if m.ungoverned else "live")
-            rows.append(d)
-        df = pd.DataFrame(rows)[
-            [
-                "version",
-                "question_id",
-                "auc",
-                "disparity_ratio",
-                "fairness_pass",
-                "status",
-                "origin",
-                "created_at",
-            ]
-        ]
-        st.dataframe(df, width="stretch")
+            origin = "seeded" if m.seeded else ("ungoverned" if m.ungoverned else "live")
+            cols = _table_row(_MV_COLS, f"mv_{d['version']}")
+            _td(cols[0], d["version"], mono=True)
+            _td(cols[1], d["question_id"])
+            _td(cols[2], f"{d['auc']:.4f}" if d["auc"] is not None else "-", num=True)
+            _td(
+                cols[3],
+                f"{d['disparity_ratio']:.3f}" if d["disparity_ratio"] is not None else "-",
+                num=True,
+            )
+            cols[4].markdown(_FAIR_BADGE[d["fairness_pass"]], unsafe_allow_html=True)
+            with cols[5]:
+                # Status is the eval gate's verdict plus the human decision, so
+                # the chip opens the eval gate's catalogue entry and states this
+                # model's actual numbers underneath it.
+                control_popover(
+                    "eval_gate",
+                    label=_STATUS_MD.get(d["status"], d["status"]),
+                    key=f"mvst_{d['version']}",
+                    extra=_model_status_extra(d),
+                )
+            _td(cols[6], origin)
+            _td(cols[7], d["created_at"][:10])
         st.caption(
             "Status comes from the eval gate and the human decision: promoted, "
             "blocked, or rejected. 'seeded' rows are labeled demo history; 'live' "
@@ -1350,8 +1608,18 @@ def render_registry() -> None:
         st.info("No models registered yet.")
 
     st.markdown("### Agents")
-    ar = agent_registry()
-    st.dataframe(pd.DataFrame([a.to_dict() for a in ar]), width="stretch")
+    # The two governed columns explain themselves once at the header rather than
+    # once per row: the control is the same for every agent, only the value
+    # differs, so a chip per row would be four copies of one explanation.
+    _agent_table_head()
+    for a in agent_registry():
+        d = a.to_dict()
+        cols = _table_row(_AG_COLS, f"ag_{d['agent_id']}")
+        _td(cols[0], d["agent_id"], mono=True)
+        _td(cols[1], d["template"])
+        _td(cols[2], d["version"], mono=True)
+        _td(cols[3], d["tools"])
+        _td(cols[4], d["rbac_scope"])
     st.caption(
         "Each agent is derived from a template and carries its tool scope and RBAC "
         "scope. This is where new agents built from templates would be inventoried."
@@ -1406,15 +1674,33 @@ def render_agent_certification() -> None:
                 ),
                 unsafe_allow_html=True,
             )
-            for g in decision.gates:
+            for gi, g in enumerate(decision.gates):
                 mark = "✓" if g.passed else "✗"
                 cls = "muted" if g.passed else "flag"
-                ctl = f" <span class='ctrl-chip'>{g.control}</span>" if g.control else ""
-                st.markdown(
-                    f"<span class='{cls}'>{mark} {g.name}</span>{ctl} "
-                    f"<span class='muted'>— {g.detail}</span>",
-                    unsafe_allow_html=True,
+                if not g.control:
+                    st.markdown(
+                        f"<span class='{cls}'>{mark} {g.name}</span> "
+                        f"<span class='muted'>— {g.detail}</span>",
+                        unsafe_allow_html=True,
+                    )
+                    continue
+                # The gate names a catalogue control, so the chip explains itself
+                # through the same popover the run walkthrough uses.
+                row = st.container(
+                    horizontal=True,
+                    vertical_alignment="center",
+                    key=f"cert_gate_{entry.id}_{gi}",
                 )
+                with row:
+                    st.markdown(
+                        f"<span class='{cls}'>{mark} {g.name}</span>",
+                        unsafe_allow_html=True,
+                    )
+                    control_popover(g.control, key=f"certctl_{entry.id}_{gi}")
+                    st.markdown(
+                        f"<span class='muted'>— {g.detail}</span>",
+                        unsafe_allow_html=True,
+                    )
             _assign_validator_action(entry, decision)
 
 
@@ -1448,34 +1734,81 @@ def _assign_validator_action(entry, decision) -> None:  # noqa: ANN001
         st.rerun()
 
 
+_DS_COLS = (2.5, 3.4, 2.3, 1.2, 1.0, 2.1, 1.5, 1.5)
+_DS_HEAD = (
+    "id",
+    "name",
+    "classification",
+    "rows",
+    "tables",
+    "license",
+    "commercial",
+    "onboarded",
+)
+
+
 def render_datasets() -> None:
     st.subheader("Dataset registry")
     st.markdown(
         "<span class='muted'>The onboarded-dataset inventory. Each dataset carries "
-        "its license (and a commercial-use flag the platform enforces), the "
-        "capabilities it provides, and its provenance. Analyses match against "
-        "these via data contracts.</span>",
+        "its classification (which sets the autonomy ceiling), its license (and a "
+        "commercial-use flag the platform enforces), the capabilities it provides, "
+        "and its provenance. Analyses match against these via data "
+        "contracts.</span>",
         unsafe_allow_html=True,
     )
-    rows = []
+    # The class-count breakdown row above the table (ui-spec 3.4), same chips
+    # the dashboard tile uses.
+    counts: dict[str, int] = {}
     for d in all_datasets():
-        rows.append(
-            {
-                "id": d.id,
-                "name": d.name,
-                "provides": ", ".join(sorted(d.provides)),
-                "rows": d.rows,
-                "tables": d.tables,
-                "license": d.license,
-                "commercial": "yes" if d.commercial_ok else "flagged",
-                "onboarded": "yes" if dataset_available(d.id) else "registered",
-            }
+        cls = _classification_of(d.id)
+        counts[cls] = counts.get(cls, 0) + 1
+    st.markdown(
+        "".join(
+            f"<span class='cls {name.lower()}'>{name} {counts[name]}</span> "
+            for name in ("Restricted", "Confidential", "Internal", "Public")
+            if name in counts
+        ),
+        unsafe_allow_html=True,
+    )
+    _table_head(_DS_HEAD, _DS_COLS, "ds")
+    for d in all_datasets():
+        classification = _classification_of(d.id)
+        cols = _table_row(_DS_COLS, f"ds_{d.id}")
+        _td(cols[0], d.id, mono=True)
+        _td(cols[1], d.name)
+        with cols[2]:
+            # The classification is the one cell here that is a governance
+            # decision rather than a fact about the file, so it is the cell that
+            # explains itself: same CTL-PURP-01 popover as the topbar Data chip,
+            # carrying this dataset's ceiling and permitted purposes.
+            control_popover(
+                "CTL-PURP-01",
+                label=_cls_label(classification) if classification else "n/a",
+                key=f"dscls_{d.id}",
+                extra=_purpose_extra(d.id),
+            )
+        _td(cols[3], f"{d.rows:,}", num=True)
+        _td(cols[4], d.tables, num=True)
+        _td(cols[5], d.license)
+        cols[6].markdown(
+            "<span class='badge ok'>yes</span>"
+            if d.commercial_ok
+            else "<span class='badge danger'>flagged</span>",
+            unsafe_allow_html=True,
         )
-    st.dataframe(pd.DataFrame(rows), width="stretch")
+        cols[7].markdown(
+            "<span class='badge ok'>yes</span>"
+            if dataset_available(d.id)
+            else "<span class='badge neutral'>registered</span>",
+            unsafe_allow_html=True,
+        )
     st.caption(
         "All 8 registered datasets ship onboarded (scripts/onboard_datasets.py "
         "produces their local files). 'flagged' commercial status means the "
-        "license restricts commercial use and the platform blocks it."
+        "license restricts commercial use and the platform blocks it; no control "
+        "id is claimed for it, because the enforcement lives in the dataset "
+        "registry rather than in the control catalogue."
     )
 
 

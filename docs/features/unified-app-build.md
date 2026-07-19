@@ -276,6 +276,63 @@ above, with reasons:
 - **The landing after login is Overview** (the command-center), matching the
   mockup's pick behavior.
 
+## 4c. Landed (2026-07-19, the control-chip branch)
+
+The gap: a control chip sometimes explained itself on click and sometimes did
+not, with no rule for which. `_control_popover` in `sentinel/ui/govflow.py` was
+already the right mechanism (it reads the 27-entry `ControlInfo` catalogue and
+adds an "In this run" line off the published stage output) and was already
+proven at three call sites, but the engine bar, the Architecture stop, the
+import allowlist, the topbar scope chips, and the certification cards all
+rendered control ids as inert `<span>`s or plain dataframe strings.
+
+The rule this branch settles: **if a chip names a governance decision, it opens
+the catalogue entry for the control that made it. If it names a fact (a module
+name, a row count, a license), it stays inert.** Every disclosure calls
+`_control_popover`; nothing else writes what/why copy.
+
+### Decisions
+
+| # | Surface | Options | Call |
+|---|---|---|---|
+| 1 | Engine bar, "Governance implemented" (every stage) | Leave inert / wire to `_control_popover` | **Wired.** The highest-value, lowest-risk fix: the mechanism sat in the same file, ~30 lines above the code building the dead spans. The strip becomes a horizontal container (chips must be Streamlit elements to be clickable, so the row cannot stay one markdown blob) wearing the same `.enginebar` skin. |
+| 2 | Architecture stop, "Governance implemented (built)" | Leave inert / wire | **Wired**, same mechanism, one row per stage. |
+| 3 | Gate, "What the parsers checked" table | Add a chip row under it / leave the ids as table text | **Left as text.** The Gate engine bar directly above now carries all eight of those controls as popovers; a second chip row would be the same ids twice on one screen. `CTL-CODE-00` was missing from the Gate engine list and was added, so every id the table names has a clickable home. |
+| 4 | Screen, the `CTL-DISC-03` PII warning | Bare `st.warning` string / add a popover | **Wired**, in the same `[1, 5]` column shape the Gate violations list already uses. `CTL-DISC-03` was also added to the Screen engine list. |
+| 5 | The global Controls popover (`_controls_plane`) | Wire its chips / leave static | **Left static.** Streamlit's own guidance for `st.popover` is "to follow best design practices, don't nest popovers", and this is the see-everything-at-once catch-all: a menu inside a menu reads badly regardless. Per-instance popovers are its complement, not its replacement. This is the one place a control chip is deliberately not clickable, and the caption already says where the clickable ones are. |
+| 6 | Import allowlist (module chips) | A popover per module / one per row / leave inert | **One per row.** A module name is not a control id, so `numpy` has nothing to look up. The deny list is now grouped by the control that denies it, mirroring `import_verdict()`'s precedence (egress → filesystem → dynamic code), and each row carries one chip for that control. The allow row carries `CTL-CODE-01`. The module chips themselves stay inert, and the lede says why. 4 popovers instead of 36. |
+| 7 | Topbar Data / Purpose chips | Leave static / make them popovers | **Popovers.** Both ui-spec 2.1 and demo-stepper-ux specified "clickable to the relevant stage or control" and the build never wired it. Both chips open `CTL-PURP-01`: the purpose matrix is dataset-by-purpose and these two chips name its two axes, so one control honestly explains both. The Data chip adds one factual line (classification, the ceiling it imposes, the purposes the matrix permits) read off the real policy. |
+| 8 | Datasets + Registry tables | Leave as `st.dataframe` / rebuild by hand / middle ground | **Rebuilt by hand.** `st.dataframe` renders every cell as plain text: it cannot carry the `.cls` and `.badge` chips ui-spec 4.2 specifies, let alone a popover. All three tables are now a header band plus one `st.columns` row per record. Cost was accepted deliberately (see the trade below). |
+| 9 | Which cells become clickable | Every chip / only governance decisions | **Only governance decisions.** Datasets: the classification chip (per row, since it differs per row). Models: the status chip, which is the eval gate's verdict plus the human decision. Agents: the `tools` and `rbac scope` **column headers**, because the control is identical for all four rows and only the value differs; four copies of one explanation would be noise. Commercial-use stays an inert badge: the platform does enforce it, but from the dataset registry, not from a catalogue control, and inventing `CTL-` ids for the demo is the thing this project refuses to do. |
+
+### Deviations and costs, recorded honestly
+
+- **The topbar stopped being one markdown blob.** A popover trigger cannot live
+  inside raw HTML, so the topbar is now a horizontal container carrying the
+  same `.topbar` skin. The old 9:3 `st.columns` split went with it, in favour of
+  the mockup's actual structure (2.1): one flex row, brand left, everything
+  else right, each item sized to its content.
+- **Two knock-on chrome changes, both improvements.** The identity popover was
+  being truncated to "Acting as: Data Sci..." by the old column split; its
+  trigger is now the persona name behind the accent dot, which is the mockup's
+  persona chip, and it no longer clips. The scope chips wear the neutral chrome
+  pill with the classification badge inside the pill (Streamlit colour markdown,
+  since a label cannot carry the `.cls` span), which is both closer to the
+  mockup and what keeps the bar on one row at the 1120px content cap.
+- **`st.dataframe`'s sorting and column resizing are gone** from Datasets and
+  the two Registry tables. That is the real cost of item 8. It buys the
+  documented visual language (classification chips, status badges) and per-row
+  disclosure; at 8 / 3 / 4 rows, sorting was not earning its keep.
+- **The Datasets table had no classification column at all**, despite ui-spec
+  3.4 listing one. Found while scoping item 8; added, along with the
+  class-count breakdown row above the table that the spec also calls for.
+- **19 popovers on the Architecture stop and 8 on the dataset registry.** Chips
+  are small and the alternative was inert decoration, but this is the density
+  ceiling; a future surface with 50 rows should use a different pattern.
+- **Not done, deliberately:** the `CTL-` ids inside prose (the Attest lede, the
+  certification section header) stay plain text. They are sentences, not chips,
+  and turning every mention into a button would make the prose unreadable.
+
 ## 5. Out of scope (recorded so nobody re-litigates)
 
 - RBAC-gated navigation (all sidebar items always shown, for now).
