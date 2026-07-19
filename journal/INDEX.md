@@ -1,10 +1,60 @@
 # Sentinel — Journal Index
 
-Last refreshed: 2026-07-19 13:54
+Last refreshed: 2026-07-19 15:22
 
-Latest entry: [2026-07-19-1354-chrome-that-tells-the-truth-v7.md](entries/2026-07-19-1354-chrome-that-tells-the-truth-v7.md)
+Latest entry: [2026-07-19-1522-chips-that-explain-themselves-v8.md](entries/2026-07-19-1522-chips-that-explain-themselves-v8.md)
 
 ## Where we are now
+
+**v8 is merged and LIVE in prod. Every control chip in the app now explains
+itself through one mechanism, and OPA externalisation is out of scope for the
+foreseeable future, which closes the last open fork.**
+
+The gap v8 closed: a chip naming a control sometimes opened an explanation and
+sometimes did nothing, with no rule for which. `_control_popover` (the 27-entry
+ControlInfo catalogue, plus an "In this run" line off the published stage
+output) was already right and already proven at three call sites, while the
+engine bar built dead `ctlchip` spans thirty lines below it. The rule, now in
+ui-spec 4.3: **a chip is clickable when it names a governance decision, inert
+when it names a fact.** Wired accordingly: the engine bar on all nine stages,
+the Architecture stop, the import allowlist (grouped by the control that denies
+each row, one chip per row, not per module), the topbar Data and Purpose chips
+(both onto CTL-PURP-01, whose two axes they name), the certification gate rows,
+and the Screen stage's PII finding. Deliberately not wired: the chips inside the
+global Controls popover, since Streamlit's guidance is not to nest popovers and
+that surface is the see-everything catch-all.
+
+Datasets and both Registry tables were rebuilt from `st.dataframe` into hand-laid
+header-band plus `st.columns` tables, because a dataframe cell cannot hold a chip
+or a popover. Clickable: each dataset's classification, each model's status (onto
+the eval gate, carrying that model's own numbers), and the agent table's tools
+and rbac-scope column headers. Cost recorded rather than glossed: dataframe
+sorting and column resizing are gone from those three tables.
+
+Found while scoping that: the dataset registry had **no classification column at
+all**, despite ui-spec 3.4 listing one. Added, with the class-count breakdown row.
+`CTL-CODE-00` and `CTL-DISC-03` were also missing from their stages' engine
+lists. The topbar's move to a single flex row fixed the identity trigger clipping
+to "Acting as: Data Sci...".
+
+PR #11 merged (`df353d8`). Deployed bundle `sentinel-20260719-151623.zip`, EB
+Green, live-LLM on, verified on the live site: the Data chip opens the real
+CTL-PURP-01 entry, the dataset registry shows 8 rows with 8 clickable
+classification chips and zero surviving dataframes. 382 tests, ruff clean.
+
+Deploy gotcha worth keeping: the deploy script reads the live-LLM key from
+`$REPO_ROOT/.env`, which is gitignored and therefore absent from every worktree.
+Deploying from a worktree without passing it through sets the CFN parameter empty
+and silently reverts prod to scripted narration, with health still green.
+
+Deferred still, all by choice: dark mode, RBAC-gated navigation, B-style
+contextual drawers. Drift monitoring still has no stage in the lifecycle and is
+now the largest genuine hole. `app.py` is past 2,000 lines with a hand-rolled
+router.
+
+Everything below is the prior state: v7 in prod.
+
+---
 
 **v7 is merged and LIVE in prod. It is a chrome pass on top of v6, and the
 theme is that the app shell no longer claims what the page cannot back up:
@@ -32,8 +82,10 @@ chrome.
 
 Deferred still: dark mode, RBAC-gated navigation, B-style contextual drawers,
 OPA externalisation (waits on Sandip; an earlier note in this session called it
-killed, which was wrong and is corrected in the latest entry). The W29 weekly
-summary is written. Drift monitoring still has no stage in the lifecycle.
+killed, which was wrong and is corrected in the latest entry). *Superseded
+2026-07-19 15:22: Sandip put OPA out of scope for the foreseeable future. See
+Things ruled out.* The W29 summary is written. Drift monitoring still has no
+stage in the lifecycle.
 
 Everything below is the prior state: v6 in prod.
 
@@ -304,6 +356,7 @@ out).
 
 ## Recent entries
 
+- [2026-07-19-1522-chips-that-explain-themselves-v8.md](entries/2026-07-19-1522-chips-that-explain-themselves-v8.md) : closed the control-chip gap and got a decision on OPA. The rule, now in ui-spec 4.3: a chip is clickable when it names a governance decision, inert when it names a fact. `_control_popover` was already the right mechanism and already proven at three sites while the engine bar built dead spans thirty lines below it. Wired: engine bar (all nine stages), Architecture stop, import allowlist (grouped by the control that denies each row, four popovers not thirty-six), topbar Data/Purpose chips (both onto CTL-PURP-01, whose two axes they name), certification gate rows, the Screen PII finding. Not wired, deliberately: the chips inside the Controls popover, since popovers should not nest. Datasets and both Registry tables rebuilt off `st.dataframe` into hand-laid tables so cells can carry chips; cost is lost sorting. Found on the way: the dataset registry had no classification column at all, and CTL-CODE-00 / CTL-DISC-03 were missing from their engine lists. PR #11, bundle `sentinel-20260719-151623.zip`, EB Green, verified live. 382 tests. **OPA externalisation ruled out by Sandip: not in scope for the foreseeable future.** prod is v8.
 - [2026-07-19-1354-chrome-that-tells-the-truth-v7.md](entries/2026-07-19-1354-chrome-that-tells-the-truth-v7.md) : a chrome pass, all of it the same theme: the shell claiming what the page could not back. PR #8 (identity in one place, the header popover; tier off the global bar; the green governed badge becomes a warning that only warns; nav icons + in-app Back). PR #9 (Data/Purpose chips scoped to screens with a run, no more hardcoded german_credit/fair-lending on the dashboard and catalogs; sidebar rhythm matched to the mockup, 590px rail to 410px by zeroing Streamlit's 16px block gap). Deployed bundle `sentinel-20260719-133917.zip`, EB Green, live-LLM on, verified by clicking through the live site. 371 tests. ui-spec 2.1/2.2 updated. Also corrects my own earlier claim that OPA externalisation was killed: it was not, it still waits on Sandip. prod is v7.
 - [2026-07-19-1030-v6-deployed-to-prod.md](entries/2026-07-19-1030-v6-deployed-to-prod.md) : Sandip said merge and deploy. PR #5 merged to main (`2e47fce`); deployed bundle `sentinel-20260719-101916.zip`, CFN changeset applied, EB green, live-LLM on. Prod moved v5 to v6. Verified the right way: the login gate renders (absent in v5), the command center shows live tiles (Datasets 8, Registry 3, Adoption 19) and a grouped sidebar with live counts, and run `7d306d5dfb64` completed all nine stages at tier L2 with 3 controls fired. `describe-application-versions` returned null for the bundle key (CFN manages the version label); the deploy upload log is the provenance. prod is v6.
 - [2026-07-19-1011-unified-app-shell-datasets-history.md](entries/2026-07-19-1011-unified-app-shell-datasets-history.md) : the mockup became the app. Merged + deployed v5 (prod verified by a flow run). Then built v6 in three workstreams: D (all 8 datasets onboarded, deleted the lying `onboarded` flag, synthetic_its gains CAP_TABULAR), H (a real seeded run-history JSONL store from 19 executed runs, replacing fictional registry rows and the hardcoded weekly list), S (login persona gate, grouped sidebar with live counts, command-center landing with four live tiles). A 25-agent adversarial review confirmed 9 findings, all fixed (the sharpest: the adoption tile implied 13/19 promotions where only 2 of 3 models promoted). 374 tests. PR #5 open; prod is v5, v6 deploys after merge.
@@ -349,7 +402,7 @@ out).
 ## Open questions
 
 - Which comes first, `ctx.sql` or `ctx.table`? Resolved for v1: `ctx.table`, because v1's done-when (a webhook caught at the gate, an n=3 cell suppressed) needs no SQL. `ctx.sql` plus the sqlglot row-filter rewrite is the more recognisable governance demo and lands in v2, where `CTL-COMPLEX-01` and `CTL-CONTRACT-01` also live.
-- Is `n < 10` the right small-cell floor? It is the common default, but a real bank sets it per data domain. Now a `floor` parameter on the Screen (default 10) rather than a hardcoded constant, which is the right shape; making it a per-domain policy value is the OPA argument, still open.
+- ~~Is `n < 10` the right small-cell floor?~~ Settled 2026-07-19 by OPA going out of scope. It is the common default, but a real bank sets it per data domain. Making it a per-domain policy value was the strongest argument for externalising policy; with OPA ruled out, the floor stays a `floor` parameter on the Screen (default 10) rather than a hardcoded constant, which is the right shape regardless.
 - Where does drift monitoring live? Evidently is on the dependency map with no stage in the lifecycle.
 - ~~Should linear analysis runs feed the adoption metrics and model registry?~~ Resolved 2026-07-19 (H phase). Linear analysis, govflow, and L3 runs now feed the adoption totals and the weekly/per-dataset cuts via the seeded run-history store. The model registry stays scoped to credit_risk runs only, since it is a model inventory and only that path promotes a model. Per-agent invocation counts are likewise scoped to the credit pipeline.
 - Retrieval ranking: the SR 11-7 query ranks the internal modeling standard above the SR 11-7 document itself (SR 11-7 chunks still return at ranks 2-3). Worth a later look at chunking or reranking.
@@ -358,6 +411,7 @@ out).
 
 ## Things ruled out
 
+- **OPA externalisation (ruled out 2026-07-19 by Sandip: "not in scope for the foreseeable future").** This was the one genuine fork left open since v4, and it is now closed. Not a rejection of the idea. Externalising policy to OPA needs an external server, and the demo already shows the policy logic working in-process: the purpose matrix refuses at Access (`CTL-PURP-01`), the tier resolves as the lower of two ceilings, the gate reads code with real parsers. OPA would change *where* the policy lives, not whether it exists, which is an architecture decision for a real deployment rather than for a credibility artifact. Note for anyone reading the frozen entries: several of them (through 2026-07-19 13:54) describe OPA as deferred and awaiting this call. They are correct as of their own dates; this line supersedes them. An earlier note in that session called OPA "killed" with nothing backing it, was corrected in the v7 entry, and is now overtaken by an actual decision.
 - Next.js + FastAPI split (chose Streamlit for speed). Revisited 2026-07-17 and reaffirmed, now on stronger grounds than speed. The runtime is Python end to end and load-bearingly so: the gate parses generated Python with `ast`, the sandbox runs Python, the allowlist is a list of Python imports, and every DS library (fairlearn, statsmodels, DoWhy, lifelines, SHAP, ydata-profiling, sqlglot, Presidio) is Python-only. "Node entirely" would mean reimplementing fairlearn in TypeScript, which is the exact thing the thesis says not to do. "Node + FastAPI" is the prioritization trap: nobody hires an SVP AI PM for a React frontend, and spending three weeks there instead of the gate demonstrates the bad prioritization the role screens against. The demo has three surfaces, not two, and the split is already made: Streamlit (Console + Gate), marimo (DS output), Quarto (leadership doc). Streamlit is also a real deploy target (Databricks Apps, Snowflake), so "how would this productionize" is a one-sentence answer. The real friction is `app.py` at ~1,100 lines with a hand-rolled router and no `pages/`; the fix is Streamlit's native multipage, not a framework switch. Full reasoning in PRD 10.7. The one thing that could reopen it (editing code at the gate) is a v2 design question, not a framework one.
 - Mocked codegen during development (chose live from the start, 2026-07-17). The code-generation step calls the real model throughout dev, with the cumulative spend cap as the backstop. Fixtures would harden the gate against code I wrote, not against code the model writes, which is the wrong target.
 - Direct-to-main for the build (chose a feature branch, 2026-07-17). Work goes on `feat/governed-codegen` with a PR per slice. A clean reviewable history is worth more on a credibility artifact than a fast one.

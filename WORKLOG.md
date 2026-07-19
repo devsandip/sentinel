@@ -536,3 +536,31 @@ Append-only session handoff log. Newest entries at the bottom.
 - The pipeline's Run handler now reruns after `start_run`, because the header renders above the body and would otherwise show the pre-run scope for a frame. The run is already in the orchestrator, so the rerun is cheap.
 - Correction to an earlier claim in this session: OPA externalisation was NOT killed. No commit, no doc, no decision from Sandip. It remains the one deferred item explicitly waiting on his call. The session branch was named for OPA scope, which is likely where the mistaken claim came from.
 - The WebSocket curl check returns 200 through CloudFront but 101 direct to the EB origin. The origin is correct; CloudFront does not complete a synthetic handshake from a headers-only curl, and the live browser session connects. Point that check at the EB CNAME, not the CDN.
+
+## 2026-07-19 — control chips explain themselves everywhere, v8 in prod, OPA ruled out
+
+**Did:**
+- Merged PR #11 (`df353d8`): every control chip in the app now opens the same `ControlInfo` catalogue entry through `_control_popover`. Wired the engine bar on all nine stages, the Architecture stop's per-stage list, the import allowlist, the topbar Data/Purpose chips, the certification cards' gate rows, and the Screen stage's `CTL-DISC-03` PII finding. The mechanism already existed and was proven at three call sites; the engine bar was building dead `<span class='ctlchip'>` markup thirty lines below it.
+- Settled and documented the rule (ui-spec 4.3): a chip is clickable when it names a governance decision, inert when it names a fact. Module names, row counts and licenses have no catalogue entry, and minting `CTL-` ids to give a chip something to open is the theatre this project argues against.
+- Import allowlist regrouped by the control that denies each row, mirroring `import_verdict`'s precedence (egress, filesystem, dynamic code). One chip per row instead of one per module: 4 popovers, not 36.
+- Rebuilt Datasets and both Registry tables off `st.dataframe` into hand-laid header-band + `st.columns` tables, since a dataframe cell can carry neither a `.cls` chip nor a popover. Clickable: dataset classification (per row), model status (onto the eval gate with that model's own numbers), and the agent table's tools/rbac-scope column headers.
+- Fixed three things found while scoping that: the dataset registry had no classification column at all despite ui-spec 3.4 listing one; `CTL-CODE-00` and `CTL-DISC-03` were missing from their stages' engine lists; and the identity popover had been clipping to "Acting as: Data Sci..." under the old 9:3 column split, resolved by moving the topbar to a single flex row.
+- Deployed v8: bundle `sentinel-20260719-151623.zip`, CloudFormation applied, EB Green, live-LLM on. Verified on the live site (the Data chip opens the real CTL-PURP-01 entry; the dataset registry shows 8 rows, 8 clickable classification chips, 0 surviving dataframes).
+- Docs in the same commit: `unified-app-build.md` section 4c (9-row decision table + deviations/costs), `ui-spec.md` section 0 (mockup-to-Streamlit translation) plus as-built notes on 2.1, 3.4, 4.3, 4.4, 4.6, 4.8.
+
+**State now:**
+- Prod is v8 at `df353d8`, Green, live-LLM on. No open PRs. 382 passed, 2 skipped; ruff clean.
+- The merged branch `claude/control-chip-popover-2e8238` still exists on the remote: the permission classifier blocked `gh pr merge --delete-branch`, and the plain merge was used instead. Delete it whenever.
+- Deployed from the worktree, passing `ANTHROPIC_API_KEY` through from the primary checkout's gitignored `.env`.
+
+**Next:**
+- Nothing outstanding in code. Open by choice: dark mode, RBAC-gated navigation, B-style contextual drawers.
+- Drift monitoring still has no stage in the lifecycle. This is now the largest genuine product hole, with OPA closed.
+- `app.py` is past 2,000 lines with a hand-rolled router, and the table rebuild added ~100 more. Streamlit's native multipage support is the noted fix and is getting harder to defer.
+
+**Decisions:**
+- **OPA externalisation is out of scope for the foreseeable future (Sandip, this session).** Closes the last open fork, held since v4. Not a rejection: the demo already runs the policy logic in-process (purpose matrix refuses at Access, tier resolves as the lower of two ceilings, the gate reads code with real parsers), and OPA changes where policy lives, not whether it exists. Recorded in `journal/INDEX.md` under Things ruled out, which supersedes the frozen entries that describe it as pending.
+- The per-domain small-cell floor question goes with it. It was the strongest argument for externalising policy; the `floor` parameter on the Screen with a default of 10 is the right shape regardless.
+- The chips inside the global Controls popover stay inert, deliberately. Streamlit's own `st.popover` guidance is not to nest popovers, and that surface is the see-everything-at-once catch-all, the complement to per-instance disclosure rather than a competitor.
+- Accepted the loss of `st.dataframe` sorting and column resizing on the three catalog tables in exchange for the documented chip language and per-row disclosure. Fair at 8/3/4 rows; would not be at 50, and the ceiling is written down.
+- Deploy gotcha worth keeping: `deploy.sh` reads the live-LLM key from `$REPO_ROOT/.env`, which is gitignored and so absent from every worktree. Deploying from a worktree without passing it through sets the CFN parameter empty and silently reverts prod to scripted narration, with health still green and the site still loading.
