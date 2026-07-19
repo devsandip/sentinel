@@ -7,9 +7,9 @@ import pytest
 from sentinel.datasets import (
     DATASETS,
     all_datasets,
+    available,
     contract,
     get_dataset,
-    onboarded_datasets,
 )
 from sentinel.datasets.contracts import (
     ALL_CAPABILITIES,
@@ -26,7 +26,7 @@ def test_registry_seeded_and_ids_unique():
     ids = [d.id for d in ds]
     assert len(ids) == len(set(ids))
     # german_credit ships onboarded; it is the anchor.
-    assert get_dataset("german_credit").onboarded is True
+    assert available("german_credit")
 
 
 def test_every_spec_is_well_formed():
@@ -38,11 +38,12 @@ def test_every_spec_is_well_formed():
         assert isinstance(d.commercial_ok, bool)
 
 
-def test_onboarded_subset():
-    onboarded = {d.id for d in onboarded_datasets()}
-    assert "german_credit" in onboarded
-    # The rest register with metadata but are not onboarded until the script runs.
-    assert "berka" not in onboarded
+def test_every_registered_dataset_is_onboarded():
+    # 8/8: every registered dataset ships its data in the repo (the D1
+    # acceptance). Availability is a disk fact via available(), not a
+    # registry flag.
+    missing = [d.id for d in all_datasets() if not available(d.id)]
+    assert missing == [], f"registered but not onboarded: {missing}"
 
 
 def test_contract_matching():
@@ -83,7 +84,7 @@ def test_onboarded_datasets_load_with_declared_roles():
     from sentinel.datasets import available, load_frame
 
     # These are onboarded by scripts/onboard_datasets.py and ship in the repo.
-    for did in ("uci_taiwan_credit", "hillstrom", "german_credit"):
+    for did in ("uci_taiwan_credit", "hillstrom", "german_credit", "uci_bank_marketing"):
         assert available(did), f"{did} data file missing; run onboard script"
         df = load_frame(did)
         assert len(df) > 0
@@ -100,7 +101,6 @@ def test_synthetic_its_is_onboarded_with_a_known_effect():
     # onboarded and is the legal home for the L3 sandbox.
     assert available("synthetic_its")
     spec = get_dataset("synthetic_its")
-    assert spec.onboarded is True
     df = load_frame("synthetic_its")
     assert len(df) == spec.rows == 365
     assert set(df.columns) >= {"date", "intervention", "control", "metric"}
