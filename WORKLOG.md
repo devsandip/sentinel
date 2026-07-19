@@ -470,3 +470,26 @@ Append-only session handoff log. Newest entries at the bottom.
 - No deploy: large unreviewed UI change on a public instance overnight is the wrong tradeoff; the PR is the review vehicle.
 - The rail stays a styled radio because custom HTML links would drop the Streamlit session (and the run with it).
 - Deferred S1-S3 rather than building them at 1am: they restructure the app entry flow and the build plan sequences them after the data workstreams anyway.
+
+## 2026-07-19 (10:11) — merged + deployed v5, then built the unified app (v6)
+
+**Did:**
+- Merged PR #4 (v5 show-and-tell stepper) to main and deployed v5 to prod: bundle `sentinel-20260719-094651.zip`, EB green, live-LLM on. Verified the right way: loaded the page and ran a governed flow on the instance (run f7b5e5da5394 reached the human gate). Prod is v5.
+- **D** (commit `14dbe9b`): deleted `DatasetSpec.onboarded` (hardcoded True for 2 of 7 onboarded datasets, unread in production; availability is `available()`, a disk fact). Onboarded `uci_bank_marketing` from the UCI 222 zip (zip-of-zips, semicolon CSV, 20k of 41188 rows) so all 8 datasets ship data. Gave `synthetic_its` CAP_TABULAR (plain 365-row CSV) so profiling is legal on it.
+- **H** (commit `e84325c`): `sentinel/platform/run_history.py`, an append-only JSONL store at `sentinel/data/seed_runs.jsonl`; `scripts/seed_runs.py` fills it by executing 19 real runs (scripted/free). Each record keeps `executed_at` (real wall clock) + `demo_date` (the demo-timeline date the UI renders). The model registry seeds from executed credit_risk records (promoted x2, rejected x1, real AUC 0.8018), replacing two fictional rows; adoption derives weekly (4/4/6/5) and a per-dataset cut from the store. L3 causal seed recovered the +12 effect at 11.87.
+- **S** (commit `c6ca4e7`): login persona gate (six cards, always dark, hero analyst) before any chrome; grouped sidebar (Overview / Workspace / Governance / Platform) with live count badges replacing the flat radio; command-center landing with a CTA into the run and four live-number tiles. Sidebar selectbox survives as the switch-identity affordance. Smoke tests reworked for the gate (_boot pre-seeds persona_id).
+- 25-agent adversarial review of the v6 diff (commit `fcc24e7`), 9 confirmed of 31 raw, all fixed: re-clicking the active nav item no longer resets section state; the Adoption tile now honestly reads "19 runs, 2 of 3 models promoted" (was "19 governed runs, 67% promoted", implying 13/19); int->round on percents; login cards use spec display names; the dead `.cta-run` rule now elevates the CTA. Tests: login gate parametrized over all six personas; per_dataset chart data asserted at the metrics layer.
+
+**State now:**
+- Prod is v5, healthy, verified by a flow run. v6 is 4 commits on branch `claude/resume-md-continuation-05f7fe`, open as PR #5, 374 tests pass, ruff clean.
+- Browser-verified v6: login gate (spec names), command center (elevated CTA, honest tiles, W26-W29 chart), Datasets surface (8/8 onboarded).
+
+**Next:**
+- Sandip reviews and merges PR #5, then deploy v6 to prod (standing autonomy covers the milestone deploy after merge).
+- W29 weekly journal summary is due Monday 2026-07-20.
+- Remaining plan items (all deferred, none started): dark mode, RBAC-gated nav, B-style contextual drawers, OPA externalisation (Sandip's call).
+
+**Decisions:**
+- Deleted the `onboarded` field rather than deriving it: nothing in production read it and a derived property would need registry->loaders, a circular import.
+- Seeded history comes from actually executed runs, labeled seeded, per the honesty rule; the old hand-written registry rows and weekly list were fiction and are gone. fairness_age really promotes (the old seed said blocked).
+- S2 nav is styled sidebar buttons, not `st.navigation`: the flat script + AppTest suite + custom look made the sanctioned fallback right. Recorded in unified-app-build.md 4b along with the other deviations.
