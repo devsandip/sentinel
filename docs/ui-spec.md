@@ -15,6 +15,39 @@ alongside `prd.md`-equivalent docs (`docs/features/*`).
 
 ---
 
+## 0. Reading this doc against the Streamlit build
+
+This doc describes the HTML mockup. The shipped app is Streamlit, which has no
+drawers and no arbitrary click targets, so a few things map rather than match.
+Read the mockup's interaction words as follows:
+
+| Mockup | Streamlit build | Where |
+|---|---|---|
+| Control drawer (4.7), the right-side slide-over | `st.popover` anchored to the chip | `_control_popover` in `sentinel/ui/govflow.py` |
+| Inline expand / collapse on one row or card | `st.expander` | playbook cards, certification cards, audit trail |
+| Controls modal (4.8), centre-screen | `st.popover` off the topbar button | `_controls_plane` in `app.py` |
+| A clickable `<span>` chip | a popover trigger button, CSS-skinned to look like the chip | throughout |
+
+Two consequences worth knowing before reading further:
+
+- **A popover trigger's label is markdown, not HTML.** Chips whose label needs a
+  colour (the classification badge inside the topbar Data chip, a model's
+  status) use Streamlit's `:red-background[...]` syntax rather than a `.cls` or
+  `.badge` span. Same palette, different mechanism.
+- **Popovers do not nest.** Streamlit's own guidance is not to put a popover
+  inside a popover, which is why the chips listed inside the Controls popover
+  (4.8) are the one place in the app where a control chip is deliberately
+  not clickable.
+
+**The built app is light-theme only.** Section 1's dark-mode column, and the
+`prefers-color-scheme` / `data-theme` machinery around it, describe the mockup.
+`app.py` ships a single `:root` token block and `.streamlit/config.toml` pins
+`base = "light"`; there is no in-app theme toggle. The dark values are kept here
+because they are the design intent if the app ever gains one, not because they
+are live.
+
+---
+
 ## 1. Design tokens
 
 All colors are CSS custom properties on `:root`, redefined under
@@ -159,6 +192,19 @@ Row: `[brand] [spacer] [ctx-chip: persona] [ctx-chip: dataset+classification] [c
   the page. Persona and tier left the topbar earlier: identity is the header's
   "Acting as" popover, and the tier is run-scope, shown in the Run flow. The
   only always-on element is the UNGOVERNED warning badge, which is global state.
+  **As built (2026-07-19, the control-chip pass), the chips are clickable, as
+  this section always said they should be.** Data and Purpose are both popover
+  triggers onto `CTL-PURP-01`, the dataset-by-purpose rule whose two axes they
+  name; the Data chip adds one line stating that dataset's classification, the
+  tier ceiling it imposes, and the purposes the matrix permits, all read off the
+  real policy. The classification badge sits inside the pill as Streamlit
+  colour markdown rather than as a `.cls` span, because a popover label cannot
+  carry HTML. The topbar is now one horizontal flex row (brand left, everything
+  else right, each item content-sized) rather than a 9:3 `st.columns` split,
+  which is closer to the row this section describes and stopped the identity
+  trigger clipping; that trigger now reads as the persona name behind the accent
+  dot, i.e. the persona chip described above, with "Acting as" as the label of
+  the selectbox inside it.
 - **Icon buttons** (`.iconbtn`): transparent bg, chrome-border outline, 8px
   radius. Three: "▦ Stack" (jumps to the Architecture stop), "▤ Controls" (opens
   the control-plane modal), and a theme toggle (◑/◐ depending on state,
@@ -344,6 +390,16 @@ side-by-side cards. Datasets: one table (id/name/class/rows/tables/license/
 commercial/onboarded) with a `.cls` chip per row and a class-count breakdown row
 above it. Registry: certification-lifecycle cards (one `.card` per analysis,
 with a gates checklist and control chips) + a models table + an agents table.
+
+**As built (2026-07-19).** All three catalog tables match this description now;
+until the control-chip pass they were bare `st.dataframe` grids and the Datasets
+table had no classification column at all. What is clickable, per the 4.3 rule:
+each dataset's classification chip (`CTL-PURP-01`, carrying that dataset's
+ceiling and permitted purposes), each model's status chip (the `eval_gate`
+entry, carrying that model's own auc / disparity / fairness numbers), and the
+agent table's `tools` and `rbac scope` column headers (`guardrails` and `rbac`).
+The certification cards' gate rows carry the control they name as a popover too,
+replacing the static `.ctrl-chip` span.
 Platform: 4 metric tiles + template cards + a playbooks table + a pattern-badge
 row. Adoption: 4 metric tiles + two `.barchart` cards side by side.
 
@@ -379,6 +435,18 @@ semantic palette: `.pass` (ok), `.fired` (warn), `.block` (danger), `.armed`
 control chip is a button that opens the control drawer (4.7) explaining what it
 is, why it fired, what it did.
 
+**The rule, settled 2026-07-19.** A chip is clickable when it names a governance
+*decision*; it stays inert when it names a *fact*. So: control ids, a dataset's
+classification, a model's promotion status all open a popover keyed to the
+control that made the call. Module names in the import allowlist, row counts,
+licenses and commercial-use flags do not — there is no catalogue entry behind
+them, and minting `CTL-` ids to give a chip something to open is exactly the
+kind of governance theatre this project refuses. Where a whole column is
+governed by one control (the agent registry's `tools` and `rbac scope`), the
+popover hangs off the column header rather than repeating on every row; a
+dotted underline marks the header as explainable. All of it routes through
+`_control_popover`, which is the only place what/why copy lives.
+
 ### 4.4 Tables (`.tbl-wrap` + `<table>`)
 
 Bordered, radius-clipped wrapper with internal horizontal scroll. Uppercase
@@ -390,6 +458,16 @@ project's "suppressed, not deleted" principle), `.col-denied` (struck-through
 column header/cell for an access-denied column), `.row-sel` (accent-tinted
 selected row), `.rowgood`/`.rowbad` (a left accent bar or full-row danger tint
 for e.g. the selected dataset or a failed model).
+
+**As built (2026-07-19), tables come in two kinds.** Inside the run walkthrough
+they are real HTML tables (`_html_table`, `.gv-table`), because the cells are
+text and the row states above need CSS classes. The three catalog tables
+(Datasets, Registry Models, Registry Agents) are instead laid out by hand as a
+header band plus one `st.columns` row per record, keyed `tblhead_*` / `tblrow_*`
+and skinned to the same look. The reason is 4.3: `st.dataframe` renders every
+cell as plain text, so it can carry neither a `.cls` chip nor a popover, and
+those tables need both. The trade is that they lose `st.dataframe`'s sorting and
+column resizing; at 8, 3 and 4 rows that was judged worth it.
 
 ### 4.5 In/Does/Out card row (`.iodid`)
 
@@ -409,6 +487,14 @@ Plan). Clicking any library chip jumps to the Architecture stop. Renamed
 labels; the underlying two-column bought/built framing on the Architecture stop
 itself uses the same renamed language.
 
+**As built (2026-07-19).** The governance half renders real control popovers
+(4.3), not spans: the strip is a horizontal container skinned as `.enginebar`,
+because a chip has to be a Streamlit element to be clickable. The library chips
+are still static markdown; the jump-to-Architecture behaviour above is mockup
+intent, not yet built. The Gate stage's list gained `CTL-CODE-00` and Screen's
+gained `CTL-DISC-03`, so that every control the stage bodies name has a
+clickable home here.
+
 ### 4.7 Control drawer (`.drawer`, right-side slide-over)
 
 A 440px right-edge panel (`translateX` slide, 260ms), scrim behind it. Header:
@@ -423,6 +509,12 @@ A centered card (680px) listing every control on the run, grouped by stage,
 admin-only toggle switches (`.toggle`, a pill switch) for two controls
 (CTL-DISC-02, CTL-PROXY-01) with a segmented "Analyst / Platform Admin"
 viewing-as switch above the list.
+
+This is the see-everything-at-once catch-all, the complement to the per-instance
+chips in 4.3, not a replacement for them. Its own chips are the one place a
+control chip does not open a popover: it is itself a popover in the Streamlit
+build (see Section 0), and popovers do not nest. Its closing caption points at
+the clickable chips elsewhere.
 
 ### 4.9 Code block (`.code`, Generate stage)
 

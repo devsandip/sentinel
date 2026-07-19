@@ -133,11 +133,14 @@ _ENGINE = {
     "Generate": (["claude-sonnet-5"], []),
     "Gate": (
         ["ast", "sqlglot"],
-        ["CTL-EGRESS-01", "CTL-CODE-01", "CTL-CODE-02", "CTL-CODE-03",
+        ["CTL-CODE-00", "CTL-EGRESS-01", "CTL-CODE-01", "CTL-CODE-02", "CTL-CODE-03",
          "CTL-CODE-04", "CTL-COL-01", "CTL-COMPLEX-01"],
     ),
     "Execute": (["subprocess", "duckdb"], ["CTL-TIME-01"]),
-    "Screen": (["pandas", "numpy"], ["CTL-DISC-01", "CTL-DISC-02", "CTL-PROXY-01"]),
+    "Screen": (
+        ["pandas", "numpy"],
+        ["CTL-DISC-01", "CTL-DISC-02", "CTL-DISC-03", "CTL-PROXY-01"],
+    ),
     "Interpret": ([], ["CTL-EVAL-01"]),
     "Attest": (["openlineage", "quarto", "marimo"], ["CTL-SOD-01"]),
 }
@@ -430,16 +433,39 @@ def _run_detail(cid: str, pub: dict) -> str:
     return ""
 
 
-def _control_popover(cid: str, pub: dict | None, container=None) -> None:  # noqa: ANN001
-    """A control chip that explains itself: what, why, what it did here."""
+def _control_popover(  # noqa: ANN001
+    cid: str,
+    pub: dict | None,
+    container=None,
+    label: str | None = None,
+    key: str | None = None,
+    extra: str = "",
+) -> None:
+    """A control chip that explains itself: what, why, what it did here.
+
+    The single explanation surface for every control in the app. Callers never
+    write their own what/why copy: it all comes from the ControlInfo catalogue,
+    so one control reads identically everywhere it appears.
+
+    `label` renames the trigger for chips whose visible text is not the bare id
+    (the topbar Data/Purpose chips read "Data german_credit", not
+    "CTL-PURP-01"); `extra` adds one factual line about the calling context
+    (e.g. the dataset's classification) above the run detail. Neither is a
+    second explanation format: the body is always the catalogue's.
+    """
     info = control_info(cid)
     target = container if container is not None else st
-    with target.popover(cid):
+    with target.popover(label or cid, key=key):
         st.markdown(f"**{info.name}** &nbsp; {_chip(info.action)}", unsafe_allow_html=True)
-        st.markdown(f"<span class='muted'>Stage: {info.stage}</span>", unsafe_allow_html=True)
+        st.markdown(
+            f"<span class='muted'>{html.escape(cid)} &middot; stage: {info.stage}</span>",
+            unsafe_allow_html=True,
+        )
         st.write(info.what)
         if info.why:
             st.markdown(f"*Why it exists.* {info.why}")
+        if extra:
+            st.caption(extra)
         if not info.implemented:
             st.warning("Named in the PRD control catalogue; not implemented in this build.")
             return
@@ -450,6 +476,23 @@ def _control_popover(cid: str, pub: dict | None, container=None) -> None:  # noq
             st.caption(f"When it fires: {info.fired_means}")
 
 
+def control_popover(  # noqa: ANN001
+    cid: str,
+    pub: dict | None = None,
+    container=None,
+    label: str | None = None,
+    key: str | None = None,
+    extra: str = "",
+) -> None:
+    """Public entry point to the one control-explanation surface.
+
+    Exported so the platform surfaces in app.py (the certification cards, the
+    topbar scope chips) explain a control through the same catalogue the run
+    walkthrough uses, instead of growing a parallel copy of the text.
+    """
+    _control_popover(cid, pub, container=container, label=label, key=key, extra=extra)
+
+
 def _control_chip_row(ids: list[str], pub: dict | None) -> None:
     if not ids:
         return
@@ -458,8 +501,16 @@ def _control_chip_row(ids: list[str], pub: dict | None) -> None:
         _control_popover(cid, pub, container=cols[i % len(cols)])
 
 
-def _engine_bar(stage: str) -> None:
-    """Framework & tools used / governance implemented, one strip per stage."""
+def _engine_bar(stage: str, pub: dict | None = None) -> None:
+    """Framework & tools used / governance implemented, one strip per stage.
+
+    The governance half renders real control popovers, not decorative spans: a
+    chip that names CTL-EGRESS-01 and does nothing on click teaches the viewer
+    nothing, and the mechanism that explains it already exists. The strip is a
+    horizontal container styled as the mockup's .enginebar (the chips have to
+    be Streamlit elements to be clickable, so the row cannot be one markdown
+    blob any more).
+    """
     libs, ctls = _ENGINE.get(stage, ([], []))
     lib_html = (
         " ".join(
@@ -469,19 +520,27 @@ def _engine_bar(stage: str) -> None:
         if libs
         else "<span class='lib none'>policy only, no external library</span>"
     )
-    ctl_html = (
-        " ".join(
-            f"<span class='ctlchip'><span class='st'></span>{c}</span>" for c in ctls
+    bar = st.container(
+        horizontal=True, vertical_alignment="center", key=f"gv_eb_{stage}"
+    )
+    with bar:
+        st.markdown(
+            f"<span class='eb-lab'>Framework &amp; tools used</span> {lib_html}",
+            unsafe_allow_html=True,
         )
-        if ctls
-        else "<span class='lib none'>no named control acts here</span>"
-    )
-    st.markdown(
-        f"<div class='enginebar'><span class='eb-lab'>Framework &amp; tools used</span> "
-        f"{lib_html}<span class='eb-sep'></span>"
-        f"<span class='eb-lab'>Governance implemented</span> {ctl_html}</div>",
-        unsafe_allow_html=True,
-    )
+        st.markdown(
+            "<span class='eb-sep'></span>"
+            "<span class='eb-lab'>Governance implemented</span>",
+            unsafe_allow_html=True,
+        )
+        if ctls:
+            for c in ctls:
+                _control_popover(c, pub, key=f"eb_{stage}_{c}")
+        else:
+            st.markdown(
+                "<span class='lib none'>no named control acts here</span>",
+                unsafe_allow_html=True,
+            )
 
 
 _STATUS_BADGE = {
@@ -527,7 +586,7 @@ def _stage_banner(pub: dict | None, stage: str) -> None:
             """,
             unsafe_allow_html=True,
         )
-    _engine_bar(stage)
+    _engine_bar(stage, pub)
     if rec is not None and rec.get("detail"):
         st.markdown(
             f"<div class='stage-status'><span class='muted'>"
@@ -1460,8 +1519,12 @@ def _panel_screen(pub: dict | None, cfg: dict | None, persona) -> None:  # noqa:
                 "make it."
             )
     if scr.get("pii_findings"):
-        for f in scr["pii_findings"]:
-            st.warning(f"CTL-DISC-03: PII found in {f['location']}: {f['kinds']}")
+        # Same shape as the Gate violations list: the control chip explains
+        # itself, the sentence next to it says what it caught here.
+        for i, f in enumerate(scr["pii_findings"]):
+            pc1, pc2 = st.columns([1, 5])
+            _control_popover("CTL-DISC-03", pub, container=pc1, key=f"gv_pii_{i}")
+            pc2.warning(f"PII found in {f['location']}: {f['kinds']}")
 
 
 def _panel_interpret(pub: dict | None, cfg: dict | None, persona) -> None:  # noqa: ANN001
@@ -1646,40 +1709,65 @@ def _panel_architecture(pub: dict | None, cfg: dict | None, persona) -> None:  #
         )
     with b2:
         st.markdown("**Governance implemented** (built)", unsafe_allow_html=True)
+        st.markdown(
+            "<span class='muted'>Every control here is clickable.</span>",
+            unsafe_allow_html=True,
+        )
         for stage in STAGES:
             _libs, ctls = _ENGINE.get(stage, ([], []))
             if not ctls:
                 continue
-            chips = " ".join(
-                f"<span class='ctlchip'><span class='st'></span>{c}</span>"
-                for c in ctls
+            row = st.container(
+                horizontal=True, vertical_alignment="center", key=f"gv_arch_{stage}"
             )
-            st.markdown(
-                f"<div style='margin:4px 0'><span class='muted'>{stage}:</span> "
-                f"{chips}</div>",
-                unsafe_allow_html=True,
-            )
+            with row:
+                st.markdown(
+                    f"<span class='muted'>{html.escape(stage)}:</span>",
+                    unsafe_allow_html=True,
+                )
+                for c in ctls:
+                    _control_popover(c, pub, key=f"arch_{stage}_{c}")
     st.markdown("**The import allowlist, as the governed catalogue**")
     st.markdown(
         "<span class='muted'>What the model may reach for at L2 (green) and what "
         "is denied at every tier (red). The gate reads the code; this list is "
-        "the fence.</span>",
+        "the fence. A module name is not a control, so the module chips stay "
+        "inert; the clickable chip on each row is the control that decides the "
+        "row, which is the thing worth explaining.</span>",
         unsafe_allow_html=True,
     )
-    allow_html = " ".join(
-        f"<span class='ctlchip pass'><span class='st'></span>{html.escape(m)}</span>"
-        for m in sorted(ALLOWED_IMPORTS)
-    )
-    deny_html = " ".join(
-        f"<span class='ctlchip block'><span class='st'></span>"
-        f"{html.escape(m).replace('_', '&#95;')}</span>"
-        for m in sorted(EGRESS_MODULES | FS_MODULES | DYNCODE_MODULES | DYNCODE_BUILTINS)
-    )
-    st.markdown(
-        f"<div style='margin:8px 0'>{allow_html}</div>"
-        f"<div style='margin:8px 0'>{deny_html}</div>",
-        unsafe_allow_html=True,
-    )
+    # The deny list is grouped by the control that actually denies it, mirroring
+    # import_verdict()'s precedence (egress, then filesystem, then dynamic code)
+    # rather than one flat red blob. Grouping is what lets a single control chip
+    # per row answer "why is this denied", without minting 36 popovers or
+    # pretending 'os' is a control id.
+    rows: list[tuple[str, str, set[str]]] = [
+        ("Allowed at L2", "CTL-CODE-01", set(ALLOWED_IMPORTS)),
+        ("Denied: network egress", "CTL-EGRESS-01", set(EGRESS_MODULES)),
+        ("Denied: filesystem and process", "CTL-CODE-02", set(FS_MODULES)),
+        ("Denied: dynamic code", "CTL-CODE-03", set(DYNCODE_MODULES | DYNCODE_BUILTINS)),
+    ]
+    for label, cid, mods in rows:
+        kind = "pass" if cid == "CTL-CODE-01" else "block"
+        head = st.container(
+            horizontal=True, vertical_alignment="center", key=f"gv_imp_{cid}"
+        )
+        with head:
+            st.markdown(
+                f"<span class='eb-lab'>{html.escape(label)}</span>",
+                unsafe_allow_html=True,
+            )
+            _control_popover(cid, pub, key=f"imp_{cid}")
+        st.markdown(
+            "<div style='margin:2px 0 10px'>"
+            + " ".join(
+                f"<span class='ctlchip {kind}'><span class='st'></span>"
+                f"{html.escape(m).replace('_', '&#95;')}</span>"
+                for m in sorted(mods)
+            )
+            + "</div>",
+            unsafe_allow_html=True,
+        )
     st.caption(
         "On the dependency map but not wired in this build: Presidio, Evidently, "
         "OPA, pandera. Labeled as roadmap, not claimed."
