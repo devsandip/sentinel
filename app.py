@@ -117,6 +117,7 @@ st.markdown(
       /* ---------- sidebar as the nav rail ---------- */
       section[data-testid="stSidebar"] {
         background:var(--chrome-bg-2); border-right:1px solid var(--chrome-border);
+        width:222px !important; min-width:222px !important; max-width:222px !important;
       }
       section[data-testid="stSidebar"] div[role="radiogroup"] label {
         display:flex; width:100%; padding:8px 11px; border-radius:9px;
@@ -357,6 +358,14 @@ st.markdown(
         border:1px solid var(--chrome-aborder);
       }
       section[data-testid="stSidebar"] .stButton button p { font-size:13.5px; }
+      /* icon buttons wrap icon+label in an inner flex div that centers by
+         default; left-align it so each link sits under its group header */
+      section[data-testid="stSidebar"] .stButton button > div { justify-content:flex-start; }
+      /* keep Back reachable: pin it to the top of the scrolling rail */
+      section[data-testid="stSidebar"] .st-key-nav_back {
+        position:sticky; top:0; z-index:10; background:var(--chrome-bg-2);
+        padding-bottom:6px; margin-bottom:2px;
+      }
 
       /* ---------- command-center dashboard (ui-spec 3.2) ---------- */
       .dashhead .h2 { font-size:22px; font-weight:650; color:var(--ink); margin:2px 0 4px 0; }
@@ -551,7 +560,9 @@ def render_login() -> None:
                     use_container_width=True,
                 ):
                     st.session_state.persona_id = pid
+                    st.query_params["persona"] = pid
                     st.session_state.section = "Overview"
+                    st.session_state.nav_stack = []
                     st.rerun()
     st.markdown(
         "<div class='login-foot'>Faux sign-in for the demo. No credentials, no auth. "
@@ -560,9 +571,49 @@ def render_login() -> None:
     )
 
 
+# Restore the persona from the URL so a refresh keeps the user signed in
+# instead of bouncing to the faux login gate. The gate shows only on a truly
+# fresh visit: no persona chosen this session and none pinned in the URL.
 if "persona_id" not in st.session_state:
-    render_login()
-    st.stop()
+    _pinned = st.query_params.get("persona")
+    if _pinned and any(p.id == _pinned for p in all_personas()):
+        st.session_state.persona_id = _pinned
+    else:
+        render_login()
+        st.stop()
+
+
+# --------------------------------------------------------------------------
+# In-app navigation with history (Back button)
+# --------------------------------------------------------------------------
+# Screens route through st.session_state.section, which the browser's history
+# never sees, so the browser Back button leaves Sentinel entirely. We keep our
+# own bounded history stack and expose a Back control that returns to the
+# previous screen within the app. (Wiring the browser's own Back button would
+# need the st.navigation multipage migration; tracked as a follow-up.)
+def _nav_to(target: str) -> None:
+    """Switch top-level screen, remembering the current one for Back.
+
+    A no-op if already on the target, so re-clicking the active nav item does
+    not push a duplicate onto the history or trigger a truncating rerun.
+    """
+    cur = st.session_state.get("section", "Overview")
+    if target == cur:
+        return
+    stack = st.session_state.setdefault("nav_stack", [])
+    stack.append(cur)
+    del stack[:-50]  # bound the history so a long session cannot grow it forever
+    st.session_state.section = target
+    st.rerun()
+
+
+def _nav_back() -> None:
+    """Return to the previous screen on the history stack."""
+    stack = st.session_state.get("nav_stack", [])
+    if not stack:
+        return
+    st.session_state.section = stack.pop()
+    st.rerun()
 
 
 # --------------------------------------------------------------------------
@@ -628,38 +679,32 @@ def _controls_plane(persona) -> None:  # noqa: ANN001
     )
 
 
-def header(persona=None) -> None:  # noqa: ANN001
-    """The topbar command frame (ui-spec 2.1): brand lockup + live context chips
-    + the Controls popover. The chips reflect the actual session state (persona,
-    dataset, purpose, computed tier), not decoration."""
+def header(persona) -> None:  # noqa: ANN001
+    """The topbar command frame (ui-spec 2.1): brand lockup, run-context chips,
+    the identity switcher, and the Controls popover. Identity lives here only
+    (the sidebar block was removed). The resolved tier is run-scope, so it lives
+    in the Run flow rather than on this global bar, and the governed badge shows
+    only as a warning when a control is toggled off."""
     draft = st.session_state.get("govflow_draft") or {}
     pub = st.session_state.get("govflow_result") or {}
     dataset = pub.get("dataset") or draft.get("dataset") or "german_credit"
     purpose = pub.get("purpose") or draft.get("purpose") or "fair_lending"
-    from sentinel.govflow import matrix_rows, resolve_tier_for_dataset
+    from sentinel.govflow import matrix_rows
     from sentinel.govflow.purpose_matrix import PURPOSE_LABEL
 
     classification = next(
         (r["classification"] for r in matrix_rows() if r["dataset"] == dataset), ""
     )
     cls_kind = classification.lower() if classification else "internal"
-    tier = "—"
-    dot = "#9aa8c0"
-    pname = "—"
-    if persona is not None:
-        pname = persona.name
-        tier = resolve_tier_for_dataset(
-            dataset, persona.tier_role, persona.attestations
-        ).tier
-        dot = "#5fdc8a" if "certified" in persona.attestations else "#e2a03a"
     purpose_label = PURPOSE_LABEL.get(purpose, purpose)
-    any_off = _control_settings(persona).any_disabled
+    # The governed badge earns its place only as a warning: shown when a control
+    # is disabled for the next run, and nothing (not a decorative green) when on.
     gov_badge = (
         "<span class='badge warn'>UNGOVERNED next run</span>"
-        if any_off
-        else "<span class='badge ok'>governed</span>"
+        if _control_settings(persona).any_disabled
+        else ""
     )
-    left, right = st.columns([11, 2], vertical_alignment="center")
+    left, right = st.columns([9, 3], vertical_alignment="center")
     with left:
         st.markdown(
             f"""
@@ -670,13 +715,9 @@ def header(persona=None) -> None:  # noqa: ANN001
               </div>
               <div class='spacer'></div>
               <div class='ctx'>
-                <span class='ctx-chip'><span class='dot' style='background:{dot}'></span>
-                  <span class='k'>Acting as</span> {pname}</span>
                 <span class='ctx-chip'><span class='k'>Data</span> {dataset}
                   <span class='cls {cls_kind}'>{classification or "n/a"}</span></span>
                 <span class='ctx-chip'><span class='k'>Purpose</span> {purpose_label}</span>
-                <span class='ctx-chip tier'><span class='k'>Tier</span>
-                  <span class='tier-badge'>{tier}</span></span>
                 {gov_badge}
               </div>
             </div>
@@ -684,8 +725,42 @@ def header(persona=None) -> None:  # noqa: ANN001
             unsafe_allow_html=True,
         )
     with right:
-        with st.popover("Controls"):
-            _controls_plane(persona)
+        who, ctrl = st.columns(2)
+        with who:
+            _persona_switcher(persona)
+        with ctrl:
+            with st.popover("Controls", use_container_width=True):
+                _controls_plane(persona)
+
+
+def _persona_switcher(persona) -> None:  # noqa: ANN001
+    """The single identity surface after login: shows who you are acting as and
+    lets you switch. Replaces the old sidebar 'Acting as' block, so the persona
+    is shown in exactly one place. A switch pins the new persona in the URL so a
+    refresh keeps it."""
+    personas = all_personas()
+    ids = [p.id for p in personas]
+    labels = {p.id: p.name for p in personas}
+    caps = ["run" if persona.can_run else "no-run",
+            "approve" if persona.can_approve else "no-approve"]
+    if persona.read_only:
+        caps.append("read-only")
+    if persona.can_toggle_controls:
+        caps.append("toggle-controls")
+    with st.popover(f"Acting as: {persona.name}", use_container_width=True):
+        chosen = st.selectbox(
+            "Acting as",
+            options=ids,
+            index=ids.index(persona.id),
+            format_func=lambda k: labels[k],
+            key="persona_switch",
+        )
+        if chosen != persona.id:
+            st.session_state.persona_id = chosen
+            st.query_params["persona"] = chosen
+            st.rerun()
+        st.caption(f"{persona.role} · {', '.join(caps)}")
+        st.caption(persona.description)
 
 
 def _control_settings(persona) -> ControlSettings:  # noqa: ANN001
@@ -1720,8 +1795,7 @@ def render_home(persona) -> None:  # noqa: ANN001
         if cta_r.button(
             "Launch walkthrough →", key="cta_run", type="primary", use_container_width=True
         ):
-            st.session_state.section = "Run"
-            st.rerun()
+            _nav_to("Run")
 
     ds = all_datasets()
     cls_counts: dict[str, int] = {}
@@ -1739,8 +1813,7 @@ def render_home(persona) -> None:  # noqa: ANN001
             h_l, h_r = st.columns([7, 3], vertical_alignment="center")
             h_l.markdown(f"**{title}**")
             if h_r.button("Open →", key=key, use_container_width=True):
-                st.session_state.section = section_target
-                st.rerun()
+                _nav_to(section_target)
             st.markdown(body_html, unsafe_allow_html=True)
 
     cls_chips = "".join(
@@ -1816,32 +1889,6 @@ def render_home(persona) -> None:  # noqa: ANN001
 # --------------------------------------------------------------------------
 # Layout
 # --------------------------------------------------------------------------
-def persona_picker():
-    """Sidebar identity selector. No real auth; role-aware governance demo."""
-    personas = all_personas()
-    ids = [p.id for p in personas]
-    labels = {p.id: p.name for p in personas}
-    default_id = st.session_state.get("persona_id", default_persona().id)
-    chosen = st.sidebar.selectbox(
-        "Acting as",
-        options=ids,
-        index=ids.index(default_id),
-        format_func=lambda k: labels[k],
-    )
-    st.session_state.persona_id = chosen
-    persona = get_persona(chosen)
-    caps = []
-    caps.append("run" if persona.can_run else "no-run")
-    caps.append("approve" if persona.can_approve else "no-approve")
-    if persona.read_only:
-        caps.append("read-only")
-    if persona.can_toggle_controls:
-        caps.append("toggle-controls")
-    st.sidebar.caption(f"{persona.role} · {', '.join(caps)}")
-    st.sidebar.caption(persona.description)
-    return persona
-
-
 # The grouped sidebar (ui-spec 2.2): Overview, then Workspace / Governance /
 # Platform groups. Buttons write st.session_state.section; the active item
 # renders as the primary variant (styled as the nav active state).
@@ -1861,8 +1908,35 @@ _NAV_KEYS = {
     "Platform": "nav_platform",
     "Adoption": "nav_adoption",
 }
+# Nav icons (ui-spec 2.2, sentinel-stepper-mockup.html sidenav). Material
+# Symbols, rounded/outline style, matching the mockup's stroked SVG set:
+# home, play, database, verified-check, grid, bar-chart. Pipeline (the
+# credit-risk DAG) and Analyses are app-only items not in the mockup; they
+# get the nearest matching glyphs (a branching tree and a stats magnifier).
+_NAV_ICONS = {
+    "Overview": ":material/home:",
+    "Run": ":material/play_arrow:",
+    "Pipeline": ":material/account_tree:",
+    "Analyses": ":material/query_stats:",
+    "Datasets": ":material/database:",
+    "Registry": ":material/verified:",
+    "Platform": ":material/grid_view:",
+    "Adoption": ":material/bar_chart:",
+}
 
 section = st.session_state.setdefault("section", "Overview")
+
+# In-app Back: return to the previous screen instead of leaving Sentinel.
+# Disabled when there is nowhere to go back to.
+if st.sidebar.button(
+    "Back",
+    key="nav_back",
+    icon=":material/arrow_back:",
+    disabled=not st.session_state.get("nav_stack"),
+    use_container_width=True,
+):
+    _nav_back()
+
 _nav_counts = {
     "Datasets": len(all_datasets()),
     "Registry": len(cert_entries()),
@@ -1874,23 +1948,19 @@ for _glabel, _items in _NAV_GROUPS:
     for _item in _items:
         _n = _nav_counts.get(_item)
         _label = f"{_item} · {_n}" if _n is not None else _item
-        # Guard on _item != section: re-clicking the active item must be a
-        # no-op. Writing + rerun mid-loop truncates the run before the section
-        # body renders, so Streamlit would cull the visible section's widgets.
-        if (
-            st.sidebar.button(
-                _label,
-                key=_NAV_KEYS[_item],
-                type="primary" if _item == section else "secondary",
-                use_container_width=True,
-            )
-            and _item != section
+        # _nav_to no-ops when _item == section, so re-clicking the active item
+        # does not push a duplicate onto the history or trigger a truncating
+        # rerun that would cull the visible section's widgets.
+        if st.sidebar.button(
+            _label,
+            key=_NAV_KEYS[_item],
+            type="primary" if _item == section else "secondary",
+            icon=_NAV_ICONS.get(_item),
+            use_container_width=True,
         ):
-            st.session_state.section = _item
-            st.rerun()
+            _nav_to(_item)
 
-st.sidebar.divider()
-persona = persona_picker()
+persona = get_persona(st.session_state.persona_id)
 
 header(persona)
 st.divider()
