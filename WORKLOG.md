@@ -512,3 +512,27 @@ Append-only session handoff log. Newest entries at the bottom.
 **Decisions:**
 - Verified the deploy by a governed flow run on the instance, per the standing rule that health 200 is necessary but not sufficient (Streamlit answers health before app.py runs).
 - `describe-application-versions` returned null for the source-bundle key because CloudFormation manages the application version under a generated label, not the bundle filename; the deploy script's upload log plus the green changeset are the provenance. Not worth chasing further.
+
+## 2026-07-19 (13:54) — v7: the chrome honesty pass, merged and deployed
+
+**Did:**
+- Merged PR #8 (`b24d4ec`): identity consolidated into the header's Acting as popover (sidebar block removed), Tier chip off the global bar since tier is run-scope, the decorative green governed badge replaced by a warning that shows only when a control is off, Material nav icons, an in-app Back control, and `?persona=` login persistence.
+- Merged PR #9 (`019756f`), two fixes. (1) Data/Purpose chips are run-scoped: Run reads the published run else the draft config, the credit pipeline shows Data only (an orchestrator run declares no purpose, so none is invented), every other screen shows none. Kills the hardcoded german_credit/fair-lending fallback that made the dashboard and all four catalog screens claim a scope nothing on the page had. (2) Sidebar rhythm matched to the mockup's sidenav: Streamlit's 16px inter-block gap zeroed inside the sidebar, rows stack flush at the mockup's 9px/11px padding, 14px above a group label and 6px below. The rail went 590px to 410px for the same eight items.
+- Added a rule under the pinned Back control, deleted the dead radiogroup CSS from the old st.radio nav, and fixed two stale strings still telling the Admin to click a governance chip in the header (those toggles moved into the Controls popover).
+- Deployed v7: bundle `sentinel-20260719-133917.zip`, CloudFormation applied, EB Ready and Green, live-LLM on. Verified by clicking through the live site (Overview bare, Run showing both chips, tight rail, nav click reruns the script), not by a probe.
+- Updated ui-spec 2.1 (chips are run-scoped, and why) and 2.2 (as-built rail: 222px, this rhythm, Material icons at 16px, sticky Back).
+
+**State now:**
+- Prod is v7 at `019756f`, Green, live-LLM on. No open PRs, no open issues. 371 passed, 3 skipped; ruff clean.
+- Primary checkout restored to `docs/v6-deploy-record` after the deploy (it holds the gitignored `.env` with the live key, so deploys run from there against a branch pointed at merged main).
+
+**Next:**
+- Nothing outstanding in code. Open by choice: dark mode, RBAC-gated navigation, B-style contextual drawers, OPA externalisation (still Sandip's call).
+- Two known product gaps unchanged: drift monitoring has no stage in the lifecycle, and the SR 11-7 query ranks the internal modeling standard above SR 11-7 itself.
+
+**Decisions:**
+- Chips describe a run, so they render only where a run is in scope. Where a run carries no declared purpose (the orchestrator pipeline), show the one chip that is true rather than backfill the second.
+- Took the sidebar spacing numbers from the project's own mockup rather than picking them by eye, so the rail matches the design system instead of a fresh opinion.
+- The pipeline's Run handler now reruns after `start_run`, because the header renders above the body and would otherwise show the pre-run scope for a frame. The run is already in the orchestrator, so the rerun is cheap.
+- Correction to an earlier claim in this session: OPA externalisation was NOT killed. No commit, no doc, no decision from Sandip. It remains the one deferred item explicitly waiting on his call. The session branch was named for OPA scope, which is likely where the mistaken claim came from.
+- The WebSocket curl check returns 200 through CloudFront but 101 direct to the EB origin. The origin is correct; CloudFront does not complete a synthetic handshake from a headers-only curl, and the live browser session connects. Point that check at the EB CNAME, not the CDN.

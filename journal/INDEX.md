@@ -1,10 +1,43 @@
 # Sentinel — Journal Index
 
-Last refreshed: 2026-07-19 10:58
+Last refreshed: 2026-07-19 13:54
 
-Latest entry: [2026-07-19-1030-v6-deployed-to-prod.md](entries/2026-07-19-1030-v6-deployed-to-prod.md)
+Latest entry: [2026-07-19-1354-chrome-that-tells-the-truth-v7.md](entries/2026-07-19-1354-chrome-that-tells-the-truth-v7.md)
 
 ## Where we are now
+
+**v7 is merged and LIVE in prod. It is a chrome pass on top of v6, and the
+theme is that the app shell no longer claims what the page cannot back up:
+one identity surface, a warning badge that only warns, context chips that
+appear only where a run is in scope, and a nav rail with the mockup's rhythm.**
+
+Two PRs merged and deployed. **PR #8**: identity consolidated into the header's
+Acting as popover (the sidebar block is gone), the Tier chip removed from the
+global bar because tier is run-scope, the decorative green governed badge
+replaced by a warning that shows only when a control is off, plus Material nav
+icons and an in-app Back control. **PR #9**: the Data and Purpose chips are now
+run-scoped (Run takes them from the published run else the draft config; the
+credit pipeline shows Data only, since an orchestrator run declares no purpose;
+every other screen shows none, instead of the old hardcoded german_credit and
+fair-lending fallback), and the sidebar rhythm matched to the mockup's sidenav
+(Streamlit's 16px block gap zeroed, rows stack flush, air only at group
+boundaries: the rail went 590px to 410px for the same eight items).
+
+Deployed bundle `sentinel-20260719-133917.zip`, CloudFormation applied, EB Ready
+and Green, live-LLM on. Verified by clicking through the live site: Overview
+renders with no chips, Run shows Data german_credit RESTRICTED plus Purpose fair
+lending review, the rail is the tight version, and a nav click reruns the
+script. 371 tests pass, ruff clean. ui-spec 2.1 and 2.2 updated to the as-built
+chrome.
+
+Deferred still: dark mode, RBAC-gated navigation, B-style contextual drawers,
+OPA externalisation (waits on Sandip; an earlier note in this session called it
+killed, which was wrong and is corrected in the latest entry). The W29 weekly
+summary is written. Drift monitoring still has no stage in the lifecycle.
+
+Everything below is the prior state: v6 in prod.
+
+---
 
 **v6, the unified app, is merged and LIVE in prod. The mockup is now what
 `sentinel.sandip.dev` serves: a login persona gate, a grouped sidebar with
@@ -29,10 +62,6 @@ gate, the grouped sidebar, and the command-center landing with four live-number
 tiles. A 25-agent adversarial review of the diff confirmed 9 findings, all
 fixed, the sharpest being a misleading adoption number on the landing tile.
 374 tests pass, ruff clean.
-
-Deferred still: dark mode, RBAC-gated navigation, B-style contextual drawers,
-OPA externalisation (waits on Sandip). The W29 weekly summary is due Monday
-2026-07-20. A docs-only PR (this entry + INDEX + WORKLOG) is open for merge.
 
 Everything below is the prior state: v4/v5 in prod.
 
@@ -275,6 +304,7 @@ out).
 
 ## Recent entries
 
+- [2026-07-19-1354-chrome-that-tells-the-truth-v7.md](entries/2026-07-19-1354-chrome-that-tells-the-truth-v7.md) : a chrome pass, all of it the same theme: the shell claiming what the page could not back. PR #8 (identity in one place, the header popover; tier off the global bar; the green governed badge becomes a warning that only warns; nav icons + in-app Back). PR #9 (Data/Purpose chips scoped to screens with a run, no more hardcoded german_credit/fair-lending on the dashboard and catalogs; sidebar rhythm matched to the mockup, 590px rail to 410px by zeroing Streamlit's 16px block gap). Deployed bundle `sentinel-20260719-133917.zip`, EB Green, live-LLM on, verified by clicking through the live site. 371 tests. ui-spec 2.1/2.2 updated. Also corrects my own earlier claim that OPA externalisation was killed: it was not, it still waits on Sandip. prod is v7.
 - [2026-07-19-1030-v6-deployed-to-prod.md](entries/2026-07-19-1030-v6-deployed-to-prod.md) : Sandip said merge and deploy. PR #5 merged to main (`2e47fce`); deployed bundle `sentinel-20260719-101916.zip`, CFN changeset applied, EB green, live-LLM on. Prod moved v5 to v6. Verified the right way: the login gate renders (absent in v5), the command center shows live tiles (Datasets 8, Registry 3, Adoption 19) and a grouped sidebar with live counts, and run `7d306d5dfb64` completed all nine stages at tier L2 with 3 controls fired. `describe-application-versions` returned null for the bundle key (CFN manages the version label); the deploy upload log is the provenance. prod is v6.
 - [2026-07-19-1011-unified-app-shell-datasets-history.md](entries/2026-07-19-1011-unified-app-shell-datasets-history.md) : the mockup became the app. Merged + deployed v5 (prod verified by a flow run). Then built v6 in three workstreams: D (all 8 datasets onboarded, deleted the lying `onboarded` flag, synthetic_its gains CAP_TABULAR), H (a real seeded run-history JSONL store from 19 executed runs, replacing fictional registry rows and the hardcoded weekly list), S (login persona gate, grouped sidebar with live counts, command-center landing with four live tiles). A 25-agent adversarial review confirmed 9 findings, all fixed (the sharpest: the adoption tile implied 13/19 promotions where only 2 of 3 models promoted). 374 tests. PR #5 open; prod is v5, v6 deploys after merge.
 - [2026-07-19-0113-showtell-stepper-and-design-system.md](entries/2026-07-19-0113-showtell-stepper-and-design-system.md) : overnight build of the show-and-tell brief (docs/more_ideas.md). The govflow surface became a nine-stage stepper with control explainers, struck/masked denied columns, Screen before/after, and the Gate Fix it repair; an adversarial review confirmed 18 findings, all fixed. Mid-build Sandip pointed at the unified-app mockup + docs/ui-spec.md; the stepper and chrome now wear that design system (topbar lockup, nav-rail sidebar, node rail, phead/In-Does-Out/engine bar, Architecture stop). 355 tests. On a branch, PR for morning review; prod untouched.
