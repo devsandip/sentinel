@@ -58,7 +58,8 @@ def test_every_login_card_enters_the_shell_on_overview(persona_id):
     assert at.session_state["section"] == "Overview"
     # The shell is up: grouped sidebar nav + the persona switcher.
     assert at.button(key="nav_run") is not None
-    assert at.sidebar.selectbox[0].value == persona_id
+    # The persona switcher moved out of the sidebar into the header popover.
+    assert at.selectbox(key="persona_switch").value == persona_id
 
 
 def test_login_cards_cover_every_persona():
@@ -285,6 +286,6 @@ def test_admin_header_chip_toggle_degrades_and_recovers():
     assert not at.exception
     assert any("UNGOVERNED" in e.value for e in at.error)
     # Switch to a persona that cannot toggle: the stale key must not degrade
-    # their runs or their banner.
-    at.sidebar.selectbox[0].set_value("Data Scientist / Analyst").run()
+    # their runs or their banner. The switcher now lives in the header popover.
+    at.selectbox(key="persona_switch").set_value("analyst").run()
     assert not any("UNGOVERNED" in e.value for e in at.error)
