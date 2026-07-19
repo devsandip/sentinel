@@ -11,11 +11,15 @@ def test_adoption_metrics_shape_and_bounds():
     assert m["total_runs"] >= 0
     assert 0.0 <= m["promotion_rate"] <= 1.0
     assert 0.0 <= m["override_rate"] <= 1.0
-    # Profiler/EDA/Modeler run on every run; Validator only on non-rejected ones.
+    # The 4-agent credit pipeline: profiler/EDA/modeler run on every
+    # credit_risk run; validator only on non-rejected ones. Other run kinds
+    # (analysis / govflow / l3) do not invoke these agents.
     pa = m["per_agent_invocations"]
-    assert pa["profiler"] == pa["eda"] == pa["modeler"] == m["total_runs"]
-    assert pa["validator"] == m["total_runs"] - m["rejected"]
+    assert pa["profiler"] == pa["eda"] == pa["modeler"] == m["credit_risk_runs"]
+    assert pa["validator"] == m["credit_risk_runs"] - m["rejected"]
+    assert m["total_runs"] >= m["credit_risk_runs"]
     assert m["weekly"]  # seeded history present
+    assert m["per_dataset"]  # the per-dataset cut is populated
 
 
 def test_completed_run_increments_utilization():

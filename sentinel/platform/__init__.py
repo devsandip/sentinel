@@ -15,6 +15,7 @@ from .adoption import adoption_metrics
 from .patterns import PATTERNS, Pattern, all_patterns, get_pattern
 from .playbooks import Playbook, get_playbook, load_playbooks
 from .registry import agent_registry, model_versions, register_model
+from .run_history import SeedRun, load_seed_runs, seeded_by_dataset, seeded_weekly
 from .templates import (
     AGENT_LINEAGE,
     TEMPLATES,
@@ -42,4 +43,8 @@ __all__ = [
     "agent_registry",
     "register_model",
     "adoption_metrics",
+    "SeedRun",
+    "load_seed_runs",
+    "seeded_by_dataset",
+    "seeded_weekly",
 ]

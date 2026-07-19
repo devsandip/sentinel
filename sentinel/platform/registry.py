@@ -3,9 +3,10 @@
 The MRM "model inventory": every trained model is versioned with its metrics,
 fairness verdict, and promotion status; every agent is versioned with its
 template lineage and tool scope. In this demo the model registry is a
-process-level store that accumulates as runs complete, seeded with a few labeled
-historical entries so the inventory is not empty. An enterprise deployment would
-persist to the bank's model-inventory system.
+process-level store that accumulates as runs complete, seeded from the executed
+run history in sentinel/data/seed_runs.jsonl (every seed row came from a real
+run; see run_history.py). An enterprise deployment would persist to the bank's
+model-inventory system.
 """
 
 from __future__ import annotations
@@ -13,6 +14,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
+from .run_history import credit_risk_runs
 from .templates import AGENT_LINEAGE, get_template
 
 STATUS_PROMOTED = "promoted"
@@ -46,29 +48,28 @@ class ModelVersion:
         }
 
 
-# Process-level model inventory, seeded with labeled history.
-_MODEL_REGISTRY: list[ModelVersion] = [
-    ModelVersion(
-        version="credit-lr-000001",
-        question_id="build_model",
-        auc=0.78,
-        disparity_ratio=0.57,
-        fairness_pass=False,
-        status=STATUS_PROMOTED,
-        created_at="2026-07-06T10:14:00+00:00",
-        seeded=True,
-    ),
-    ModelVersion(
-        version="credit-lr-000002",
-        question_id="fairness_age",
-        auc=0.71,
-        disparity_ratio=0.52,
-        fairness_pass=False,
-        status=STATUS_BLOCKED,
-        created_at="2026-07-09T15:40:00+00:00",
-        seeded=True,
-    ),
-]
+def _seed_rows() -> list[ModelVersion]:
+    """Fold the executed credit_risk seed records into ModelVersion rows."""
+    rows: list[ModelVersion] = []
+    for r in credit_risk_runs():
+        rows.append(
+            ModelVersion(
+                version=f"credit-lr-{r.run_id[:6]}",
+                question_id=r.ref_id,
+                auc=r.metrics.get("auc"),
+                disparity_ratio=r.metrics.get("disparity_ratio"),
+                fairness_pass=r.metrics.get("fairness_pass"),
+                status=r.status,
+                created_at=r.demo_date,
+                seeded=True,
+            )
+        )
+    return rows
+
+
+# Process-level model inventory, seeded once per process from the run-history
+# store; live runs append on top via register_model.
+_MODEL_REGISTRY: list[ModelVersion] = _seed_rows()
 
 
 def register_model(
