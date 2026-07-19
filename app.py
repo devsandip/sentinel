@@ -361,11 +361,14 @@ st.markdown(
       /* ---------- command-center dashboard (ui-spec 3.2) ---------- */
       .dashhead .h2 { font-size:22px; font-weight:650; color:var(--ink); margin:2px 0 4px 0; }
       .dashhead .lede { color:var(--muted); font-size:13.5px; max-width:70ch; }
-      .cta-run { display:flex; align-items:center; gap:16px; background:var(--surface);
-        border:1px solid var(--border-strong); border-radius:var(--r-lg);
-        box-shadow:var(--shadow-md); padding:20px 24px; margin:18px 0 4px 0; }
-      .cta-run .cta-t { font-size:18px; font-weight:650; color:var(--ink); }
-      .cta-run .cta-d { font-size:12.5px; color:var(--muted); margin-top:3px; }
+      /* the CTA lives in an st.container(border=True); elevate that wrapper
+         (shadow-md, strong border) via :has() so it reads as ui-spec 3.2's
+         elevated card rather than a plain bordered box. */
+      div[data-testid="stVerticalBlockBorderWrapper"]:has(.cta-t) {
+        border-color:var(--border-strong); box-shadow:var(--shadow-md);
+        border-radius:var(--r-lg); }
+      .cta-t { font-size:18px; font-weight:650; color:var(--ink); }
+      .cta-d { font-size:12.5px; color:var(--muted); margin-top:3px; }
       .tile-stat { display:flex; align-items:baseline; gap:9px; }
       .tile-stat .big { font-size:30px; font-weight:700;
         font-variant-numeric:tabular-nums; color:var(--ink); }
@@ -445,9 +448,12 @@ _SHIELD_SVG = (
     "stroke-linecap='round' stroke-linejoin='round'/></svg>"
 )
 
-# Card copy per ui-spec 3.1 (role line, capability one-liner, tier badge).
+# Card copy per ui-spec 3.1 (display name, role line, capability, tier badge).
+# `name` is the spec's card name (shorter than the persona's full config name,
+# which carries a qualifier the role line already states).
 _LOGIN_CARDS: dict[str, dict] = {
     "analyst": {
+        "name": "Data Scientist",
         "role": "First line · certified",
         "cap": "Writes gated code against the fenced API. Runs this walkthrough.",
         "tier": "L2",
@@ -455,6 +461,7 @@ _LOGIN_CARDS: dict[str, dict] = {
         "hero": True,
     },
     "junior_analyst": {
+        "name": "Junior Analyst",
         "role": "First line · uncertified",
         "cap": "Picks a certified analysis and fills typed params. Writes no code.",
         "tier": "L1",
@@ -462,6 +469,7 @@ _LOGIN_CARDS: dict[str, dict] = {
         "hero": False,
     },
     "model_validator": {
+        "name": "Model Validator",
         "role": "Second line · MRM",
         "cap": "Independently reviews fairness and evals. Does not run.",
         "tier": "L0",
@@ -469,6 +477,7 @@ _LOGIN_CARDS: dict[str, dict] = {
         "hero": False,
     },
     "mrm_approver": {
+        "name": "MRM Approver",
         "role": "Second line · sign-off",
         "cap": "Holds the promotion sign-off. Four-eyes, never self-approves.",
         "tier": "L0",
@@ -476,6 +485,7 @@ _LOGIN_CARDS: dict[str, dict] = {
         "hero": False,
     },
     "auditor": {
+        "name": "Internal Auditor",
         "role": "Third line",
         "cap": "Read-only across the audit trail, evidence, and lineage.",
         "tier": "L0",
@@ -483,6 +493,7 @@ _LOGIN_CARDS: dict[str, dict] = {
         "hero": False,
     },
     "admin": {
+        "name": "Platform Admin",
         "role": "Platform",
         "cap": "May toggle a control (audited). L3 on Public data, caps at L2 here.",
         "tier": "L3",
@@ -515,7 +526,6 @@ def render_login() -> None:
         cols = st.columns(3)
         for col, pid in zip(cols, row_ids, strict=False):
             card = _LOGIN_CARDS[pid]
-            p = personas[pid]
             hero_cls = " hero" if card["hero"] else ""
             hero_tag = (
                 "<div class='phero-tag'>Runs this walkthrough</div>" if card["hero"] else ""
@@ -526,7 +536,7 @@ def render_login() -> None:
                     <div class='pcard{hero_cls}'>
                       <span class='ptier'>{card["tier"]}</span>
                       <div class='picon'>{card["icon"]}</div>
-                      <div class='pname'>{p.name}</div>
+                      <div class='pname'>{card["name"]}</div>
                       <div class='prole'>{card["role"]}</div>
                       <div class='pcap'>{card["cap"]}</div>
                       {hero_tag}
@@ -1387,9 +1397,14 @@ def render_adoption() -> None:
     m = adoption_metrics()
     a, b, c, d = st.columns(4)
     a.metric("Total runs", m["total_runs"], f"{m['live_session_runs']} this session")
-    b.metric("Promotion rate", f"{int(m['promotion_rate'] * 100)}%")
-    c.metric("Human-override rate", f"{int(m['override_rate'] * 100)}%")
-    d.metric("Template coverage", f"{int(m['template_coverage'] * 100)}%")
+    b.metric(
+        "Promotion rate",
+        f"{round(m['promotion_rate'] * 100)}%",
+        help=f"Over the {m['credit_risk_runs']} credit-pipeline runs (the only "
+        "kind that promotes a model).",
+    )
+    c.metric("Human-override rate", f"{round(m['override_rate'] * 100)}%")
+    d.metric("Template coverage", f"{round(m['template_coverage'] * 100)}%")
 
     st.markdown(
         f"**Agent utilization** (invocations across the {m['credit_risk_runs']} "
@@ -1788,8 +1803,8 @@ def render_home(persona) -> None:  # noqa: ANN001
         "Adoption",
         "tile_open_adoption",
         f"<div class='tile-stat'><span class='big'>{m['total_runs']}</span>"
-        f"<span class='unit'>governed runs · {int(m['promotion_rate'] * 100)}% "
-        "promoted</span></div>"
+        f"<span class='unit'>runs · {m['promoted']} of {m['credit_risk_runs']} "
+        "models promoted</span></div>"
         f"<div class='barchart'>{bars}</div>",
     )
     st.caption(
@@ -1859,11 +1874,17 @@ for _glabel, _items in _NAV_GROUPS:
     for _item in _items:
         _n = _nav_counts.get(_item)
         _label = f"{_item} · {_n}" if _n is not None else _item
-        if st.sidebar.button(
-            _label,
-            key=_NAV_KEYS[_item],
-            type="primary" if _item == section else "secondary",
-            use_container_width=True,
+        # Guard on _item != section: re-clicking the active item must be a
+        # no-op. Writing + rerun mid-loop truncates the run before the section
+        # body renders, so Streamlit would cull the visible section's widgets.
+        if (
+            st.sidebar.button(
+                _label,
+                key=_NAV_KEYS[_item],
+                type="primary" if _item == section else "secondary",
+                use_container_width=True,
+            )
+            and _item != section
         ):
             st.session_state.section = _item
             st.rerun()

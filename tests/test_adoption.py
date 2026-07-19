@@ -3,7 +3,15 @@
 from __future__ import annotations
 
 from sentinel.orchestrator import Orchestrator
-from sentinel.platform import adoption_metrics
+from sentinel.platform import adoption_metrics, seeded_by_dataset
+
+
+def test_per_dataset_matches_the_store():
+    # The per_dataset cut that feeds the Adoption chart must equal the store's
+    # own per-dataset counts (guards the chart's data wiring in render_adoption).
+    m = adoption_metrics()
+    assert m["per_dataset"] == seeded_by_dataset()
+    assert len(m["per_dataset"]) == 8
 
 
 def test_adoption_metrics_shape_and_bounds():

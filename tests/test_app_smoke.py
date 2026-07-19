@@ -43,15 +43,32 @@ def test_fresh_session_lands_on_the_login_gate():
     assert any("Choose an identity" in m.value for m in at.markdown)
 
 
-def test_picking_a_persona_enters_the_shell_on_overview():
+@pytest.mark.parametrize(
+    "persona_id",
+    ["analyst", "junior_analyst", "model_validator", "mrm_approver", "auditor", "admin"],
+)
+def test_every_login_card_enters_the_shell_on_overview(persona_id):
+    # Each of the six cards must sign in and render the Overview shell without
+    # exception, which forces every persona through header() + render_home()
+    # (both call resolve_tier_for_dataset with the persona's tier_role).
     at = AppTest(script_path=APP, default_timeout=60).run()
-    at.button(key="login_junior_analyst").click().run()
+    at.button(key=f"login_{persona_id}").click().run()
     assert not at.exception
-    assert at.session_state["persona_id"] == "junior_analyst"
+    assert at.session_state["persona_id"] == persona_id
     assert at.session_state["section"] == "Overview"
     # The shell is up: grouped sidebar nav + the persona switcher.
     assert at.button(key="nav_run") is not None
-    assert at.sidebar.selectbox[0].value == "junior_analyst"
+    assert at.sidebar.selectbox[0].value == persona_id
+
+
+def test_login_cards_cover_every_persona():
+    # The gate must offer a card for every persona; a config addition that the
+    # hardcoded card map misses would silently drop that identity.
+    from sentinel.harness.identity import all_personas
+
+    at = AppTest(script_path=APP, default_timeout=60).run()
+    login_ids = {b.key[len("login_"):] for b in at.button if b.key and b.key.startswith("login_")}
+    assert login_ids == {p.id for p in all_personas()}
 
 
 def test_overview_tiles_show_live_numbers():
@@ -63,7 +80,7 @@ def test_overview_tiles_show_live_numbers():
     assert "datasets under classification" in body
     assert "analyses in the certification lifecycle" in body
     assert "agent templates" in body
-    assert "governed runs" in body
+    assert "models promoted" in body  # Adoption tile, credit-pipeline scoped
     assert at.button(key="cta_run") is not None
 
 
@@ -112,6 +129,26 @@ def test_adoption_section_renders_seeded_history():
     body = " ".join(m.value for m in at.markdown)
     assert "Runs per week" in body
     assert "Runs per dataset" in body
+    # AppTest exposes no accessor for st.bar_chart; the chart's data substance
+    # (one row per seeded dataset, matching counts) is asserted at the metrics
+    # layer in test_adoption.py::test_per_dataset_matches_the_store.
+
+
+def test_reclicking_active_nav_item_is_a_noop():
+    # Regression: re-clicking the already-active nav item must not reset the
+    # visible section's widget state (it did while the handler wrote section +
+    # reran unconditionally, truncating the run before the body rendered).
+    at = _boot(timeout=120)
+    at.button(key="nav_run").click().run()
+    at.radio(key="govflow_stage").set_value("Plan").run()
+    at.button(key="gv_run").click().run()
+    assert at.session_state["govflow_result"]["status"] == "completed"
+    assert at.radio(key="govflow_stage").value == "Access"
+    # Re-click the active "Run" nav item: the stepper must hold its position.
+    at.button(key="nav_run").click().run()
+    assert not at.exception
+    assert at.session_state["section"] == "Run"
+    assert at.radio(key="govflow_stage").value == "Access"
 
 
 def test_registry_section_shows_certification_lifecycle():
