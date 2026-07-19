@@ -77,6 +77,31 @@ def onboard_ulb_fraud(nonfraud_sample: int = 19508) -> Path:
     return _write("ulb_fraud", out)
 
 
+def onboard_uci_bank_marketing(sample: int = 20000) -> Path:
+    """UCI Bank Marketing (dataset 222) via the archive zip (no account).
+
+    The 222 zip nests bank-additional.zip; the target file inside it is
+    bank-additional/bank-additional-full.csv (semicolon-separated, 41188 rows,
+    the version the registry describes). Sampled for repo leanness. 'duration'
+    ships intact; the registry notes flag it as leakage to drop at modeling
+    time, not at onboarding.
+    """
+    import io
+    import zipfile
+    from urllib.request import urlopen
+
+    url = "https://archive.ics.uci.edu/static/public/222/bank+marketing.zip"
+    with urlopen(url) as resp:
+        outer = zipfile.ZipFile(io.BytesIO(resp.read()))
+    inner_name = next(n for n in outer.namelist() if n.endswith("bank-additional.zip"))
+    inner = zipfile.ZipFile(io.BytesIO(outer.read(inner_name)))
+    member = next(n for n in inner.namelist() if n.endswith("bank-additional-full.csv"))
+    with inner.open(member) as f:
+        df = pd.read_csv(f, sep=";")
+    df = df.sample(n=min(sample, len(df)), random_state=42).reset_index(drop=True)
+    return _write("uci_bank_marketing", df)
+
+
 def onboard_lendingclub(sample: int = 20000) -> Path:
     """LendingClub messy loan table via the DePaul econdata mirror (no account).
 
@@ -231,6 +256,7 @@ ONBOARDERS = {
     "hillstrom": onboard_hillstrom,
     "berka": onboard_berka,
     "ulb_fraud": onboard_ulb_fraud,
+    "uci_bank_marketing": onboard_uci_bank_marketing,
     "lendingclub": onboard_lendingclub,
     "synthetic_its": onboard_synthetic_its,
 }

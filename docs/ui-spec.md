@@ -290,8 +290,15 @@ Live tile numbers (verified against the repo, not invented): Datasets "8" under
 classification with a class breakdown row (Restricted 2 / Confidential 2 /
 Internal 3 / Public 1); Registry "3" analyses in the certification lifecycle
 with certified/candidate/refused chips; Platform "5" agent templates · 3 live,
-with "4/4 agents covered" and "2 available" chips; Adoption "29" governed runs ·
-67% promoted, with a 3-bar mini weekly chart (W26/W27/W28).
+with "4/4 agents covered" and "2 available" chips; Adoption "19" runs · "2 of 3
+models promoted" (the promotion rate is scoped to the credit pipeline, the only
+run kind that promotes a model), with a 4-bar mini weekly chart (W26/W27/W28/W29).
+
+The Adoption numbers changed with the H phase (2026-07-19): the fabricated
+hardcoded weekly series (29 runs across W26-W28) was replaced by the 19
+actually-executed seed runs in sentinel/data/seed_runs.jsonl, so the tile now
+reads 19 runs over four weeks. The mockup's WEEKLY constant (29) predates this
+and is illustrative; the app renders the seeded truth.
 
 ### 3.3 The nine-stage run + Architecture (`#view-run`)
 

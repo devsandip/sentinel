@@ -117,10 +117,14 @@ def test_engine_blocks_on_contract_violation():
     assert run.steps == []  # nothing executed
 
 
-def test_engine_blocks_when_not_onboarded():
+def test_engine_blocks_when_not_onboarded(monkeypatch):
     eng = AnalysisEngine()
-    # uci_bank_marketing is registered (satisfies the tabular contract) but has no
-    # onboarder, so it stays un-onboarded and must be blocked before execution.
+    # All 8 registered datasets ship onboarded now, so simulate a missing local
+    # file: a registered dataset whose data is absent must be blocked before
+    # execution.
+    import sentinel.analyses.engine as engine_mod
+
+    monkeypatch.setattr(engine_mod, "available", lambda _did: False)
     run = eng.run(get_analysis("data_profiling"), "uci_bank_marketing")
     assert run.status == STATUS_BLOCKED
     assert any("onboard" in r for r in run.contract["reasons"])

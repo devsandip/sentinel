@@ -243,6 +243,39 @@ chart and totals then derive from real records instead of the hardcoded list.
 Each step lands with green tests + ruff before the next (316 passing today).
 Nothing deploys without Sandip's explicit go-ahead.
 
+## 4b. Landed (2026-07-19, the v6 branch)
+
+D0-D2, H0-H3, and S1-S3 shipped in three commits. Deviations from the plan
+above, with reasons:
+
+- **D0 deleted the field instead of deriving it.** Nothing in production read
+  `DatasetSpec.onboarded` (UI and engine already call `available()`), and a
+  derived property would need registry -> loaders, a circular import.
+  `onboarded_datasets()` went with it (no production callers).
+- **D2 landed** (synthetic_its + CAP_TABULAR): it is what makes "2 runs per
+  dataset" reachable for synthetic_its (L3 causal + profiling).
+- **H2's credit_risk variants are by question, not protected attribute.**
+  `Orchestrator.start_run` has no protected_attribute kwarg; all questions
+  hardcode age_band. The three genuinely re-executed runs are build_model
+  (approved), fairness_age (approved), profile_risks (rejected).
+- **fairness_age really promotes.** The old hand-written seed row said
+  blocked; the actual executed run passes the eval gate (auc 0.8018,
+  disparity 0.569, fairness_pass False). The real result replaced the
+  fiction, per the honesty rule.
+- **Timestamps: `executed_at` + `demo_date`.** Every seed record keeps its
+  real execution time; `demo_date` places it on the demo timeline (W26-W29)
+  that the weekly chart and registry dates render, continuing the convention
+  the hand-labeled rows already used. Disclosed in run_history.py and
+  scripts/seed_runs.py docstrings.
+- **S2 uses styled sidebar buttons, not st.navigation.** The flat script +
+  the AppTest suite + the custom look made the sanctioned fallback the right
+  call. The active item renders as the primary button variant.
+- **Two extra Workspace items.** The legacy credit-pipeline hero lives on as
+  "Pipeline" and Analyses stays reachable, both under Workspace. The mockup
+  has neither; recorded here as a deliberate addition.
+- **The landing after login is Overview** (the command-center), matching the
+  mockup's pick behavior.
+
 ## 5. Out of scope (recorded so nobody re-litigates)
 
 - RBAC-gated navigation (all sidebar items always shown, for now).

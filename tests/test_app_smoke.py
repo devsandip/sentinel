@@ -1,7 +1,8 @@
 """Headless smoke test that the Streamlit app renders without exceptions.
 
 Uses Streamlit's AppTest harness (no browser). Guards against import errors and
-render-time exceptions in both top-level sections.
+render-time exceptions across the login gate, the grouped sidebar shell, and
+every top-level section.
 """
 
 from __future__ import annotations
@@ -20,17 +21,91 @@ os.environ.setdefault("ARROW_DEFAULT_MEMORY_POOL", "system")
 APP = os.path.join(os.path.dirname(os.path.dirname(__file__)), "app.py")
 
 
-def test_run_analysis_section_renders():
+def _boot(persona_id: str = "analyst", timeout: int = 60) -> AppTest:
+    """A logged-in AppTest: pre-seed persona_id so the login gate passes.
+    The gate itself is covered by the dedicated login tests below."""
+    at = AppTest(script_path=APP, default_timeout=timeout)
+    at.session_state["persona_id"] = persona_id
+    return at.run()
+
+
+# -- login gate (S1) ---------------------------------------------------------
+
+
+def test_fresh_session_lands_on_the_login_gate():
     at = AppTest(script_path=APP, default_timeout=60).run()
     assert not at.exception
-    # Pre-run, the analysis section prompts the user to start a run.
+    # The gate renders the six persona cards and nothing else: no sidebar nav,
+    # no topbar, no section content.
+    login_keys = [b.key for b in at.button if b.key and b.key.startswith("login_")]
+    assert len(login_keys) == 6
+    assert not at.sidebar.selectbox
+    assert any("Choose an identity" in m.value for m in at.markdown)
+
+
+@pytest.mark.parametrize(
+    "persona_id",
+    ["analyst", "junior_analyst", "model_validator", "mrm_approver", "auditor", "admin"],
+)
+def test_every_login_card_enters_the_shell_on_overview(persona_id):
+    # Each of the six cards must sign in and render the Overview shell without
+    # exception, which forces every persona through header() + render_home()
+    # (both call resolve_tier_for_dataset with the persona's tier_role).
+    at = AppTest(script_path=APP, default_timeout=60).run()
+    at.button(key=f"login_{persona_id}").click().run()
+    assert not at.exception
+    assert at.session_state["persona_id"] == persona_id
+    assert at.session_state["section"] == "Overview"
+    # The shell is up: grouped sidebar nav + the persona switcher.
+    assert at.button(key="nav_run") is not None
+    assert at.sidebar.selectbox[0].value == persona_id
+
+
+def test_login_cards_cover_every_persona():
+    # The gate must offer a card for every persona; a config addition that the
+    # hardcoded card map misses would silently drop that identity.
+    from sentinel.harness.identity import all_personas
+
+    at = AppTest(script_path=APP, default_timeout=60).run()
+    login_ids = {b.key[len("login_"):] for b in at.button if b.key and b.key.startswith("login_")}
+    assert login_ids == {p.id for p in all_personas()}
+
+
+def test_overview_tiles_show_live_numbers():
+    at = _boot()
+    assert not at.exception
+    # The four tiles + CTA render with live numbers: 8 datasets, 3 cert
+    # entries, 5 templates, and the seeded run total.
+    body = " ".join(m.value for m in at.markdown)
+    assert "datasets under classification" in body
+    assert "analyses in the certification lifecycle" in body
+    assert "agent templates" in body
+    assert "models promoted" in body  # Adoption tile, credit-pipeline scoped
+    assert at.button(key="cta_run") is not None
+
+
+def test_cta_routes_to_the_run_walkthrough():
+    at = _boot()
+    at.button(key="cta_run").click().run()
+    assert not at.exception
+    assert at.session_state["section"] == "Run"
+    assert at.radio(key="govflow_stage").value == "Ask"
+
+
+# -- sections under the grouped sidebar (S2) ---------------------------------
+
+
+def test_pipeline_section_renders():
+    at = _boot()
+    at.button(key="nav_pipeline").click().run()
+    assert not at.exception
+    # Pre-run, the credit-pipeline section prompts the user to start a run.
     assert any("click Run" in i.value for i in at.info)
 
 
 def test_platform_section_renders():
-    at = AppTest(script_path=APP, default_timeout=60).run()
-    assert not at.exception
-    at.sidebar.radio[0].set_value("Platform").run()
+    at = _boot()
+    at.button(key="nav_platform").click().run()
     assert not at.exception
     assert any(s.value == "Platform assets" for s in at.subheader)
     # Three playbooks, each in an expander, plus the download pack button.
@@ -38,10 +113,59 @@ def test_platform_section_renders():
     assert any("playbook pack" in b.label for b in at.download_button)
 
 
-def test_governed_codegen_section_renders():
-    at = AppTest(script_path=APP, default_timeout=60).run()
+def test_datasets_section_shows_8_of_8_onboarded():
+    at = _boot()
+    at.button(key="nav_datasets").click().run()
     assert not at.exception
-    at.sidebar.radio[0].set_value("Governed codegen").run()
+    df = at.dataframe[0].value
+    assert len(df) == 8
+    assert (df["onboarded"] == "yes").all()
+
+
+def test_adoption_section_renders_seeded_history():
+    at = _boot()
+    at.button(key="nav_adoption").click().run()
+    assert not at.exception
+    body = " ".join(m.value for m in at.markdown)
+    assert "Runs per week" in body
+    assert "Runs per dataset" in body
+    # AppTest exposes no accessor for st.bar_chart; the chart's data substance
+    # (one row per seeded dataset, matching counts) is asserted at the metrics
+    # layer in test_adoption.py::test_per_dataset_matches_the_store.
+
+
+def test_reclicking_active_nav_item_is_a_noop():
+    # Regression: re-clicking the already-active nav item must not reset the
+    # visible section's widget state (it did while the handler wrote section +
+    # reran unconditionally, truncating the run before the body rendered).
+    at = _boot(timeout=120)
+    at.button(key="nav_run").click().run()
+    at.radio(key="govflow_stage").set_value("Plan").run()
+    at.button(key="gv_run").click().run()
+    assert at.session_state["govflow_result"]["status"] == "completed"
+    assert at.radio(key="govflow_stage").value == "Access"
+    # Re-click the active "Run" nav item: the stepper must hold its position.
+    at.button(key="nav_run").click().run()
+    assert not at.exception
+    assert at.session_state["section"] == "Run"
+    assert at.radio(key="govflow_stage").value == "Access"
+
+
+def test_registry_section_shows_certification_lifecycle():
+    at = _boot()
+    at.button(key="nav_registry").click().run()
+    assert not at.exception
+    # The certification lifecycle section and its visible refusal both render.
+    assert any("certification lifecycle" in m.value for m in at.markdown)
+    assert any("cohort-retention" in e.label for e in at.expander)
+
+
+# -- the governed-run walkthrough (the Run section) --------------------------
+
+
+def test_run_section_renders():
+    at = _boot()
+    at.button(key="nav_run").click().run()
     assert not at.exception
     assert any(s.value == "Governed code generation" for s in at.subheader)
     # Pre-run, the stepper prompts the user to configure and run.
@@ -51,12 +175,12 @@ def test_governed_codegen_section_renders():
     assert any("Step 1 of 3" in m.value for m in at.markdown)
 
 
-def test_governed_codegen_stepper_runs_and_walks_stages():
+def test_run_stepper_runs_and_walks_stages():
     """A scripted benign run completes and every stage panel renders. This is
     the show-and-tell rework (docs/features/govflow-showtell.md): the stepper
     walks a completed run, so each panel must render without exceptions."""
-    at = AppTest(script_path=APP, default_timeout=120).run()
-    at.sidebar.radio[0].set_value("Governed codegen").run()
+    at = _boot(timeout=120)
+    at.button(key="nav_run").click().run()
     at.radio(key="govflow_stage").set_value("Plan").run()
     at.button(key="gv_run").click().run()
     assert not at.exception
@@ -70,11 +194,11 @@ def test_governed_codegen_stepper_runs_and_walks_stages():
         assert not at.exception, f"stage panel {stage} raised"
 
 
-def test_governed_codegen_fix_it_repairs_a_blocked_run():
+def test_run_fix_it_repairs_a_blocked_run():
     """The Gate's Fix it button: an adversarial request blocks, the repair run
     passes the same gate, and the blocked run stays linked for the diff."""
-    at = AppTest(script_path=APP, default_timeout=120).run()
-    at.sidebar.radio[0].set_value("Governed codegen").run()
+    at = _boot(timeout=120)
+    at.button(key="nav_run").click().run()
     at.selectbox(key="govflow_style").set_value(
         "Adversarial: exfiltrate results to a webhook"
     ).run()
@@ -92,11 +216,11 @@ def test_governed_codegen_fix_it_repairs_a_blocked_run():
     assert at.session_state["govflow_prior"]["run_id"] == blocked["run_id"]
 
 
-def test_governed_codegen_marketing_refusal_walk():
+def test_run_marketing_refusal_walk():
     """A refused purpose blocks at Access; every panel still renders, showing
     the refusal and the skip reasons."""
-    at = AppTest(script_path=APP, default_timeout=120).run()
-    at.sidebar.radio[0].set_value("Governed codegen").run()
+    at = _boot(timeout=120)
+    at.button(key="nav_run").click().run()
     at.selectbox(key="govflow_purpose").set_value("marketing").run()
     at.radio(key="govflow_stage").set_value("Plan").run()
     at.button(key="gv_run").click().run()
@@ -109,12 +233,11 @@ def test_governed_codegen_marketing_refusal_walk():
         assert not at.exception, f"stage panel {stage} raised on a refused run"
 
 
-def test_governed_codegen_l1_walk():
+def test_run_l1_walk():
     """The Junior Analyst resolves to L1: typed params instead of code, and
     every panel renders the L1 story (no sandbox claims for in-process runs)."""
-    at = AppTest(script_path=APP, default_timeout=120).run()
-    at.sidebar.selectbox[0].set_value("Junior Analyst (uncertified)").run()
-    at.sidebar.radio[0].set_value("Governed codegen").run()
+    at = _boot(persona_id="junior_analyst", timeout=120)
+    at.button(key="nav_run").click().run()
     at.radio(key="govflow_stage").set_value("Plan").run()
     at.button(key="gv_run").click().run()
     assert not at.exception
@@ -127,11 +250,10 @@ def test_governed_codegen_l1_walk():
         assert not at.exception, f"stage panel {stage} raised on an L1 run"
 
 
-def test_governed_codegen_l3_repair_walk():
+def test_run_l3_repair_walk():
     """The L3 route with the Platform Admin: adversarial block, Fix it, walk."""
-    at = AppTest(script_path=APP, default_timeout=120).run()
-    at.sidebar.selectbox[0].set_value("Platform Admin").run()
-    at.sidebar.radio[0].set_value("Governed codegen").run()
+    at = _boot(persona_id="admin", timeout=120)
+    at.button(key="nav_run").click().run()
     at.radio(key="govflow_mode").set_value("Causal impact (synthetic_its, L3)").run()
     at.selectbox(key="govflow_style_l3").set_value(
         "Adversarial (L3): exfiltrate the series to a collector"
@@ -150,12 +272,15 @@ def test_governed_codegen_l3_repair_walk():
         assert not at.exception, f"stage panel {stage} raised on the L3 repair"
 
 
+# -- persona switching (the retained sidebar switcher) -----------------------
+
+
 def test_admin_header_chip_toggle_degrades_and_recovers():
     """The header-chip demo device: the Admin can disable a control (badge
     DEGRADED, UNGOVERNED warning); a persona without toggle authority never
     inherits the stale toggle."""
-    at = AppTest(script_path=APP, default_timeout=120).run()
-    at.sidebar.selectbox[0].set_value("Platform Admin").run()
+    at = _boot(persona_id="admin", timeout=120)
+    at.button(key="nav_pipeline").click().run()
     at.checkbox(key="ctrl_off_pii").set_value(True).run()
     assert not at.exception
     assert any("UNGOVERNED" in e.value for e in at.error)
@@ -163,13 +288,3 @@ def test_admin_header_chip_toggle_degrades_and_recovers():
     # their runs or their banner.
     at.sidebar.selectbox[0].set_value("Data Scientist / Analyst").run()
     assert not any("UNGOVERNED" in e.value for e in at.error)
-
-
-def test_registry_section_shows_certification_lifecycle():
-    at = AppTest(script_path=APP, default_timeout=60).run()
-    assert not at.exception
-    at.sidebar.radio[0].set_value("Registry").run()
-    assert not at.exception
-    # The certification lifecycle section and its visible refusal both render.
-    assert any("certification lifecycle" in m.value for m in at.markdown)
-    assert any("cohort-retention" in e.label for e in at.expander)

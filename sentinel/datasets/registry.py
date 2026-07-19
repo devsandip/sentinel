@@ -1,10 +1,11 @@
 """Dataset registry (analysis-platform.md, first-slice step 2).
 
-The onboarded-dataset inventory. Each DatasetSpec carries provenance, license (+
-a commercial-use flag the governance layer enforces), the capabilities it
+The registered-dataset inventory. Each DatasetSpec carries provenance, license
+(+ a commercial-use flag the governance layer enforces), the capabilities it
 provides, and a role for known columns. Seeded from the verified inventory in
-docs/features/datasets.md. `onboarded` is True once the data is available
-locally; the onboard script flips it by producing the file.
+docs/features/datasets.md. Whether a dataset's data is available locally is a
+disk fact, not registry metadata: ask loaders.available(), which checks for the
+file the onboard script produces.
 """
 
 from __future__ import annotations
@@ -37,7 +38,6 @@ class DatasetSpec:
     tables: int
     provides: frozenset[str]  # capabilities (see contracts.py)
     column_roles: dict[str, str] = field(default_factory=dict)
-    onboarded: bool = False  # is the data available locally?
     notes: str = ""
 
     def to_dict(self) -> dict:
@@ -50,14 +50,13 @@ class DatasetSpec:
             "rows": self.rows,
             "tables": self.tables,
             "provides": sorted(self.provides),
-            "onboarded": self.onboarded,
             "notes": self.notes,
         }
 
 
-# The verified inventory. german_credit is onboarded (ships with the repo); the
-# rest are registered with metadata + contracts and flip to onboarded when the
-# onboard script produces their local file.
+# The verified inventory. Registration is metadata + contracts only; the data
+# itself ships in sentinel/data/ once scripts/onboard_datasets.py produces it,
+# and loaders.available() reports which datasets have their file.
 DATASETS: list[DatasetSpec] = [
     DatasetSpec(
         id="german_credit",
@@ -75,7 +74,6 @@ DATASETS: list[DatasetSpec] = [
             "personal_status_sex": ROLE_PROTECTED,
             "age_years": ROLE_PROTECTED,
         },
-        onboarded=True,
         notes="The anchor dataset; ships with the repo. Modeling loader derives "
         "sex/age_band and injects synthetic PII to demonstrate redaction.",
     ),
@@ -170,9 +168,8 @@ DATASETS: list[DatasetSpec] = [
         commercial_ok=True,
         rows=365,
         tables=1,
-        provides=frozenset({CAP_TIMESERIES, CAP_TREATMENT}),
+        provides=frozenset({CAP_TABULAR, CAP_TIMESERIES, CAP_TREATMENT}),
         column_roles={"date": ROLE_TIMESTAMP, "intervention": ROLE_TREATMENT},
-        onboarded=True,
         notes="Fully synthetic: a daily metric with a known +12 effect injected from "
         "day 250. Ground truth is known, so it validates causal-impact analysis. The "
         "only Public-class dataset, and the only legal home for the L3 sandbox.",
@@ -188,7 +185,3 @@ def all_datasets() -> list[DatasetSpec]:
 
 def get_dataset(dataset_id: str) -> DatasetSpec | None:
     return DATASETS_BY_ID.get(dataset_id)
-
-
-def onboarded_datasets() -> list[DatasetSpec]:
-    return [d for d in DATASETS if d.onboarded]

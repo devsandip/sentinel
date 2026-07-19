@@ -19,7 +19,6 @@ from .registry import (
     DatasetSpec,
     all_datasets,
     get_dataset,
-    onboarded_datasets,
 )
 
 __all__ = [
@@ -31,7 +30,6 @@ __all__ = [
     "DatasetSpec",
     "all_datasets",
     "get_dataset",
-    "onboarded_datasets",
     "available",
     "load_frame",
     "load_tables",
