@@ -1,33 +1,38 @@
 # Sentinel — Journal Index
 
-Last refreshed: 2026-07-19 10:11
+Last refreshed: 2026-07-19 10:30
 
-Latest entry: [2026-07-19-1011-unified-app-shell-datasets-history.md](entries/2026-07-19-1011-unified-app-shell-datasets-history.md)
+Latest entry: [2026-07-19-1030-v6-deployed-to-prod.md](entries/2026-07-19-1030-v6-deployed-to-prod.md)
 
 ## Where we are now
 
-**The mocked-up unified app is now the real app. v5 (the show-and-tell
-stepper) is merged and LIVE in prod, verified by loading the page and running
-a governed flow on the instance. v6 is built on branch
-`claude/resume-md-continuation-05f7fe` and open as PR #5, awaiting review and
-its own deploy.**
+**v6, the unified app, is merged and LIVE in prod. The mockup is now what
+`sentinel.sandip.dev` serves: a login persona gate, a grouped sidebar with
+live counts, a command-center landing, all 8 datasets onboarded, and a real
+seeded run-history store behind the numbers. Verified the right way, by a
+governed flow run on the instance.**
 
-v6 is three workstreams from docs/features/unified-app-build.md. **D**: all
-eight datasets are onboarded (added uci_bank_marketing; deleted the lying
+PR #5 merged to main (`2e47fce`). Deployed bundle `sentinel-20260719-101916.zip`,
+CloudFormation changeset applied, EB Ready and Green, live-LLM on. Prod moved
+v5 to v6. Verified on the instance: the login gate renders (it did not exist in
+v5), the command center shows live tiles (Datasets 8, Registry 3, Adoption 19)
+and a grouped sidebar with live counts, and run `7d306d5dfb64` completed all
+nine stages at tier L2 with 3 controls fired.
+
+v6 was three workstreams from docs/features/unified-app-build.md. **D**: all
+eight datasets onboarded (added uci_bank_marketing; deleted the lying
 `onboarded` flag; gave synthetic_its CAP_TABULAR). **H**: a real seeded
 run-history store (sentinel/data/seed_runs.jsonl) fed by 19 actually-executed
 runs, replacing the hand-written fictional registry rows and weekly list; the
-Registry, Adoption, and dashboard surfaces read it. **S**: a login persona
-gate, a grouped sidebar with live counts, and a command-center landing with
-four live-number tiles, all matching the mockup and docs/ui-spec.md.
-
-A 25-agent adversarial review of the v6 diff confirmed 9 findings, all fixed,
-the sharpest being a misleading adoption number on the landing tile. 374 tests
-pass, ruff clean.
+Registry, Adoption, and dashboard surfaces read it. **S**: the login persona
+gate, the grouped sidebar, and the command-center landing with four live-number
+tiles. A 25-agent adversarial review of the diff confirmed 9 findings, all
+fixed, the sharpest being a misleading adoption number on the landing tile.
+374 tests pass, ruff clean.
 
 Deferred still: dark mode, RBAC-gated navigation, B-style contextual drawers,
 OPA externalisation (waits on Sandip). The W29 weekly summary is due Monday
-2026-07-20.
+2026-07-20. A docs-only PR (this entry + INDEX + WORKLOG) is open for merge.
 
 Everything below is the prior state: v4/v5 in prod.
 
@@ -270,6 +275,7 @@ out).
 
 ## Recent entries
 
+- [2026-07-19-1030-v6-deployed-to-prod.md](entries/2026-07-19-1030-v6-deployed-to-prod.md) : Sandip said merge and deploy. PR #5 merged to main (`2e47fce`); deployed bundle `sentinel-20260719-101916.zip`, CFN changeset applied, EB green, live-LLM on. Prod moved v5 to v6. Verified the right way: the login gate renders (absent in v5), the command center shows live tiles (Datasets 8, Registry 3, Adoption 19) and a grouped sidebar with live counts, and run `7d306d5dfb64` completed all nine stages at tier L2 with 3 controls fired. `describe-application-versions` returned null for the bundle key (CFN manages the version label); the deploy upload log is the provenance. prod is v6.
 - [2026-07-19-1011-unified-app-shell-datasets-history.md](entries/2026-07-19-1011-unified-app-shell-datasets-history.md) : the mockup became the app. Merged + deployed v5 (prod verified by a flow run). Then built v6 in three workstreams: D (all 8 datasets onboarded, deleted the lying `onboarded` flag, synthetic_its gains CAP_TABULAR), H (a real seeded run-history JSONL store from 19 executed runs, replacing fictional registry rows and the hardcoded weekly list), S (login persona gate, grouped sidebar with live counts, command-center landing with four live tiles). A 25-agent adversarial review confirmed 9 findings, all fixed (the sharpest: the adoption tile implied 13/19 promotions where only 2 of 3 models promoted). 374 tests. PR #5 open; prod is v5, v6 deploys after merge.
 - [2026-07-19-0113-showtell-stepper-and-design-system.md](entries/2026-07-19-0113-showtell-stepper-and-design-system.md) : overnight build of the show-and-tell brief (docs/more_ideas.md). The govflow surface became a nine-stage stepper with control explainers, struck/masked denied columns, Screen before/after, and the Gate Fix it repair; an adversarial review confirmed 18 findings, all fixed. Mid-build Sandip pointed at the unified-app mockup + docs/ui-spec.md; the stepper and chrome now wear that design system (topbar lockup, nav-rail sidebar, node rail, phead/In-Does-Out/engine bar, Architecture stop). 355 tests. On a branch, PR for morning review; prod untouched.
 - [2026-07-18-1859-v4-merged-and-deployed-to-prod.md](entries/2026-07-18-1859-v4-merged-and-deployed-to-prod.md) : Sandip said merge and deploy. PR #3 merged to main (`3b17921`); deployed bundle `sentinel-20260718-185231.zip`, EB green, live-LLM on, no drift/missing-deps. Verified the right way this time: loaded the page and ran a flow on the instance. The Governed codegen surface renders all the new v4 pieces (mode toggle, computed tier chip, purpose matrix), and run 696ef64456bc completed through all nine stages (Execute passing = the sandbox ran generated code in prod). prod is v4.

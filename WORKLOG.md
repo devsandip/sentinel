@@ -493,3 +493,22 @@ Append-only session handoff log. Newest entries at the bottom.
 - Deleted the `onboarded` field rather than deriving it: nothing in production read it and a derived property would need registry->loaders, a circular import.
 - Seeded history comes from actually executed runs, labeled seeded, per the honesty rule; the old hand-written registry rows and weekly list were fiction and are gone. fairness_age really promotes (the old seed said blocked).
 - S2 nav is styled sidebar buttons, not `st.navigation`: the flat script + AppTest suite + custom look made the sanctioned fallback right. Recorded in unified-app-build.md 4b along with the other deviations.
+
+## 2026-07-19 (10:30) — merged + deployed v6 to prod
+
+**Did:**
+- Merged PR #5 (the unified app, v6) to main (`2e47fce`) after Sandip approved the two gated commands. Pulled it into the main checkout, ran the suite there (374 passed, 2 skipped).
+- Deployed v6: bundle `sentinel-20260719-101916.zip`, CloudFormation changeset applied, EB Ready and Green, live-LLM enabled behind the cap. Prod moved v5 to v6.
+- Verified on the instance, not by health probe: loaded `sentinel.sandip.dev`, the login persona gate rendered (it did not exist in v5), picked Data Scientist, landed on the command center with live tiles (Datasets 8, Registry 3 = 1 certified/1 candidate/1 refused, Adoption 19) and a grouped sidebar with live counts. Ran a governed flow: run `7d306d5dfb64` completed all nine stages at tier L2 with 3 controls fired, Access showed the scoped view (6 granted columns of 21).
+
+**State now:**
+- Prod is v6, healthy, verified by a flow run. Everything the mockup promised (identity gate, grouped shell, 8-dataset catalog, seeded history) is what the public link serves.
+- Main is at `2e47fce`. A docs-only PR (this WORKLOG entry + the journal entry + INDEX refresh) is open for merge.
+
+**Next:**
+- W29 weekly journal summary is due Monday 2026-07-20 (use the project-journal skill; read every daily entry of the ISO week first).
+- Deferred, none started: dark mode, RBAC-gated navigation, B-style contextual drawers, OPA externalisation (Sandip's call).
+
+**Decisions:**
+- Verified the deploy by a governed flow run on the instance, per the standing rule that health 200 is necessary but not sufficient (Streamlit answers health before app.py runs).
+- `describe-application-versions` returned null for the source-bundle key because CloudFormation manages the application version under a generated label, not the bundle filename; the deploy script's upload log plus the green changeset are the provenance. Not worth chasing further.
