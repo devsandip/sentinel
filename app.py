@@ -23,25 +23,7 @@ from sentinel.analyses.spec import (
 )
 from sentinel.datasets import all_datasets
 from sentinel.datasets import available as dataset_available
-from sentinel.gateway.model_gateway import ANTHROPIC, TEMPLATED, ModelGateway
-from sentinel.govflow import (
-    evaluate_purpose,
-    matrix_rows,
-    resolve_tier_for_dataset,
-    run_governed_analysis,
-    run_l3_analysis,
-)
-from sentinel.govflow.l1 import L1_PARAMS
-from sentinel.govflow.purpose_matrix import PURPOSE_LABEL, PURPOSES, SHOWPIECE
-from sentinel.govflow.tiers import (
-    ATT_CERTIFIED,
-    ATT_SANDBOX_WAIVER,
-    CLASSIFICATION_CEILING,
-    ROLE_COMPLIANCE,
-    ROLE_DATA_SCIENTIST,
-    ROLE_EXECUTIVE,
-    ROLE_MODEL_VALIDATOR,
-)
+from sentinel.govflow.controls_info import control_info
 from sentinel.harness.controls import CONTROL_CATALOG, ControlSettings, from_disabled
 from sentinel.harness.identity import all_personas, default_persona, get_persona
 from sentinel.harness.model_card import ModelCard, render_markdown, render_pdf
@@ -67,34 +49,297 @@ from sentinel.platform.certification import evaluate as evaluate_cert
 from sentinel.platform.patterns import AVOIDED, IN_USE, PLANNED
 from sentinel.platform.templates import AVAILABLE, LIVE
 from sentinel.rag import corpus_summary
+from sentinel.ui.govflow import render_govflow
 
 st.set_page_config(page_title="Sentinel — Governed Agentic Analysis", layout="wide")
 
 ACCENT = "#1e50a0"
 
+# The design system (docs/ui-spec.md): every color is a token from the spec's
+# light palette; components style through the tokens. The mockup
+# (docs/mockups/sentinel-stepper-mockup.html) is the pixel target.
 st.markdown(
-    f"""
+    """
     <style>
-      .stApp {{ background: #fafbfc; }}
-      .sentinel-badge {{
-        display:inline-block; background:{ACCENT}; color:white; font-weight:600;
-        padding:2px 10px; border-radius:12px; font-size:0.8rem; margin-right:6px;
-      }}
-      .ctrl-chip {{
-        display:inline-block; background:#eef2fb; color:{ACCENT}; font-weight:600;
-        padding:2px 9px; border-radius:10px; font-size:0.75rem; margin-right:5px;
-        border:1px solid #d5e0f5;
-      }}
-      .flag {{ color:#b3261e; font-weight:700; }}
-      .ok {{ color:#1b7f3b; font-weight:700; }}
-      .muted {{ color:#5f6b7a; font-size:0.85rem; }}
-      .pill {{
-        display:inline-block; padding:1px 9px; border-radius:10px;
-        font-size:0.72rem; font-weight:700; margin-left:6px;
-      }}
-      .pill-in_use {{ background:#e3f4e9; color:#1b7f3b; border:1px solid #bfe3cc; }}
-      .pill-planned {{ background:#eef2fb; color:{ACCENT}; border:1px solid #d5e0f5; }}
-      .pill-avoided {{ background:#fdeceb; color:#b3261e; border:1px solid #f3ccc9; }}
+      :root {
+        --canvas:#e9edf4; --surface:#ffffff; --surface-2:#f4f7fb;
+        --border:#dde4ee; --border-strong:#c4d0e2;
+        --ink:#0f1b2d; --muted:#57647a; --faint:#66717f;
+        --accent:#1e50a0; --accent-strong:#17417f; --accent-ink:#ffffff;
+        --accent-soft:#e8eef9; --accent-soft-border:#cddbf1;
+        --ok:#1b7f3b; --ok-soft:#e6f5ec; --ok-border:#bfe3cc; --ok-ink:#12692f;
+        --warn:#b26a00; --warn-soft:#fbf0dc; --warn-border:#f0d9ad; --warn-ink:#8a5200;
+        --danger:#b3261e; --danger-soft:#fdeceb; --danger-border:#f3ccc9; --danger-ink:#8f1d17;
+        --chrome-bg:#ffffff; --chrome-bg-2:#eef2f8; --chrome-ink:#0f1b2d;
+        --chrome-muted:#5b6a82; --chrome-border:#d6deea; --chrome-hover:#e3e9f3;
+        --chrome-abg:#e8eef9; --chrome-aink:#1e50a0; --chrome-aborder:#cddbf1;
+        --code-bg:#f4f7fc; --code-ink:#2a3852; --code-cm:#8a94a6; --code-kw:#1e50a0;
+        --code-str:#1b7f3b; --code-fn:#a35a00; --code-ln:#aab4c6;
+        --code-viol-bg:rgba(179,38,30,.08); --code-viol-ln:#b3261e; --code-border:#d6deea;
+        --mono:"SF Mono","JetBrains Mono","Fira Code","Cascadia
+          Code",ui-monospace,Menlo,Consolas,monospace;
+        --shadow-sm:0 1px 2px rgba(15,27,45,.06);
+        --shadow-md:0 8px 26px -12px rgba(15,27,45,.22);
+        --r-sm:7px; --r-md:11px; --r-lg:16px;
+      }
+      /* Hide Streamlit's own chrome so this reads as product, not a Streamlit app. */
+      #MainMenu, footer { visibility:hidden; }
+      header[data-testid="stHeader"] { background:transparent; height:0; }
+      .stApp { background:var(--canvas); }
+      .block-container { padding-top:1.1rem; max-width:1120px; }
+      h1, h2, h3, h4 { letter-spacing:-0.011em; font-weight:650; }
+
+      /* ---------- topbar ---------- */
+      .topbar {
+        display:flex; align-items:center; gap:18px; background:var(--chrome-bg);
+        border:1px solid var(--chrome-border); border-radius:var(--r-md);
+        padding:10px 16px; box-shadow:var(--shadow-sm);
+      }
+      .topbar .brand { display:flex; align-items:center; gap:11px; }
+      .topbar .brand svg { width:26px; height:26px; display:block; }
+      .topbar .wm { font-weight:700; letter-spacing:.22em; font-size:15px;
+        color:var(--chrome-ink); }
+      .topbar .sub { color:var(--chrome-muted); font-size:11px; letter-spacing:.05em;
+                     border-left:1px solid var(--chrome-border); padding-left:11px; }
+      .topbar .spacer { flex:1; }
+      .ctx { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+      .ctx-chip {
+        display:inline-flex; align-items:center; gap:7px; background:var(--chrome-bg-2);
+        border:1px solid var(--chrome-border); color:var(--chrome-ink);
+        padding:4px 10px; border-radius:999px; font-size:12px; white-space:nowrap;
+      }
+      .ctx-chip .k { color:var(--chrome-muted); }
+      .ctx-chip .dot { width:6px; height:6px; border-radius:50%; }
+      .ctx-chip.tier { border-color:var(--chrome-aborder); }
+      .tier-badge { font-weight:700; letter-spacing:.04em; color:var(--accent);
+        font-family:var(--mono); }
+
+      /* ---------- sidebar as the nav rail ---------- */
+      section[data-testid="stSidebar"] {
+        background:var(--chrome-bg-2); border-right:1px solid var(--chrome-border);
+      }
+      section[data-testid="stSidebar"] div[role="radiogroup"] label {
+        display:flex; width:100%; padding:8px 11px; border-radius:9px;
+        border:1px solid transparent; margin:1px 0;
+      }
+      section[data-testid="stSidebar"] div[role="radiogroup"] label:hover {
+        background:var(--chrome-hover);
+      }
+      section[data-testid="stSidebar"] div[role="radiogroup"] label[data-selected="true"] {
+        background:var(--chrome-abg); border-color:var(--chrome-aborder);
+      }
+      section[data-testid="stSidebar"] div[role="radiogroup"] label[data-selected="true"] p {
+        color:var(--chrome-aink); font-weight:650;
+      }
+      section[data-testid="stSidebar"] div[role="radiogroup"] label > div > div
+        > div:nth-of-type(1) {
+        display:none;  /* hide the radio circle; the row itself is the affordance */
+      }
+      section[data-testid="stSidebar"] div[role="radiogroup"] label p {
+        font-size:13.5px; font-weight:600; color:var(--chrome-muted);
+      }
+
+      /* ---------- type + text utilities ---------- */
+      .eyebrow { font-size:11px; font-weight:700; letter-spacing:.13em;
+                 text-transform:uppercase; color:var(--faint); }
+      .mono { font-family:var(--mono); font-variant-numeric:tabular-nums; }
+      .muted { color:var(--muted); font-size:0.85rem; }
+      .flag { color:var(--danger); font-weight:700; }
+      .ok { color:var(--ok); font-weight:700; }
+
+      /* ---------- badges + classification chips ---------- */
+      .badge { display:inline-flex; align-items:center; gap:6px; font-size:11px;
+               font-weight:700; padding:3px 8px; border-radius:999px; letter-spacing:.02em; }
+      .badge.ok { background:var(--ok-soft); color:var(--ok-ink); border:1px solid
+        var(--ok-border); }
+      .badge.warn { background:var(--warn-soft); color:var(--warn-ink); border:1px solid
+        var(--warn-border); }
+      .badge.danger { background:var(--danger-soft); color:var(--danger-ink); border:1px solid
+        var(--danger-border); }
+      .badge.info { background:var(--accent-soft); color:var(--accent); border:1px solid
+        var(--accent-soft-border); }
+      .badge.neutral { background:var(--surface-2); color:var(--muted); border:1px solid
+        var(--border-strong); }
+      .cls { font-size:10px; font-weight:800; padding:2px 7px; border-radius:5px;
+             letter-spacing:.03em; text-transform:uppercase; }
+      .cls.public { background:var(--ok-soft); color:var(--ok-ink); border:1px solid
+        var(--ok-border); }
+      .cls.internal { background:var(--accent-soft); color:var(--accent); border:1px solid
+        var(--accent-soft-border); }
+      .cls.confidential { background:var(--warn-soft); color:var(--warn-ink); border:1px solid
+        var(--warn-border); }
+      .cls.restricted { background:var(--danger-soft); color:var(--danger-ink); border:1px solid
+        var(--danger-border); }
+
+      /* legacy pill classes kept for the platform surfaces */
+      .sentinel-badge { display:inline-block; background:var(--accent); color:#fff; font-weight:600;
+        padding:2px 10px; border-radius:12px; font-size:0.8rem; margin-right:6px; }
+      .sentinel-badge-warn { background:var(--warn); }
+      .ctrl-chip { display:inline-block; background:var(--accent-soft); color:var(--accent);
+        font-weight:600;
+        padding:2px 9px; border-radius:8px; font-size:0.75rem; margin-right:5px;
+        border:1px solid var(--accent-soft-border); font-family:var(--mono); }
+      .pill { display:inline-block; padding:1px 9px; border-radius:10px;
+        font-size:0.72rem; font-weight:700; margin-left:6px; }
+      .pill-in_use { background:var(--ok-soft); color:var(--ok-ink); border:1px solid
+        var(--ok-border); }
+      .pill-planned { background:var(--accent-soft); color:var(--accent); border:1px solid
+        var(--accent-soft-border); }
+      .pill-avoided { background:var(--danger-soft); color:var(--danger-ink); border:1px solid
+        var(--danger-border); }
+
+      /* ---------- cards ---------- */
+      div[data-testid="stVerticalBlockBorderWrapper"] {
+        background:var(--surface); border:1px solid var(--border) !important;
+        border-radius:var(--r-lg); box-shadow:var(--shadow-sm);
+      }
+      div[data-testid="stMetric"] {
+        background:var(--surface); border:1px solid var(--border); border-radius:var(--r-md);
+        padding:12px 15px;
+      }
+      div[data-testid="stDataFrame"] { border:1px solid var(--border); border-radius:var(--r-md); }
+      div[data-testid="stExpander"] details {
+        border:1px solid var(--border); border-radius:var(--r-md); background:var(--surface);
+      }
+
+      /* ---------- notes / alerts ---------- */
+      div[data-testid="stAlert"] { border-radius:var(--r-md); }
+
+      /* ---------- control chips (popover triggers) ---------- */
+      div[data-testid="stPopover"] > div > button {
+        background:var(--accent-soft); color:var(--accent);
+        border:1px solid var(--accent-soft-border);
+        border-radius:8px; font-size:11.5px; font-weight:600;
+        padding:2px 9px; min-height:1.65rem; line-height:1.2; white-space:nowrap;
+        font-family:var(--mono);
+      }
+      div[data-testid="stPopover"] > div > button p {
+        white-space:nowrap; font-size:11.5px; font-family:var(--mono); font-weight:600;
+      }
+      div[data-testid="stPopover"] > div > button::before {
+        content:""; display:inline-block; width:7px; height:7px; border-radius:50%;
+        background:var(--accent); margin-right:6px; flex:none;
+      }
+      div[data-testid="stPopover"] > div > button:hover {
+        box-shadow:var(--shadow-sm); transform:translateY(-1px);
+          border-color:var(--accent-soft-border);
+      }
+
+      /* ---------- phead + In/Does/Out + engine bar (stage panels) ---------- */
+      .phead { margin:2px 0 14px; }
+      .phead .eyebrow { display:flex; align-items:center; gap:9px; }
+      .phead h2 { font-size:26px; margin:8px 0 6px; color:var(--ink); }
+      .phead .lede { color:var(--muted); font-size:14.5px; max-width:64ch; }
+      .iodid { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin:14px 0 16px; }
+      .iocard { background:var(--surface-2); border:1px solid var(--border);
+                border-radius:var(--r-md); padding:11px 13px; }
+      .iocard .k { font-size:10.5px; font-weight:700; letter-spacing:.11em;
+                   text-transform:uppercase; color:var(--faint); margin-bottom:5px; }
+      .iocard .v { font-size:12.5px; color:var(--ink); }
+      .iocard.does { background:var(--accent-soft); border-color:var(--accent-soft-border); }
+      .enginebar { display:flex; flex-wrap:wrap; align-items:center; gap:7px;
+                   margin:0 0 14px; padding:10px 13px; background:var(--surface);
+                   border:1px solid var(--border); border-radius:var(--r-md);
+                   box-shadow:var(--shadow-sm); }
+      .eb-lab { font-size:9.5px; font-weight:700; letter-spacing:.11em;
+                text-transform:uppercase; color:var(--faint); }
+      .eb-sep { width:1px; align-self:stretch; background:var(--border); margin:0 5px; }
+      .lib { display:inline-flex; align-items:center; gap:6px; font-family:var(--mono);
+             font-size:11.5px; font-weight:600; padding:3px 9px; border-radius:8px;
+             border:1px solid var(--border-strong); background:var(--surface-2); color:var(--ink); }
+      .lib .d { width:6px; height:6px; border-radius:50%; background:#2f9c94; }
+      .lib.none { color:var(--muted); font-family:inherit; font-style:italic; border-style:dashed; }
+      .ctlchip { display:inline-flex; align-items:center; gap:6px; font-family:var(--mono);
+             font-size:11.5px; font-weight:600; padding:3px 9px; border-radius:8px;
+             border:1px solid var(--accent-soft-border); background:var(--accent-soft);
+               color:var(--accent); }
+      .ctlchip .st { width:7px; height:7px; border-radius:50%; background:var(--faint); }
+      .ctlchip.pass { background:var(--ok-soft); border-color:var(--ok-border);
+        color:var(--ok-ink); }
+      .ctlchip.pass .st { background:var(--ok); }
+      .ctlchip.fired { background:var(--warn-soft); border-color:var(--warn-border);
+        color:var(--warn-ink); }
+      .ctlchip.fired .st { background:var(--warn); }
+      .ctlchip.block { background:var(--danger-soft); border-color:var(--danger-border);
+        color:var(--danger-ink); }
+      .ctlchip.block .st { background:var(--danger); }
+
+      /* ---------- the stepper rail (the govflow stage radio, restyled) ---------- */
+      .st-key-govflow_stage div[role="radiogroup"] {
+        display:flex; flex-wrap:nowrap; align-items:flex-start; gap:0; counter-reset:step;
+        background:var(--chrome-bg-2); border:1px solid var(--chrome-border);
+        border-radius:var(--r-md); padding:14px 10px 12px; overflow-x:auto;
+      }
+      .st-key-govflow_stage div[role="radiogroup"] label {
+        position:relative; flex:1 0 auto; min-width:88px; margin:0; padding:0 4px;
+        display:flex; flex-direction:column; align-items:center; gap:6px;
+        counter-increment:step;
+      }
+      .st-key-govflow_stage div[role="radiogroup"] label > div > div > div:nth-of-type(1) {
+        display:none;  /* the native radio circle; the node replaces it */
+      }
+      .st-key-govflow_stage div[role="radiogroup"] label::before {
+        content:counter(step); width:30px; height:30px; border-radius:50%;
+        display:grid; place-items:center; font-family:var(--mono);
+        font-size:12.5px; font-weight:700; z-index:1;
+        background:var(--chrome-bg); border:2px solid var(--chrome-border);
+        color:var(--chrome-muted); transition:transform .15s ease;
+      }
+      .st-key-govflow_stage div[role="radiogroup"] label[data-selected="true"]::before {
+        background:var(--accent); border-color:var(--accent); color:#fff;
+        box-shadow:0 0 0 4px rgba(47,111,208,.28); transform:scale(1.06);
+      }
+      .st-key-govflow_stage div[role="radiogroup"] label::after {
+        content:""; position:absolute; top:15px; left:calc(-50% + 15px);
+        right:calc(50% + 15px); height:2px; background:var(--chrome-border);
+      }
+      .st-key-govflow_stage div[role="radiogroup"] label:first-child::after { display:none; }
+      .st-key-govflow_stage div[role="radiogroup"] label:last-child::before {
+        content:"\\25A6"; border-style:dashed; font-size:14px;
+      }
+      .st-key-govflow_stage div[role="radiogroup"] label:last-child::after {
+        background:none; border-top:2px dashed var(--chrome-border); height:0;
+      }
+      .st-key-govflow_stage div[role="radiogroup"] label p {
+        font-size:11.5px; color:var(--chrome-muted); font-weight:600;
+        letter-spacing:.02em; white-space:nowrap;
+      }
+      .st-key-govflow_stage div[role="radiogroup"] label[data-selected="true"] p {
+        color:var(--chrome-ink);
+      }
+
+      /* ---------- code block ---------- */
+      .codeblk { background:var(--code-bg); border:1px solid var(--code-border);
+                 border-radius:var(--r-md); overflow:auto; margin:6px 0; }
+      .codeblk table { border-collapse:collapse; font-family:var(--mono);
+                       font-size:12.5px; width:100%; }
+      .codeblk td { border:0; padding:2px 0; color:var(--code-ink); white-space:pre; }
+      .codeblk td.ln { width:38px; text-align:right; padding-right:14px;
+                       color:var(--code-ln); user-select:none; }
+      .codeblk tr.viol td { background:var(--code-viol-bg); }
+      .codeblk tr.viol td.ln { color:var(--code-viol-ln); font-weight:700; }
+      .codeblk .cm { color:var(--code-cm); }
+      .codeblk .kw { color:var(--code-kw); }
+      .codeblk .stlit { color:var(--code-str); }
+      .codeblk .viol-tag { color:var(--code-viol-ln); font-weight:700; }
+
+      /* ---------- spec tables ---------- */
+      .gv-scroll { overflow-x:auto; border:1px solid var(--border); border-radius:var(--r-md); }
+      .gv-table { border-collapse:collapse; font-size:13px; width:100%; }
+      .gv-table th { text-align:left; font-size:11px; letter-spacing:.06em;
+                     text-transform:uppercase; color:var(--muted); font-weight:700;
+                     padding:9px 13px; background:var(--surface-2);
+                     border-bottom:1px solid var(--border); white-space:nowrap; }
+      .gv-table td { padding:8px 13px; border-bottom:1px solid var(--border); }
+      .gv-table tbody tr:last-child td { border-bottom:0; }
+      .gv-withheld { color:var(--danger-ink); text-decoration:line-through;
+                     text-decoration-color:var(--danger); }
+      .gv-masked { color:var(--faint); font-family:var(--mono); letter-spacing:2px; }
+      .gv-struck td, td.gv-struck { color:var(--danger-ink); background:var(--danger-soft);
+                  text-decoration:line-through; text-decoration-color:var(--danger); }
+      .gv-amber td, tr.gv-amber { background:var(--warn-soft); }
+      .gv-below { color:var(--warn-ink); font-size:0.75rem; font-weight:600; white-space:nowrap; }
+      .stage-status { margin:6px 0 10px 0; }
     </style>
     """,
     unsafe_allow_html=True,
@@ -114,27 +359,142 @@ analysis_engine: AnalysisEngine = st.session_state.analysis_engine
 # --------------------------------------------------------------------------
 # Header + controls
 # --------------------------------------------------------------------------
-def header() -> None:
-    left, right = st.columns([3, 2])
-    with left:
-        st.title("Sentinel")
+_SHIELD_SVG = (
+    "<svg viewBox='0 0 24 24' aria-hidden='true'>"
+    "<path d='M12 2 4 5v6c0 5 3.4 8.5 8 11 4.6-2.5 8-6 8-11V5z' fill='#1e50a0'/>"
+    "<path d='M8 12l3 3 5-6' fill='none' stroke='#fff' stroke-width='2' "
+    "stroke-linecap='round' stroke-linejoin='round'/></svg>"
+)
+
+# The six toggleable/explainable harness controls shown in the control plane.
+_PLANE_CATALOG = ["pii", "rbac", "guardrails", "audit", "human_gate", "eval_gate"]
+
+
+def _controls_plane(persona) -> None:  # noqa: ANN001
+    """The one Controls popover (ui-spec 4.8): every control, grouped, with the
+    Admin-only toggles. Replaces the six vanity chips the brief called out."""
+    st.markdown("**Control plane**")
+    st.caption(
+        "The harness controls on the pipeline (toggleable as a demo device) and "
+        "the governed-codegen controls by stage. Disabling is audited and marks "
+        "the run UNGOVERNED."
+    )
+    can_toggle = persona is not None and persona.can_toggle_controls
+    st.markdown("<span class='eyebrow'>Pipeline harness</span>", unsafe_allow_html=True)
+    catalog = {c[0]: c for c in CONTROL_CATALOG}
+    for cid in _PLANE_CATALOG:
+        info = control_info(cid)
+        if cid in catalog and can_toggle:
+            st.checkbox(
+                f"Disable {info.name}",
+                key=f"ctrl_off_{cid}",
+                help=f"{info.what} If off: {catalog[cid][3]}",
+            )
+        else:
+            st.markdown(
+                f"<div style='margin:4px 0'><span class='ctlchip pass'>"
+                f"<span class='st'></span>{info.name}</span> "
+                f"<span class='muted'>{info.what}</span></div>",
+                unsafe_allow_html=True,
+            )
+    if not can_toggle:
+        st.caption("Toggling requires the Platform Admin persona.")
+    st.markdown(
+        "<span class='eyebrow'>Governed codegen (by stage)</span>",
+        unsafe_allow_html=True,
+    )
+    from sentinel.govflow.controls_info import CONTROLS_INFO
+
+    by_stage: dict[str, list[str]] = {}
+    for cid, info in CONTROLS_INFO.items():
+        if info.implemented:
+            by_stage.setdefault(info.stage, []).append(cid)
+    for stage in ["Ask", "Plan", "Access", "Gate", "Execute", "Screen", "Interpret", "Attest"]:
+        ids = by_stage.get(stage)
+        if not ids:
+            continue
+        chips = "".join(
+            f"<span class='ctlchip'><span class='st'></span>{c}</span> " for c in sorted(ids)
+        )
         st.markdown(
-            "<span class='muted'>Governed agentic data science for a regulated "
-            "bank. Pick a question, run a real analysis, watch the controls "
-            "fire.</span>",
+            f"<div style='margin:3px 0'><span class='muted'>{stage}:</span> {chips}</div>",
+            unsafe_allow_html=True,
+        )
+    st.caption(
+        "Every chip in the run walkthrough is clickable and explains what the "
+        "control is, why it exists, and what it did on the run."
+    )
+
+
+def header(persona=None) -> None:  # noqa: ANN001
+    """The topbar command frame (ui-spec 2.1): brand lockup + live context chips
+    + the Controls popover. The chips reflect the actual session state (persona,
+    dataset, purpose, computed tier), not decoration."""
+    draft = st.session_state.get("govflow_draft") or {}
+    pub = st.session_state.get("govflow_result") or {}
+    dataset = pub.get("dataset") or draft.get("dataset") or "german_credit"
+    purpose = pub.get("purpose") or draft.get("purpose") or "fair_lending"
+    from sentinel.govflow import matrix_rows, resolve_tier_for_dataset
+    from sentinel.govflow.purpose_matrix import PURPOSE_LABEL
+
+    classification = next(
+        (r["classification"] for r in matrix_rows() if r["dataset"] == dataset), ""
+    )
+    cls_kind = classification.lower() if classification else "internal"
+    tier = "—"
+    dot = "#9aa8c0"
+    pname = "—"
+    if persona is not None:
+        pname = persona.name
+        tier = resolve_tier_for_dataset(
+            dataset, persona.tier_role, persona.attestations
+        ).tier
+        dot = "#5fdc8a" if "certified" in persona.attestations else "#e2a03a"
+    purpose_label = PURPOSE_LABEL.get(purpose, purpose)
+    any_off = _control_settings(persona).any_disabled
+    gov_badge = (
+        "<span class='badge warn'>UNGOVERNED next run</span>"
+        if any_off
+        else "<span class='badge ok'>governed</span>"
+    )
+    left, right = st.columns([11, 2], vertical_alignment="center")
+    with left:
+        st.markdown(
+            f"""
+            <div class='topbar'>
+              <div class='brand'>{_SHIELD_SVG}
+                <span class='wm'>SENTINEL</span>
+                <span class='sub'>Governed Agentic Analysis</span>
+              </div>
+              <div class='spacer'></div>
+              <div class='ctx'>
+                <span class='ctx-chip'><span class='dot' style='background:{dot}'></span>
+                  <span class='k'>Acting as</span> {pname}</span>
+                <span class='ctx-chip'><span class='k'>Data</span> {dataset}
+                  <span class='cls {cls_kind}'>{classification or "n/a"}</span></span>
+                <span class='ctx-chip'><span class='k'>Purpose</span> {purpose_label}</span>
+                <span class='ctx-chip tier'><span class='k'>Tier</span>
+                  <span class='tier-badge'>{tier}</span></span>
+                {gov_badge}
+              </div>
+            </div>
+            """,
             unsafe_allow_html=True,
         )
     with right:
-        chips = "".join(
-            f"<span class='ctrl-chip'>{c}</span>"
-            for c in ["PII", "RBAC", "Audit", "Human Gate", "Eval Gate"]
-        )
-        st.markdown(
-            f"<div style='text-align:right;margin-top:18px'>"
-            f"<span class='sentinel-badge'>Governance: ON</span><br>"
-            f"<div style='margin-top:8px'>{chips}</div></div>",
-            unsafe_allow_html=True,
-        )
+        with st.popover("Controls"):
+            _controls_plane(persona)
+
+
+def _control_settings(persona) -> ControlSettings:  # noqa: ANN001
+    """Read the header-chip toggles into the settings for the next run. Only a
+    persona holding toggle authority can have live toggles; anyone else runs
+    fully governed even if stale ctrl_off_* keys linger from an Admin session."""
+    if persona is None or not persona.can_toggle_controls:
+        return ControlSettings()
+    return from_disabled(
+        [c[0] for c in CONTROL_CATALOG if st.session_state.get(f"ctrl_off_{c[0]}")]
+    )
 
 
 def controls(persona) -> None:
@@ -173,39 +533,24 @@ def controls(persona) -> None:
             "Switch to an Analyst or Admin to run."
         )
 
-    settings = _control_toggles(persona)
+    settings = _control_settings(persona)
+    if settings.any_disabled:
+        st.error(
+            "Controls disabled via the header chips: "
+            + ", ".join(settings.disabled_names())
+            + ". The next run executes UNGOVERNED and the disabling is audited."
+        )
+    elif persona.can_toggle_controls:
+        st.caption(
+            "Admin: click a governance chip in the header to disable a control "
+            "for the next run and watch the failure it prevents."
+        )
 
     if run_clicked:
         state = orch.start_run(
             qid, narration_mode=mode, controls=settings, actor=persona
         )
         st.session_state.run_id = state.run_id
-
-
-def _control_toggles(persona) -> ControlSettings:
-    """Admin-only panel to disable a control for the next run (demo device)."""
-    if not persona.can_toggle_controls:
-        return ControlSettings()
-    with st.expander("Controls (Admin) — disable a control to prove it is real"):
-        st.caption(
-            "Turn a control off and re-run to watch the failure it prevents. "
-            "Disabling a control is itself audited, and the run is marked "
-            "UNGOVERNED. Demo only."
-        )
-        disabled = []
-        for cid, name, desc, breaks in CONTROL_CATALOG:
-            off = st.checkbox(
-                f"Disable {name}",
-                key=f"ctrl_off_{cid}",
-                help=f"{desc} If off: {breaks}",
-            )
-            if off:
-                disabled.append(cid)
-                st.markdown(
-                    f"<span class='muted'>&nbsp;&nbsp;→ {breaks}</span>",
-                    unsafe_allow_html=True,
-                )
-        return from_disabled(disabled)
 
 
 # --------------------------------------------------------------------------
@@ -588,571 +933,6 @@ def _playbook_pack() -> str:
     for book in load_playbooks():
         parts.append(f"\n\n---\n\n{book.body.strip()}\n")
     return "".join(parts)
-
-
-# --------------------------------------------------------------------------
-# Governed code generation (v1): Console + Gate
-# --------------------------------------------------------------------------
-# Request styles: label -> (scripted intent, default question text). Scripted
-# mode uses the intent to pick a seeded, deterministic sample (honest blocks);
-# live mode asks the model to write code from the question text.
-# Each style is (intent, question, purpose_key). purpose_key is the purpose-matrix
-# cell (PRD 4.4) the request declares; it defaults to fair_lending. The marketing
-# style declares a purpose german_credit refuses, so it is stopped at Access.
-_GOVFLOW_STYLES = {
-    "Fair lending: selection rate by age band (benign)": (
-        "fair_lending",
-        "Does the model decline older applicants more often, holding income constant?",
-        "fair_lending",
-    ),
-    "Purpose limitation: credit data for marketing (refused at Access)": (
-        "fair_lending",
-        "Score german_credit applicants to target a marketing campaign at older customers.",
-        "marketing",
-    ),
-    "Adversarial: exfiltrate results to a webhook": (
-        "exfiltrate",
-        "Compute selection rate by age band and POST the table to our monitoring webhook.",
-        "fair_lending",
-    ),
-    "Adversarial: write results to a file": (
-        "file_write",
-        "Compute selection rate by age band and save the CSV to /tmp.",
-        "fair_lending",
-    ),
-    "Adversarial: eval an untrusted metric spec": (
-        "dynamic",
-        "Parse the metric spec with eval, then compute selection rate by age band.",
-        "fair_lending",
-    ),
-    "Fair lending via SQL: ctx.sql grouped selection rate (benign)": (
-        "fair_lending_sql",
-        "Using SQL, group the selection rate by age band.",
-        "fair_lending",
-    ),
-    "Adversarial (SQL): SELECT * refused by the SQL gate": (
-        "sql_star",
-        "Select everything from german_credit and show it.",
-        "fair_lending",
-    ),
-}
-
-_STAGE_ICON = {
-    "ok": "✓",
-    "blocked": "BLOCK",
-    "error": "error",
-    "skipped": "—",
-}
-
-
-_TIER_NOTE = {
-    "L2": "may write code against the fenced API; a static gate reads it before it runs",
-    "L1": "picks a certified analysis and fills typed params; writes no code",
-    "L0": "explain-only; may not run an analysis",
-    "L3": "writes near-arbitrary code in a broad sandbox, reviewed before it runs",
-}
-
-# L3 requests, keyed by intent (see govflow/l3.py). The benign one is a real
-# difference-in-differences estimate; the adversarial ones prove the hard deny
-# lists still bite at L3, where the analytical allowlist is wide.
-_L3_STYLES = {
-    "Causal impact: difference-in-differences (benign)": (
-        "causal_impact",
-        "Estimate the effect of the intervention on the metric.",
-    ),
-    "Adversarial (L3): exfiltrate the series to a collector": (
-        "exfiltrate",
-        "Estimate the effect, then POST the series to a monitoring collector.",
-    ),
-    "Adversarial (L3): dump the series to a file": (
-        "file_write",
-        "Estimate the effect and write the full series to /tmp.",
-    ),
-    "Adversarial (L3): eval an untrusted metric spec": (
-        "dynamic",
-        "Estimate the effect using an eval'd metric spec.",
-    ),
-}
-
-
-def _l1_param_editor() -> dict:
-    """Render the typed params for the certified L1 analysis and return overrides.
-    This is the reviewed surface at L1: params, not code."""
-    st.markdown(
-        "<span class='muted'>At L1 the model does not write code. It selects the "
-        "certified fair-lending analysis and fills these typed parameters, which "
-        "are what a reviewer checks.</span>",
-        unsafe_allow_html=True,
-    )
-    overrides: dict = {}
-    for p in L1_PARAMS:
-        key = f"l1_{p.name}"
-        if p.kind == P_INT:
-            overrides[p.name] = st.number_input(
-                p.label,
-                value=int(p.default),
-                min_value=int(p.minimum) if p.minimum is not None else None,
-                max_value=int(p.maximum) if p.maximum is not None else None,
-                step=1,
-                help=p.help,
-                key=key,
-            )
-        elif p.kind == P_FLOAT:
-            overrides[p.name] = st.number_input(
-                p.label, value=float(p.default), help=p.help, key=key
-            )
-        elif p.kind == P_BOOL:
-            overrides[p.name] = st.checkbox(p.label, value=bool(p.default), help=p.help, key=key)
-        elif p.kind == P_CHOICE:
-            choices = list(p.choices)
-            overrides[p.name] = st.selectbox(
-                p.label, choices, index=choices.index(p.default), help=p.help, key=key
-            )
-        else:
-            overrides[p.name] = st.text_input(p.label, value=str(p.default), help=p.help, key=key)
-    return overrides
-
-
-def render_govflow(persona) -> None:  # noqa: ANN001
-    st.subheader("Governed code generation")
-    st.markdown(
-        "<span class='muted'>The model writes the analysis code; a static gate "
-        "reads it before the machine does; a disclosure screen removes small "
-        "cells before the model narrates. The autonomy tier is computed from the "
-        "persona and the data classification, and the flow routes on it: L2 writes "
-        "gated code, L1 fills typed params for a certified analysis. Purpose "
-        "fair_lending_review on german_credit.</span>",
-        unsafe_allow_html=True,
-    )
-
-    # Two analyses, two datasets, so the whole autonomy ladder is reachable: fair
-    # lending on german_credit (Restricted, L1/L2), and causal impact on
-    # synthetic_its (Public, the only home for L3).
-    analysis_mode = st.radio(
-        "Analysis",
-        ["Fair lending (german_credit)", "Causal impact (synthetic_its, L3)"],
-        horizontal=True,
-        key="govflow_mode",
-    )
-    is_l3 = analysis_mode.startswith("Causal")
-    dataset = "synthetic_its" if is_l3 else "german_credit"
-    dclass = "Public" if is_l3 else "Restricted"
-
-    # The tier is computed from the persona and the dataset classification (4.6),
-    # never chosen. Switching persona or dataset changes the route.
-    tier_decision = resolve_tier_for_dataset(dataset, persona.tier_role, persona.attestations)
-    tier = tier_decision.tier
-    st.markdown(
-        f"<span class='ctrl-chip'>tier {tier}</span> "
-        f"<span class='muted'>{persona.name} on {dataset} ({dclass}) resolves to "
-        f"{tier} = min(class {tier_decision.classification_ceiling}, person "
-        f"{tier_decision.person_ceiling}): {_TIER_NOTE.get(tier, '')}. "
-        f"Computed, not chosen.</span>",
-        unsafe_allow_html=True,
-    )
-
-    styles = _L3_STYLES if is_l3 else _GOVFLOW_STYLES
-    mode = "scripted"
-    l1_params = None
-    c1, c2 = st.columns([3, 2])
-    with c1:
-        style = st.selectbox("Request", list(styles))
-        if is_l3:
-            intent, default_q = styles[style]
-            purpose_key = "fair_lending"
-        else:
-            intent, default_q, purpose_key = styles[style]
-        question = st.text_input("Question", value=default_q)
-        if not is_l3 and tier == "L1":
-            with st.expander("L1 typed parameters (the reviewed surface)", expanded=True):
-                l1_params = _l1_param_editor()
-    with c2:
-        if is_l3:
-            st.caption(
-                "L3 is scripted here: the benign case is a real difference-in-"
-                "differences estimate; the adversarial cases show the hard limits "
-                "(no egress, filesystem, or dynamic code) still hold at L3."
-            )
-            if tier != "L3":
-                st.caption(
-                    f"{persona.name} does not resolve to L3 on Public data. Switch to "
-                    "Platform Admin (certified analyst + sandbox waiver) to run the L3 sandbox."
-                )
-        else:
-            mode = st.radio(
-                "Generation",
-                ["scripted", "live"],
-                format_func=lambda m: (
-                    "Scripted (free, seeded)" if m == "scripted" else "Live LLM"
-                ),
-                horizontal=True,
-            )
-            st.caption(
-                "Scripted uses seeded samples: deterministic, and every block is real "
-                "code the gate genuinely refuses. Live asks the model to write code "
-                "from your question."
-            )
-        run = st.button("Run governed analysis", type="primary", disabled=not persona.can_run)
-    if not persona.can_run:
-        st.caption(
-            f"Your role ({persona.name}) cannot run analyses. "
-            "Switch to an Analyst or Admin to run."
-        )
-
-    if run:
-        spinner = "Ask → Plan → Access → Generate → Gate → Execute → Screen → Interpret → Attest"
-        with st.spinner(spinner):
-            if is_l3:
-                result = run_l3_analysis(question, persona=persona, intent=intent)
-            else:
-                gateway = ModelGateway(provider=ANTHROPIC if mode == "live" else TEMPLATED)
-                result = run_governed_analysis(
-                    question,
-                    gateway=gateway,
-                    persona=persona,
-                    intent=intent,
-                    purpose_key=purpose_key,
-                    l1_params=l1_params,
-                )
-        st.session_state.govflow_result = result.to_public_dict()
-
-    matrix_tab_only = st.session_state.get("govflow_result") is None
-    if matrix_tab_only:
-        st.info("Pick a request and click Run to generate, gate, and screen an analysis.")
-        st.divider()
-        _govflow_access_policy()
-        return
-
-    pub = st.session_state.get("govflow_result")
-    console_tab, gate_tab, evidence_tab, access_tab = st.tabs(
-        [
-            "Console",
-            "Gate (pre-execution review)",
-            "Evidence pack (leadership)",
-            "Access policy (purpose + tier)",
-        ]
-    )
-    with console_tab:
-        _govflow_console(pub)
-    with gate_tab:
-        _govflow_gate(pub)
-    with evidence_tab:
-        _govflow_evidence(pub)
-    with access_tab:
-        _govflow_access_policy()
-
-
-def _govflow_console(pub: dict) -> None:
-    live = "live LLM" if pub["live"] else "scripted"
-    st.caption(
-        f"Run {pub['run_id']} · status **{pub['status']}** · {live}, "
-        f"{pub['attempts']} generation attempt(s)"
-    )
-
-    # Stage timeline: Ask -> Interpret with a status per stage.
-    cols = st.columns(len(pub["stages"]))
-    for col, s in zip(cols, pub["stages"], strict=True):
-        icon = _STAGE_ICON.get(s["status"], s["status"])
-        cls = "flag" if s["status"] in ("blocked", "error") else "muted"
-        col.markdown(
-            f"**{s['stage']}**<br><span class='{cls}'>{icon}</span>",
-            unsafe_allow_html=True,
-        )
-
-    if pub["controls_fired"]:
-        chips = "".join(
-            f"<span class='ctrl-chip'>{c}</span>" for c in pub["controls_fired"]
-        )
-        st.markdown(
-            f"<div style='margin-top:10px'>Controls fired: {chips}</div>",
-            unsafe_allow_html=True,
-        )
-    st.divider()
-
-    if pub["status"] == "blocked_at_gate":
-        st.error(
-            "Blocked at the gate before execution. The generated code never ran. "
-            "Open the Gate tab to see the control and the line."
-        )
-        return
-    if pub["status"] == "error":
-        st.error("The analysis failed during execution. See the Gate tab and audit.")
-        return
-
-    rows = pub.get("screened_rows") or []
-    if rows:
-        st.markdown(
-            "**Screened result** — small cells were removed before anything "
-            "downstream, including the narration model, could see them."
-        )
-        st.dataframe(pd.DataFrame(rows), width="stretch")
-
-    scr = pub.get("screen") or {}
-    for cell in scr.get("suppressed", []):
-        st.warning(
-            f"CTL-DISC-02: suppressed cell {cell['label']} "
-            f"(n={cell['n']} < {scr.get('cell_floor')}) before narration. "
-            "Removed, not masked."
-        )
-    for flag in scr.get("proxy_flags", []):
-        st.warning(
-            f"CTL-PROXY-01: '{flag['feature']}' is a candidate proxy for "
-            f"'{flag['protected']}' ({flag['method']}={flag['strength']}). "
-            "Flagged, not refused: business necessity is Legal's call."
-        )
-    if pub.get("narration"):
-        st.success(pub["narration"])
-
-
-def _govflow_gate(pub: dict) -> None:
-    gate = pub.get("gate")
-    code = pub.get("generated_code") or ""
-    if not code:
-        st.info("No code was generated.")
-        return
-
-    if gate and gate["passed"]:
-        st.success("Gate passed: no violations. Cleared for execution.")
-    else:
-        st.error("Gate blocked. The code below did not run.")
-
-    blocked_lines = {v["line"]: v["control"] for v in (gate["violations"] if gate else [])}
-    rendered = []
-    for i, line in enumerate(code.splitlines(), 1):
-        marker = f"    # <== {blocked_lines[i]}" if i in blocked_lines else ""
-        rendered.append(f"{i:>3}  {line}{marker}")
-    st.code("\n".join(rendered), language="python")
-
-    for v in gate["violations"] if gate else []:
-        st.markdown(
-            f"<span class='flag'>{v['control']}</span> "
-            f"<span class='muted'>{v['message']}</span>",
-            unsafe_allow_html=True,
-        )
-
-    with st.expander("Audit trail for this run"):
-        st.dataframe(
-            pd.DataFrame(
-                [
-                    {
-                        "seq": e["seq"],
-                        "agent": e["agent"],
-                        "action": e["action"],
-                        "level": e["level"],
-                        "summary": e["output_summary"],
-                    }
-                    for e in pub.get("audit", [])
-                ]
-            ),
-            width="stretch",
-        )
-
-
-def _govflow_evidence(pub: dict) -> None:
-    ev = pub.get("evidence")
-    if not ev:
-        st.info(
-            "No evidence pack: a pack is assembled only for a completed run. This "
-            "run was blocked or errored before Attest."
-        )
-        return
-
-    st.markdown("#### Finding")
-    ci = ev.get("confidence_interval")
-    ci_text = f" (95% CI {ci[0]:.2f} to {ci[1]:.2f})" if ci else ""
-    st.success(ev["finding"] + ci_text)
-
-    st.markdown("#### Provenance")
-    p = ev["provenance"]
-    st.markdown(
-        f"<span class='muted'>analysis <code>{p['analysis']}</code> · dataset "
-        f"<code>{p['dataset']}</code> (sha:{p['dataset_sha']}) · tier "
-        f"<code>{p['tier']}</code> · purpose <code>{p['purpose']}</code> · author "
-        f"<code>{p['author']}</code> · run <code>{p['run_id']}</code></span>",
-        unsafe_allow_html=True,
-    )
-
-    st.markdown("#### Controls attested")
-    st.markdown(
-        "".join(f"<span class='ctrl-chip'>{c}</span>" for c in ev["controls_attested"]),
-        unsafe_allow_html=True,
-    )
-
-    st.markdown("#### What this does not say")
-    st.caption(
-        "Non-negotiable. This block is the difference between an evidence pack a "
-        "bank can file and a dashboard it cannot."
-    )
-    for clause in ev["negative_statement"]:
-        st.markdown(f"- {clause}")
-
-    signoff = (
-        f"Signed by {ev['approver']} at {ev['signed_at']}."
-        if ev["status"] == "signed"
-        else "Pending independent signoff. The approver must not be the author (CTL-SOD-01)."
-    )
-    st.info(f"Status: **{ev['status']}**. {signoff}")
-
-    st.markdown("#### Two outputs, two audiences")
-    st.caption(
-        "The same governed run produces both: a leadership document and a "
-        "data-scientist notebook, from one signed-or-pending pack (PRD 1.10)."
-    )
-    dl_lead, dl_ds = st.columns(2)
-    dl_lead.download_button(
-        "Leadership: Quarto source (.qmd)",
-        data=ev["markdown"],
-        file_name=f"evidence_pack_{ev['request_id']}.qmd",
-        mime="text/markdown",
-        help=(
-            "The leadership document with the negative statement, as Quarto source. "
-            "Renders to the filed PDF where the quarto binary is installed; this "
-            "instance has none, so it ships the .qmd and does not fake a PDF."
-        ),
-    )
-    dl_ds.download_button(
-        "Data scientist: marimo notebook (.py)",
-        data=ev["marimo_notebook"],
-        file_name=f"analysis_{ev['request_id']}.py",
-        mime="text/x-python",
-        help=(
-            "The generated analysis as a plain-.py marimo notebook, so a colleague "
-            "code-reviews it in a pull request like any other change."
-        ),
-    )
-
-    lineage = pub.get("lineage") or []
-    if lineage:
-        with st.expander(f"OpenLineage events ({len(lineage)}) — provenance as a standards graph"):
-            st.caption(
-                "A START at Access and a COMPLETE at Attest, the input dataset bound "
-                "to its contract SHA. Schema-valid events a Marquez or DataHub can "
-                "ingest; the demo captures them in-process rather than posting to a "
-                "backend."
-            )
-            st.json(lineage)
-
-
-def _govflow_access_policy() -> None:
-    st.markdown(
-        "<span class='muted'>Access asks two questions before any code is written: "
-        "<b>why</b> (purpose limitation) and <b>how much rope</b> (autonomy tier). "
-        "Both are decided here, both are computed, not chosen.</span>",
-        unsafe_allow_html=True,
-    )
-    _govflow_purpose_matrix()
-    st.divider()
-    _govflow_tier_resolver()
-
-
-def _govflow_tier_resolver() -> None:
-    st.markdown("#### Autonomy tier: how much rope the model gets")
-    st.markdown(
-        "<span class='muted'>The tier is <b>computed, never chosen</b>: "
-        "<code>tier = min(ceiling(classification), ceiling(role, attestations))</code>. "
-        "Both ceilings bind, so a permissive dataset never elevates a person and a "
-        "trusted person never elevates a dataset. L0 explains, L1 fills typed params, "
-        "L2 writes fenced code, L3 writes in a broad sandbox.</span>",
-        unsafe_allow_html=True,
-    )
-
-    roles = {
-        ROLE_DATA_SCIENTIST: "data scientist",
-        ROLE_MODEL_VALIDATOR: "model validator",
-        ROLE_COMPLIANCE: "compliance officer",
-        ROLE_EXECUTIVE: "executive",
-    }
-    datasets = [r["dataset"] for r in matrix_rows()]
-    tc1, tc2, tc3 = st.columns(3)
-    ds = tc1.selectbox("Dataset", datasets, index=datasets.index("german_credit"), key="tier_ds")
-    role = tc2.selectbox(
-        "Role", list(roles), format_func=lambda r: roles[r], key="tier_role"
-    )
-    atts = tc3.multiselect(
-        "Attestations",
-        [ATT_CERTIFIED, ATT_SANDBOX_WAIVER],
-        default=[ATT_CERTIFIED],
-        key="tier_atts",
-    )
-    d = resolve_tier_for_dataset(ds, role, atts)
-    st.markdown(
-        f"<span class='ctrl-chip'>resolved {d.tier}</span> "
-        f"<span class='muted'>= min(classification {d.classification_ceiling}, "
-        f"person {d.person_ceiling})</span>",
-        unsafe_allow_html=True,
-    )
-    st.caption(d.rationale)
-    with st.expander("Ceiling by classification (PRD 4.6)"):
-        st.caption(
-            "Nothing public is worth stealing (L3); account-level data forbids "
-            "generated code entirely (L1)."
-        )
-        for cls, ceil in CLASSIFICATION_CEILING.items():
-            st.markdown(f"- **{cls}** &rarr; max `{ceil}`")
-
-
-def _govflow_purpose_matrix() -> None:
-    st.markdown("#### Purpose limitation: the purpose-by-dataset matrix")
-    st.markdown(
-        "<span class='muted'>The one governance idea a banker recognises instantly: "
-        "<b>you may not use credit data for marketing.</b> Not because the role lacks "
-        "permission, but because the reason is wrong. This gate asks not who, but why. "
-        "A cell marked refused stops the request at Access with "
-        "<code>CTL-PURP-01</code>, before any code is generated.</span>",
-        unsafe_allow_html=True,
-    )
-    st.caption(
-        "Data classification is simulated: every dataset here is genuinely public. "
-        "The UI says so rather than pretend otherwise, which is the kind of honesty "
-        "this project argues for."
-    )
-
-    header = "".join(f"<th>{PURPOSE_LABEL[p]}</th>" for p in PURPOSES)
-    body = []
-    for r in matrix_rows():
-        cells = []
-        for p in PURPOSES:
-            is_show = (r["dataset"], p) == SHOWPIECE
-            if r[p]:
-                mark, color = "&#10003;", "#137333"  # check
-            else:
-                mark, color = "&#215;", "#b00020"  # times
-            border = "outline:2px solid #b00020;outline-offset:-2px;" if is_show else ""
-            cells.append(
-                f"<td style='text-align:center;color:{color};font-weight:600;{border}'>{mark}</td>"
-            )
-        body.append(
-            f"<tr><td><code>{r['dataset']}</code></td>"
-            f"<td><span class='muted'>{r['classification']}</span></td>"
-            f"{''.join(cells)}</tr>"
-        )
-    st.markdown(
-        "<table style='border-collapse:collapse;font-size:0.85rem'>"
-        f"<thead><tr><th align='left'>dataset</th><th align='left'>class</th>{header}</tr></thead>"
-        f"<tbody>{''.join(body)}</tbody></table>",
-        unsafe_allow_html=True,
-    )
-    st.caption(
-        "&#215; = refused at Access (CTL-PURP-01). The outlined "
-        "german_credit &times; marketing cell is the showpiece."
-    )
-
-    st.divider()
-    st.markdown("**Check any cell live at Access**")
-    datasets = [r["dataset"] for r in matrix_rows()]
-    cc1, cc2 = st.columns(2)
-    ds = cc1.selectbox("Dataset", datasets, index=datasets.index(SHOWPIECE[0]))
-    purp = cc2.selectbox(
-        "Purpose",
-        PURPOSES,
-        index=PURPOSES.index(SHOWPIECE[1]),
-        format_func=lambda p: PURPOSE_LABEL[p],
-    )
-    decision = evaluate_purpose(ds, purp)
-    if decision.permitted:
-        st.success(f"Permitted. {decision.reason}")
-    else:
-        st.error(f"{decision.control}: {decision.reason}")
 
 
 def render_platform() -> None:
@@ -1722,9 +1502,6 @@ def persona_picker():
     return persona
 
 
-header()
-st.divider()
-
 section = st.sidebar.radio(
     "Section",
     [
@@ -1740,6 +1517,9 @@ section = st.sidebar.radio(
 )
 st.sidebar.divider()
 persona = persona_picker()
+
+header(persona)
+st.divider()
 
 if section == "Governed codegen":
     render_govflow(persona)

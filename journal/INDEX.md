@@ -1,10 +1,27 @@
 # Sentinel — Journal Index
 
-Last refreshed: 2026-07-18 18:59
+Last refreshed: 2026-07-19 01:13
 
-Latest entry: [2026-07-18-1859-v4-merged-and-deployed-to-prod.md](entries/2026-07-18-1859-v4-merged-and-deployed-to-prod.md)
+Latest entry: [2026-07-19-0113-showtell-stepper-and-design-system.md](entries/2026-07-19-0113-showtell-stepper-and-design-system.md)
 
 ## Where we are now
+
+**The show-and-tell rework (v5) is built and waiting for morning review on
+branch `claude/resume-review-build-20aab7`. The Governed codegen surface is a
+nine-stage walkthrough wearing the unified-app design system from
+docs/ui-spec.md: stepper rail, per-stage explainers, controls that explain
+themselves, denied columns struck and masked, Screen before/after, the Gate
+Fix it repair, and an Architecture stop. 355 tests pass. Prod still runs v4;
+nothing deployed.**
+
+Deferred to the phased plan (docs/features/unified-app-build.md): login
+persona gate, grouped sidebar, command-center landing, dark mode, dataset
+onboarding (D), seeded run history (H). OPA externalisation still waits on
+Sandip.
+
+Everything below is the prior state: v4 in prod.
+
+---
 
 **v4 is merged to main (`3b17921`) and LIVE in prod, verified by loading the page
 and running a flow. The autonomy ladder works end to end, L0 to L3. Only OPA
@@ -243,6 +260,7 @@ out).
 
 ## Recent entries
 
+- [2026-07-19-0113-showtell-stepper-and-design-system.md](entries/2026-07-19-0113-showtell-stepper-and-design-system.md) : overnight build of the show-and-tell brief (docs/more_ideas.md). The govflow surface became a nine-stage stepper with control explainers, struck/masked denied columns, Screen before/after, and the Gate Fix it repair; an adversarial review confirmed 18 findings, all fixed. Mid-build Sandip pointed at the unified-app mockup + docs/ui-spec.md; the stepper and chrome now wear that design system (topbar lockup, nav-rail sidebar, node rail, phead/In-Does-Out/engine bar, Architecture stop). 355 tests. On a branch, PR for morning review; prod untouched.
 - [2026-07-18-1859-v4-merged-and-deployed-to-prod.md](entries/2026-07-18-1859-v4-merged-and-deployed-to-prod.md) : Sandip said merge and deploy. PR #3 merged to main (`3b17921`); deployed bundle `sentinel-20260718-185231.zip`, EB green, live-LLM on, no drift/missing-deps. Verified the right way this time: loaded the page and ran a flow on the instance. The Governed codegen surface renders all the new v4 pieces (mode toggle, computed tier chip, purpose matrix), and run 696ef64456bc completed through all nine stages (Execute passing = the sandbox ran generated code in prod). prod is v4.
 - [2026-07-18-1844-autonomy-ladder-complete-l0-to-l3.md](entries/2026-07-18-1844-autonomy-ladder-complete-l0-to-l3.md) : finished the buildable v4 (Sandip AFK, said "finish everything"). The flow computes the tier from the persona and routes: L2 codegen (analyst), L1 certified-analysis+params (junior, no code), L0 blocked (second line). Onboarded synthetic_its (fully synthetic, known +12 effect) and built the L3 broad-sandbox route: wide allowlist, same egress/fs/dyncode deny lists (more rope, same hard limits); benign DiD recovers +11.9, three adversarial requests refused. govflow mode toggle so the tier recomputes per dataset. 316 tests. Deferred: OPA (external server). Not deployed; prod still v0-v3.
 - [2026-07-18-1756-v3-outputs-and-v4-access-policy.md](entries/2026-07-18-1756-v3-outputs-and-v4-access-policy.md) : on `feat/govcodegen-v4`, three slices. The two v3 secondary outputs: a real loadable marimo notebook (generated analysis as a reviewable `def analysis(ctx)` + governance context) and a Quarto `.qmd`/PDF render path (honest fallback where no `quarto` binary). Then two v4 items: the purpose-by-dataset matrix (`CTL-PURP-01` refuses credit-data-for-marketing at Access, wired into the flow) and autonomy tier resolution (`tier = min(class ceiling, person ceiling)`, both binding, demonstrated live in the Access tab). 293 tests, ruff clean. Pushed, no PR yet, prod untouched. Deferred: OPA, L3+synthetic_its, the frozen-L2 flow rewrite + L1/L3 execution routes.
@@ -268,7 +286,7 @@ out).
 
 ## Recent weekly summaries
 
-None yet. Week 2026-W28 (through Sun 2026-07-12) has entries but no summary.
+- [2026-W28-summary.md](weekly/2026-W28-summary.md) : the founding week. Sentinel went from nothing to a working governed app in one day (Sun 2026-07-12): real ML, six-module harness, human gate, six-tab UI. W29 (through Sun 2026-07-19) is still open; its summary is owed on Monday.
 
 ## Working hypotheses
 
