@@ -150,6 +150,15 @@ Row: `[brand] [spacer] [ctx-chip: persona] [ctx-chip: dataset+classification] [c
   certified), dataset name + a classification `.badge.danger` inline, purpose,
   and tier (accent-colored badge). All chips are clickable buttons that jump to
   the relevant stage/control.
+  **As built (2026-07-19), the chips are run-scoped.** Data and Purpose describe
+  a run, so they render only on a screen that has one in scope: the Run
+  walkthrough (from the published run, else the draft config) and the credit
+  pipeline once a run has started (Data only; an orchestrator run declares no
+  purpose). The dashboard and the catalog screens show no chips rather than
+  inheriting a german_credit / fair-lending default that describes nothing on
+  the page. Persona and tier left the topbar earlier: identity is the header's
+  "Acting as" popover, and the tier is run-scope, shown in the Run flow. The
+  only always-on element is the UNGOVERNED warning badge, which is global state.
 - **Icon buttons** (`.iconbtn`): transparent bg, chrome-border outline, 8px
   radius. Three: "▦ Stack" (jumps to the Architecture stop), "▤ Controls" (opens
   the control-plane modal), and a theme toggle (◑/◐ depending on state,
@@ -181,6 +190,16 @@ Platform          Platform [5]   Adoption
   per section: home (roof+base), play (triangle), database (stacked ellipse
   cylinder), check (rounded square + checkmark), grid (2×2 squares), bar-chart
   (axis + three bars).
+
+**As built (2026-07-19).** Rail width is 222px, not 238px: left-aligning the
+labels under their group headers freed the difference. Rows stack flush (the
+9px/11px padding is the row height, ~37px); the only vertical air in the rail is
+the 14px above a group label and the 6px under it. Streamlit's 16px default gap
+between block elements is zeroed inside the sidebar, since it doubled that
+rhythm and left the rail loose. Icons are Material Symbols at 16px rather than
+inline SVG, since the nav items are `st.button(icon=...)`. An in-app Back
+control sits above Overview, pinned (`position:sticky`) to the top of the
+scrolling rail with a 1px rule under it, so it stays reachable on a long screen.
 
 ### 2.3 Stepper rail (`.rail`, inside the Run view only)
 

@@ -135,6 +135,45 @@ def test_adoption_section_renders_seeded_history():
     # layer in test_adoption.py::test_per_dataset_matches_the_store.
 
 
+def test_context_chips_are_run_scoped():
+    """Data/Purpose describe a run, so they must not follow the user onto
+    screens that have no run in scope (the dashboard and the catalogs were
+    inheriting a german_credit / fair-lending default that described nothing)."""
+    def _topbar(at):
+        return next(m.value for m in at.markdown if "class='topbar'" in m.value)
+
+    at = _boot()
+    # Overview: no run, no chips.
+    assert "ctx-chip" not in _topbar(at)
+    # Pipeline pre-run: still no run, still no chips.
+    at.button(key="nav_pipeline").click().run()
+    assert "ctx-chip" not in _topbar(at)
+    # The Run screen is run-scoped: both chips, from the config defaults.
+    at.button(key="nav_run").click().run()
+    bar = _topbar(at)
+    assert "german_credit" in bar
+    assert bar.count("ctx-chip") == 2
+    # Leaving the run screen drops them again, even with a draft in session.
+    at.button(key="nav_datasets").click().run()
+    assert at.session_state["govflow_draft"]["dataset"] == "german_credit"
+    assert "ctx-chip" not in _topbar(at)
+
+
+def test_pipeline_chips_appear_once_a_run_is_scoped():
+    """An orchestrator run scopes the Pipeline screen: the Data chip shows the
+    run's dataset. That run declares no purpose, so no Purpose chip is faked."""
+    at = _boot(timeout=120)
+    at.button(key="nav_pipeline").click().run()
+    # The hero pipeline's Run button carries no key; the sidebar's does.
+    next(b for b in at.button if b.label == "Run" and not b.key).click().run()
+    assert not at.exception
+    assert at.session_state["run_id"]
+    bar = next(m.value for m in at.markdown if "class='topbar'" in m.value)
+    assert "german_credit" in bar
+    assert bar.count("ctx-chip") == 1
+    assert "Purpose" not in bar
+
+
 def test_reclicking_active_nav_item_is_a_noop():
     # Regression: re-clicking the already-active nav item must not reset the
     # visible section's widget state (it did while the handler wrote section +
