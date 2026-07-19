@@ -1,6 +1,6 @@
 # Sentinel — Journal Index
 
-Last refreshed: 2026-07-19 10:30
+Last refreshed: 2026-07-19 10:58
 
 Latest entry: [2026-07-19-1030-v6-deployed-to-prod.md](entries/2026-07-19-1030-v6-deployed-to-prod.md)
 
@@ -303,7 +303,8 @@ out).
 
 ## Recent weekly summaries
 
-- [2026-W28-summary.md](weekly/2026-W28-summary.md) : the founding week. Sentinel went from nothing to a working governed app in one day (Sun 2026-07-12): real ML, six-module harness, human gate, six-tab UI. W29 (through Sun 2026-07-19) is still open; its summary is owed on Monday.
+- [2026-W29-summary.md](weekly/2026-W29-summary.md) : the rethink-and-rebuild week. Monday shipped the platform (AWS deploy + HTTPS, the 13-item buildout, pgvector on real AWS); Tuesday turned on live-LLM in prod. Friday's rethink found the harness was governing scikit-learn, not the LLM, and reframed the project around governing generated code via an autonomy ladder (tier = role x data class). v0 through v6 built and deployed across the weekend; by Sunday the mockup was the app and prod served a unified governed code-writing platform. Two beliefs flipped: the segfault was pyarrow not OpenBLAS, and "health 200 means deployed" died.
+- [2026-W28-summary.md](weekly/2026-W28-summary.md) : the founding week. Sentinel went from nothing to a working governed app in one day (Sun 2026-07-12): real ML, six-module harness, human gate, six-tab UI.
 
 ## Working hypotheses
 
