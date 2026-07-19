@@ -340,10 +340,89 @@ st.markdown(
       .gv-amber td, tr.gv-amber { background:var(--warn-soft); }
       .gv-below { color:var(--warn-ink); font-size:0.75rem; font-weight:600; white-space:nowrap; }
       .stage-status { margin:6px 0 10px 0; }
+
+      /* ---------- sidebar nav groups (ui-spec 2.2) ---------- */
+      .gl { font-size:9.5px; font-weight:700; letter-spacing:.11em; text-transform:uppercase;
+            color:var(--chrome-muted); padding:0 10px; margin:14px 0 4px 0; }
+      section[data-testid="stSidebar"] .stButton button {
+        display:flex; justify-content:flex-start; width:100%; padding:8px 11px;
+        border-radius:9px; border:1px solid transparent; background:transparent;
+        color:var(--chrome-muted); font-size:13.5px; font-weight:600; min-height:0;
+      }
+      section[data-testid="stSidebar"] .stButton button:hover {
+        background:var(--chrome-hover); color:var(--chrome-ink); border-color:transparent;
+      }
+      section[data-testid="stSidebar"] .stButton button[kind="primary"] {
+        background:var(--chrome-abg); color:var(--chrome-aink);
+        border:1px solid var(--chrome-aborder);
+      }
+      section[data-testid="stSidebar"] .stButton button p { font-size:13.5px; }
+
+      /* ---------- command-center dashboard (ui-spec 3.2) ---------- */
+      .dashhead .h2 { font-size:22px; font-weight:650; color:var(--ink); margin:2px 0 4px 0; }
+      .dashhead .lede { color:var(--muted); font-size:13.5px; max-width:70ch; }
+      .cta-run { display:flex; align-items:center; gap:16px; background:var(--surface);
+        border:1px solid var(--border-strong); border-radius:var(--r-lg);
+        box-shadow:var(--shadow-md); padding:20px 24px; margin:18px 0 4px 0; }
+      .cta-run .cta-t { font-size:18px; font-weight:650; color:var(--ink); }
+      .cta-run .cta-d { font-size:12.5px; color:var(--muted); margin-top:3px; }
+      .tile-stat { display:flex; align-items:baseline; gap:9px; }
+      .tile-stat .big { font-size:30px; font-weight:700;
+        font-variant-numeric:tabular-nums; color:var(--ink); }
+      .tile-stat .unit { font-size:12.5px; color:var(--muted); }
+      .breakrow { display:flex; gap:6px; flex-wrap:wrap; margin:10px 0 4px 0; }
+      .barchart { display:flex; align-items:flex-end; gap:10px; height:70px;
+        padding-top:14px; margin-top:6px; }
+      .barchart .bcol { flex:1; display:flex; flex-direction:column; align-items:center;
+        justify-content:flex-end; height:100%; gap:3px; }
+      .barchart .bar { width:100%; background:var(--accent-soft);
+        border:1px solid var(--accent-soft-border); border-radius:4px 4px 0 0; }
+      .barchart .v { font-family:var(--mono); font-size:10.5px; color:var(--muted); }
+      .barchart .bcap { font-size:10px; color:var(--faint); }
     </style>
     """,
     unsafe_allow_html=True,
 )
+
+# The always-dark login gate (ui-spec 1.5 + 3.1): rail tokens are hardcoded on
+# purpose; the sign-in moment does not follow the app theme.
+_LOGIN_CSS = """
+    <style>
+      .stApp { background:radial-gradient(1100px 560px at 50% -8%, #16274a, #0d1a30); }
+      .block-container { max-width:900px; padding-top:4rem; }
+      .login-brand { display:flex; align-items:center; justify-content:center; gap:12px; }
+      .login-brand svg { width:30px; height:30px; }
+      .login-brand .wm { font-weight:700; letter-spacing:.24em; font-size:16px; color:#eef3fc; }
+      .login-brand .sub { color:#93a4c2; font-size:11.5px; letter-spacing:.05em;
+        border-left:1px solid #243a5e; padding-left:11px; }
+      .login-eyebrow { text-align:center; font-size:11px; font-weight:700;
+        letter-spacing:.16em; text-transform:uppercase; color:#7fa6e6; margin-top:26px; }
+      .login-h { text-align:center; font-size:28px; font-weight:650; color:#ffffff;
+        margin:6px 0 8px 0; }
+      .login-sub { text-align:center; color:#93a4c2; font-size:14px; max-width:54ch;
+        margin:0 auto 10px auto; }
+      .login-foot { text-align:center; color:#93a4c2; font-size:11.5px; margin-top:18px; }
+      .pcard { position:relative; background:rgba(255,255,255,.04);
+        border:1px solid #243a5e; border-radius:14px 14px 0 0; border-bottom:0;
+        padding:16px 16px 8px 16px; text-align:left; min-height:148px; }
+      .pcard.hero { border-color:#3f6bb0; background:rgba(91,141,239,.1); }
+      .pcard .picon { width:46px; height:46px; border-radius:12px;
+        background:rgba(91,141,239,.14); color:#9dc0f5; display:flex; align-items:center;
+        justify-content:center; font-size:20px; font-weight:700; }
+      .pcard .pname { font-size:15px; font-weight:650; color:#ffffff; margin-top:10px; }
+      .pcard .prole { font-size:11.5px; color:#93a4c2; }
+      .pcard .pcap { font-size:12px; color:#b9c8e2; line-height:1.45; margin-top:6px; }
+      .pcard .ptier { position:absolute; top:14px; right:14px; font-family:var(--mono);
+        font-size:11px; font-weight:700; background:rgba(91,141,239,.16);
+        border:1px solid #2f4d7e; color:#9dc0f5; padding:2px 8px; border-radius:999px; }
+      .pcard .phero-tag { font-size:10px; font-weight:700; letter-spacing:.06em;
+        text-transform:uppercase; color:#5fdc8a; margin-top:6px; }
+      div[data-testid="stVerticalBlockBorderWrapper"]:has(.pcard) { gap:0; }
+      .stButton button[kind="secondary"], .stButton button[kind="primary"] {
+        width:100%; border-radius:0 0 14px 14px;
+      }
+    </style>
+"""
 
 if "orch" not in st.session_state:
     st.session_state.orch = Orchestrator()
@@ -357,7 +436,7 @@ analysis_engine: AnalysisEngine = st.session_state.analysis_engine
 
 
 # --------------------------------------------------------------------------
-# Header + controls
+# Login gate (ui-spec 3.1): the six personas as cards, before any chrome.
 # --------------------------------------------------------------------------
 _SHIELD_SVG = (
     "<svg viewBox='0 0 24 24' aria-hidden='true'>"
@@ -366,6 +445,119 @@ _SHIELD_SVG = (
     "stroke-linecap='round' stroke-linejoin='round'/></svg>"
 )
 
+# Card copy per ui-spec 3.1 (role line, capability one-liner, tier badge).
+_LOGIN_CARDS: dict[str, dict] = {
+    "analyst": {
+        "role": "First line · certified",
+        "cap": "Writes gated code against the fenced API. Runs this walkthrough.",
+        "tier": "L2",
+        "icon": "DS",
+        "hero": True,
+    },
+    "junior_analyst": {
+        "role": "First line · uncertified",
+        "cap": "Picks a certified analysis and fills typed params. Writes no code.",
+        "tier": "L1",
+        "icon": "JA",
+        "hero": False,
+    },
+    "model_validator": {
+        "role": "Second line · MRM",
+        "cap": "Independently reviews fairness and evals. Does not run.",
+        "tier": "L0",
+        "icon": "MV",
+        "hero": False,
+    },
+    "mrm_approver": {
+        "role": "Second line · sign-off",
+        "cap": "Holds the promotion sign-off. Four-eyes, never self-approves.",
+        "tier": "L0",
+        "icon": "AP",
+        "hero": False,
+    },
+    "auditor": {
+        "role": "Third line",
+        "cap": "Read-only across the audit trail, evidence, and lineage.",
+        "tier": "L0",
+        "icon": "AU",
+        "hero": False,
+    },
+    "admin": {
+        "role": "Platform",
+        "cap": "May toggle a control (audited). L3 on Public data, caps at L2 here.",
+        "tier": "L3",
+        "icon": "AD",
+        "hero": False,
+    },
+}
+
+
+def render_login() -> None:
+    """The faux sign-in (ui-spec 3.1): always-dark, six persona cards, no auth.
+    Picking a card writes persona_id and reruns into the shell."""
+    st.markdown(_LOGIN_CSS, unsafe_allow_html=True)
+    st.markdown(
+        f"""
+        <div class='login-brand'>{_SHIELD_SVG}
+          <span class='wm'>SENTINEL</span>
+          <span class='sub'>Governed agentic analysis</span></div>
+        <div class='login-eyebrow'>Acting as</div>
+        <div class='login-h'>Choose an identity</div>
+        <div class='login-sub'>Every persona is governed differently. Your role and
+        attestations set how much machine autonomy the platform grants, computed as
+        the lower of the two.</div>
+        """,
+        unsafe_allow_html=True,
+    )
+    personas = {p.id: p for p in all_personas()}
+    ordered = [pid for pid in _LOGIN_CARDS if pid in personas]
+    for row_ids in (ordered[:3], ordered[3:]):
+        cols = st.columns(3)
+        for col, pid in zip(cols, row_ids, strict=False):
+            card = _LOGIN_CARDS[pid]
+            p = personas[pid]
+            hero_cls = " hero" if card["hero"] else ""
+            hero_tag = (
+                "<div class='phero-tag'>Runs this walkthrough</div>" if card["hero"] else ""
+            )
+            with col:
+                st.markdown(
+                    f"""
+                    <div class='pcard{hero_cls}'>
+                      <span class='ptier'>{card["tier"]}</span>
+                      <div class='picon'>{card["icon"]}</div>
+                      <div class='pname'>{p.name}</div>
+                      <div class='prole'>{card["role"]}</div>
+                      <div class='pcap'>{card["cap"]}</div>
+                      {hero_tag}
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+                if st.button(
+                    "Act as this persona",
+                    key=f"login_{pid}",
+                    type="primary" if card["hero"] else "secondary",
+                    use_container_width=True,
+                ):
+                    st.session_state.persona_id = pid
+                    st.session_state.section = "Overview"
+                    st.rerun()
+    st.markdown(
+        "<div class='login-foot'>Faux sign-in for the demo. No credentials, no auth. "
+        "Pick anyone to enter.</div>",
+        unsafe_allow_html=True,
+    )
+
+
+if "persona_id" not in st.session_state:
+    render_login()
+    st.stop()
+
+
+# --------------------------------------------------------------------------
+# Header + controls
+# --------------------------------------------------------------------------
 # The six toggleable/explainable harness controls shown in the control plane.
 _PLANE_CATALOG = ["pii", "rbac", "guardrails", "audit", "human_gate", "eval_gate"]
 
@@ -1177,9 +1369,9 @@ def render_datasets() -> None:
         )
     st.dataframe(pd.DataFrame(rows), width="stretch")
     st.caption(
-        "'registered' datasets carry metadata + contract but are not downloaded "
-        "yet; the onboard script flips them to 'onboarded'. 'flagged' commercial "
-        "status means the license restricts commercial use and the platform blocks it."
+        "All 8 registered datasets ship onboarded (scripts/onboard_datasets.py "
+        "produces their local files). 'flagged' commercial status means the "
+        "license restricts commercial use and the platform blocks it."
     )
 
 
@@ -1199,7 +1391,10 @@ def render_adoption() -> None:
     c.metric("Human-override rate", f"{int(m['override_rate'] * 100)}%")
     d.metric("Template coverage", f"{int(m['template_coverage'] * 100)}%")
 
-    st.markdown("**Agent utilization** (invocations across all runs)")
+    st.markdown(
+        f"**Agent utilization** (invocations across the {m['credit_risk_runs']} "
+        "credit-pipeline runs)"
+    )
     st.bar_chart(
         pd.DataFrame(
             {"invocations": m["per_agent_invocations"]}
@@ -1209,10 +1404,15 @@ def render_adoption() -> None:
     st.markdown("**Runs per week** (seeded demo history)")
     wk = pd.DataFrame(m["weekly"], columns=["week", "runs"]).set_index("week")
     st.bar_chart(wk)
+
+    st.markdown("**Runs per dataset** (seeded demo history)")
+    pds = pd.DataFrame(m["per_dataset"], columns=["dataset", "runs"]).set_index("dataset")
+    st.bar_chart(pds, horizontal=True)
     st.caption(
-        "Seeded weekly history is labeled demo telemetry; the totals above include "
-        "live runs completed this session. Enterprise: this view reads the "
-        "platform's real run store."
+        "Seeded history comes from actually executed runs (see "
+        "scripts/seed_runs.py) and is labeled demo telemetry; the totals above "
+        "include live runs completed this session. Enterprise: this view reads "
+        "the platform's real run store."
     )
 
 
@@ -1474,6 +1674,131 @@ def render_analyses(persona) -> None:  # noqa: ANN001
 
 
 # --------------------------------------------------------------------------
+# Command-center landing (ui-spec 3.2)
+# --------------------------------------------------------------------------
+def render_home(persona) -> None:  # noqa: ANN001
+    """The tile dashboard: four live-number tiles + the Start-a-governed-run CTA.
+    Every number comes from the same helpers the surfaces themselves render."""
+    from sentinel.govflow import matrix_rows, resolve_tier_for_dataset
+    from sentinel.platform.certification import status_of
+
+    st.markdown(
+        "<div class='dashhead'><span class='eyebrow'>Governance command center</span>"
+        "<div class='h2'>The whole governed platform, at a glance</div>"
+        "<div class='lede'>Every surface is a live tile: data under classification, "
+        "analyses under certification, agents under templates, adoption trending up. "
+        "Start a governed run and watch one request flow through all of it.</div></div>",
+        unsafe_allow_html=True,
+    )
+
+    tier = resolve_tier_for_dataset(
+        "german_credit", persona.tier_role, persona.attestations
+    ).tier
+    with st.container(border=True):
+        cta_l, cta_r = st.columns([8, 3], vertical_alignment="center")
+        cta_l.markdown(
+            f"<div><div class='cta-t'>Start a governed run</div>"
+            f"<div class='cta-d'>german_credit · fair-lending review · resolves to "
+            f"{tier} · nine controls arm before any code runs</div></div>",
+            unsafe_allow_html=True,
+        )
+        if cta_r.button(
+            "Launch walkthrough →", key="cta_run", type="primary", use_container_width=True
+        ):
+            st.session_state.section = "Run"
+            st.rerun()
+
+    ds = all_datasets()
+    cls_counts: dict[str, int] = {}
+    for r in matrix_rows():
+        cls_counts[r["classification"]] = cls_counts.get(r["classification"], 0) + 1
+    cert_status: dict[str, int] = {}
+    for entry in cert_entries():
+        s = status_of(entry)
+        cert_status[s] = cert_status.get(s, 0) + 1
+    reuse = reuse_metrics()
+    m = adoption_metrics()
+
+    def _tile(col, title, section_target, key, body_html):  # noqa: ANN001
+        with col, st.container(border=True):
+            h_l, h_r = st.columns([7, 3], vertical_alignment="center")
+            h_l.markdown(f"**{title}**")
+            if h_r.button("Open →", key=key, use_container_width=True):
+                st.session_state.section = section_target
+                st.rerun()
+            st.markdown(body_html, unsafe_allow_html=True)
+
+    cls_chips = "".join(
+        f"<span class='cls {name.lower()}'>{name} {cls_counts[name]}</span> "
+        for name in ("Restricted", "Confidential", "Internal", "Public")
+        if name in cls_counts
+    )
+    cert_badges = (
+        f"<span class='badge ok'>{cert_status.get('certified', 0)} certified</span> "
+        f"<span class='badge warn'>{cert_status.get('candidate', 0)} candidate</span> "
+        f"<span class='badge danger'>{cert_status.get('refused', 0)} refused</span>"
+    )
+    avail_templates = reuse["templates_total"] - reuse["templates_live"]
+    plat_badges = (
+        f"<span class='badge ok'>{reuse['agents_covered']}/{reuse['agents_total']} "
+        f"agents covered</span> "
+        f"<span class='badge warn'>{avail_templates} available</span>"
+    )
+    weekly = m["weekly"]
+    peak = max((n for _, n in weekly), default=1)
+    bars = "".join(
+        f"<div class='bcol'><span class='v'>{n}</span>"
+        f"<div class='bar' style='height:{max(6, int(n / peak * 46))}px'></div>"
+        f"<span class='bcap'>{wk.split('-')[-1]}</span></div>"
+        for wk, n in weekly
+    )
+
+    row1 = st.columns(2)
+    _tile(
+        row1[0],
+        "Datasets",
+        "Datasets",
+        "tile_open_datasets",
+        f"<div class='tile-stat'><span class='big'>{len(ds)}</span>"
+        "<span class='unit'>datasets under classification</span></div>"
+        f"<div class='breakrow'>{cls_chips}</div>",
+    )
+    _tile(
+        row1[1],
+        "Registry",
+        "Registry",
+        "tile_open_registry",
+        f"<div class='tile-stat'><span class='big'>{len(cert_entries())}</span>"
+        "<span class='unit'>analyses in the certification lifecycle</span></div>"
+        f"<div class='breakrow'>{cert_badges}</div>",
+    )
+    row2 = st.columns(2)
+    _tile(
+        row2[0],
+        "Platform",
+        "Platform",
+        "tile_open_platform",
+        f"<div class='tile-stat'><span class='big'>{reuse['templates_total']}</span>"
+        f"<span class='unit'>agent templates · {reuse['templates_live']} live</span></div>"
+        f"<div class='breakrow'>{plat_badges}</div>",
+    )
+    _tile(
+        row2[1],
+        "Adoption",
+        "Adoption",
+        "tile_open_adoption",
+        f"<div class='tile-stat'><span class='big'>{m['total_runs']}</span>"
+        f"<span class='unit'>governed runs · {int(m['promotion_rate'] * 100)}% "
+        "promoted</span></div>"
+        f"<div class='barchart'>{bars}</div>",
+    )
+    st.caption(
+        "Run history is seeded demo telemetry from actually executed runs, plus "
+        "live runs this session; every seeded row is labeled on its surface."
+    )
+
+
+# --------------------------------------------------------------------------
 # Layout
 # --------------------------------------------------------------------------
 def persona_picker():
@@ -1502,26 +1827,58 @@ def persona_picker():
     return persona
 
 
-section = st.sidebar.radio(
-    "Section",
-    [
-        "Run analysis",
-        "Governed codegen",
-        "Analyses",
-        "Platform",
-        "Datasets",
-        "Registry",
-        "Adoption",
-    ],
-    index=0,
-)
+# The grouped sidebar (ui-spec 2.2): Overview, then Workspace / Governance /
+# Platform groups. Buttons write st.session_state.section; the active item
+# renders as the primary variant (styled as the nav active state).
+_NAV_GROUPS: list[tuple[str | None, list[str]]] = [
+    (None, ["Overview"]),
+    ("Workspace", ["Run", "Pipeline", "Analyses"]),
+    ("Governance", ["Datasets", "Registry"]),
+    ("Platform", ["Platform", "Adoption"]),
+]
+_NAV_KEYS = {
+    "Overview": "nav_home",
+    "Run": "nav_run",
+    "Pipeline": "nav_pipeline",
+    "Analyses": "nav_analyses",
+    "Datasets": "nav_datasets",
+    "Registry": "nav_registry",
+    "Platform": "nav_platform",
+    "Adoption": "nav_adoption",
+}
+
+section = st.session_state.setdefault("section", "Overview")
+_nav_counts = {
+    "Datasets": len(all_datasets()),
+    "Registry": len(cert_entries()),
+    "Platform": reuse_metrics()["templates_total"],
+}
+for _glabel, _items in _NAV_GROUPS:
+    if _glabel:
+        st.sidebar.markdown(f"<div class='gl'>{_glabel}</div>", unsafe_allow_html=True)
+    for _item in _items:
+        _n = _nav_counts.get(_item)
+        _label = f"{_item} · {_n}" if _n is not None else _item
+        if st.sidebar.button(
+            _label,
+            key=_NAV_KEYS[_item],
+            type="primary" if _item == section else "secondary",
+            use_container_width=True,
+        ):
+            st.session_state.section = _item
+            st.rerun()
+
 st.sidebar.divider()
 persona = persona_picker()
 
 header(persona)
 st.divider()
 
-if section == "Governed codegen":
+if section == "Overview":
+    render_home(persona)
+    st.stop()
+
+if section == "Run":
     render_govflow(persona)
     st.stop()
 
@@ -1545,6 +1902,7 @@ if section == "Adoption":
     render_adoption()
     st.stop()
 
+# Fall-through: the credit-pipeline hero ("Pipeline" in the sidebar).
 controls(persona)
 st.divider()
 
