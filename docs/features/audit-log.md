@@ -1,0 +1,362 @@
+# Audit Log
+
+**Status:** planned, not built
+**Nav:** Platform group, immediately after Adoption
+**Owner surface:** `render_audit_log()` in `app.py`, data layer in `sentinel/platform/audit_store.py` (new)
+
+---
+
+## 1. What this is
+
+One screen that answers, across every run the platform has ever executed:
+
+1. What ran, when, and against what data.
+2. Every step inside that run, in the run's own vocabulary.
+3. What a control allowed.
+4. What a control caught and refused.
+5. Who ran it.
+6. Who else had to sign, and whether one signature was enough.
+
+Sentinel already has eight surfaces that show a single run's trail: the Pipeline
+screen's audit tab, the govflow stepper's per-stage control chips, the Analyses
+run panel, the evidence pack, the model card, the cost ledger, the trace viewer,
+the Registry. Every one of them is scoped to one run, and all but the seeded
+Registry rows vanish when the session ends.
+
+The gap is the cross-run view. A control that fires once in a scripted demo is a
+demo. A control that fires on 23 runs across four weeks, with the refusals
+countable and the signatures attributable, is a control. That is the only thing
+this screen adds, and it is why it earns a nav slot instead of a tab.
+
+**It reads the record. It cannot write to it.** No action on this screen mutates
+anything.
+
+---
+
+## 2. What exists today
+
+The raw material is better than expected. `AuditEvent` is already a frozen
+dataclass with fourteen fields, and every run kind emits through it.
+
+| Field | Populated | Note |
+|---|---|---|
+| `run_id` | always | 12-hex uuid4 slice, all four run kinds |
+| `seq` | always | monotonic, **per run**, restarts at 0 |
+| `ts` | always | ISO-8601 UTC |
+| `agent` | always | 11 distinct values in the local corpus |
+| `action` | always | 22 distinct values in the local corpus |
+| `level` | always | `info` / `blocked` / `redaction` / `gate` |
+| `actor` | defaults to `agent` | the trap, see 3.3 |
+| `policy_version` | always | `2026.07-rbac-v1`, stamped at `AuditLog` construction |
+| `data_touched` | on data events | column lists, the RBAC denial's payload |
+| `inputs_summary` / `output_summary` | free text | prose, no vocabulary |
+| `tokens` / `cost` | always 0 | no call site passes them; `CostTracker` is the real accountant |
+| `extra` | 12 of 61 sites | where `control` lives when it lives anywhere |
+
+Four run kinds, four step vocabularies, no shared base class:
+
+- **analysis** — declarative `spec.steps`; `data_profiling` is load → profile →
+  quality, `feature_engineering` is load → features → leakage. Statuses
+  `completed` / `blocked`.
+- **credit_risk** — a compiled LangGraph: profiler → eda → modeler → **human
+  gate** → validator. Statuses `running` / `awaiting_approval` / `completed` /
+  `rejected` / `blocked`.
+- **govflow** — nine stages: Ask, Plan, Access, Generate, Gate, Execute, Screen,
+  Interpret, Attest. Statuses `completed` / `blocked_at_gate` / `error`.
+- **l3** — the same nine stages at tier L3.
+
+Refusals are real and enforced in code, not asserted in prose: `tier_block` at
+Ask, `CTL-PURP-01` at the purpose matrix, the static AST gate at Gate,
+`CTL-EGRESS-01`, `CTL-SOD-01` at the promotion gate, RBAC column denial,
+PII redaction, the eval gate.
+
+---
+
+## 3. What does not exist, stated plainly
+
+This section matters more than the design. Four of these are load-bearing for
+the feature and one of them is the question you actually asked.
+
+### 3.1 There is no dual control anywhere in Sentinel
+
+You asked whether a run "required more than one user for additional approvals."
+Today the honest answer is **no run ever requires more than one**.
+
+What exists is **author is not approver**, enforced by identity comparison:
+`RunState.started_by` is set from `actor.id` at `start_run`, and
+`Orchestrator.approve()` refuses when `actor.id == state.started_by`, recording
+`approval_denied` at `LEVEL_BLOCKED` naming `CTL-SOD-01`. A test drives the full
+path. That is real, and it is what the login card means by "four-eyes."
+
+But there is no approver list, no quorum, no vote count, no pending-second-
+signature state, and no data structure anywhere that could hold two approvals.
+One MRM Approver click promotes the model.
+
+Three further holes in the same area:
+
+- **Rejection is unguarded.** Both the role check and the SoD check are
+  conditioned on `approved` being `True`. Any persona, including the run's own
+  author and the read-only Auditor, can reject a run and terminate it.
+- **No rationale is captured on any decision.** The gate is two bare buttons.
+  `output_summary` is a fixed literal, `APPROVED at model gate`.
+- **The govflow nine-stage route has no human gate at all.** The interrupt
+  belongs solely to the legacy credit_risk pipeline. The flow with all the
+  interesting refusals has the thinnest accountability, and
+  `sign_evidence_pack()` — which has a real `CTL-SOD-01` refusal — is called
+  only from tests. Every pack the product ships is `status='pending'`.
+
+So the "Second pair of eyes" column reads `not required` on 16 of 19 seeded
+runs. **See section 7 for the decision this forces.**
+
+### 3.2 The audit record does not survive a deploy
+
+`runtime/` is gitignored and excluded from the Elastic Beanstalk bundle, and EB
+replaces `/var/app/current` wholesale. There are 324 audit JSONL files on this
+machine and zero on the instance.
+
+Worse, `govflow` and `l3` construct their `AuditLog` with `persist=False`, so
+their events never touch disk even locally. That is why the local corpus has
+1,050 `agent_started` events and not one govflow stage event.
+
+Worse still, `scripts/seed_runs.py` collapses each run's event stream into a
+sorted set of distinct action strings and discards seq, ts, actor, agent, level,
+and `data_touched`. **The 19 seeded runs carry no per-step detail at all.**
+
+Net: without prerequisite work, this screen ships empty in prod and the detail
+view is blank on 19 of 19 rows. Design quality is irrelevant to that outcome.
+
+### 3.3 The actor is self-asserted, and often is not a person
+
+Persona selection is a faux sign-in driven by a URL query param with no
+credential. Every `actor` value in the log is self-asserted.
+
+And `AuditEvent.actor` defaults to `agent` when a call site omits it, which most
+do. So the actor column is populated with `orchestrator`, `sandbox`,
+`analysis_engine`, `data_connector` — module names presented in the column
+labelled "who." An audit screen that renders a module as a person is worse than
+one that admits it has no identity model.
+
+### 3.4 The record is immutable by convention, not by cryptography
+
+Immutability is enforced by a frozen dataclass and a copy-on-read. The JSONL is
+a plain file. No hash chain, no signature, no seal. `seq` is per-run and resets,
+so there is no global ordering either.
+
+The only tamper evidence available today is **sequence continuity within a
+run**: seq 0..N with no gaps. That is worth printing. A "Record integrity" tile
+that checks only monotonicity and calls itself integrity is not.
+
+### 3.5 Control ids are not first-class
+
+Only 12 of 61 emission sites populate `extra['control']`. Everywhere else the
+control id lives in prose inside `output_summary`. Until `control_id` is
+promoted to a real `AuditEvent` field, any filter keyed on control is
+structurally near-empty.
+
+---
+
+## 4. The screen
+
+Master-detail. Runs are the rows, not events. An examiner reasons in runs
+("show me the run that was refused"); a 5,000-row event table reads as log spew.
+
+Top to bottom, at the app's 1120px container:
+
+**1. Header.** `st.subheader("Audit log")` plus one muted lede, matching the
+Datasets / Registry / Platform / Adoption pattern. Then a coverage caption
+stating provenance in the house style: how many runs are seeded, how many are
+live this session, and that live runs are lost on restart.
+
+**2. KPI row.** Four `st.metric` tiles, one caption under the row giving the
+derivations.
+
+| Tile | Definition |
+|---|---|
+| Runs logged | Records in the store. Delta: `N this session`. |
+| Refusals | Runs with at least one `level='blocked'` event, as "X of Y runs". Caption splits it: **A stopped the run outright. B completed with something withheld** (a column denied, a cell suppressed, a value redacted). This is the sentence the screen exists to print. |
+| Four-eyes coverage | N of M, where M = runs that reached a human gate (`approval_requested` present) and N = runs whose `approval_decision` actor differs from `started_by`. Caption: self-approval attempts count as refusals, not as coverage. |
+| Controls fired | Distinct control ids that actually fired, over the catalogue's resolvable id space. Caption states honestly how many catalogue entries are documented-but-not-implemented, so the ratio is not misread as a coverage failure. |
+
+**3. Filter bar.** One `st.container(border=True)`, two rows. Row 1 is the
+posture control, a full-width `st.segmented_control`: **All runs / Refusals only
+/ Approval decisions**. Row 2 is four narrow selectors: Kind, Ran by, Dataset,
+Control. A right-aligned caption reads "showing N of M runs"; a Clear button
+appears only when a filter is active.
+
+No surface in Sentinel has a filter bar today, so this deliberately uses only
+existing primitives and adds no new CSS class. In the "Ran by" selector, module
+identities are grouped under a separate heading, **system components, not
+people**, per 3.3.
+
+Deliberately omitted: date range (the seeded timeline is four weeks wide, a date
+picker filters nothing) and free-text search (43 free-form action literals with
+no vocabulary; it would look powerful and return arbitrary results).
+
+**4. Run table.** Hand-laid `table_head` / `table_row` / `td` from
+`sentinel/ui/tables.py`, not `st.dataframe`, because the cells must carry `.cls`
+classification chips, `.badge` status pills and live control popovers
+(ui-spec 4.3, 4.4). Newest first, fixed sort. Ten columns:
+
+| Column | Source |
+|---|---|
+| When | `demo_date` (seeded) / `executed_at` (live), with origin as a muted suffix |
+| Run | 12-hex `run_id`, and the row's select control |
+| Kind | `.badge neutral`: analysis / credit risk / govflow / L3 |
+| Analysis | `ref_id` |
+| Dataset | `dataset_id` + `.cls` chip, the chip being a `CTL-PURP-01` popover |
+| Ran by | persona display name. **New field**, see 5 |
+| Second pair of eyes | signed / self-approval refused / awaiting / not required. **New field**, see 5 |
+| Outcome | normalized status badge; when refused, the badge itself is the popover for the control that stopped it |
+| Stopped at | the step or stage where it ended: Access, Gate, modeler. Blank when it ran clean |
+| Caught | the widest column and the point of the screen. Fired controls as clickable chips, refuse-first, three then `+N` |
+
+Row states: any run with a `blocked`-level event takes the `.rowbad`
+`--danger-soft` tint, so the eye lands on refusals before reading a word. The
+selected row takes the existing `.row-sel` accent tint. A run with zero
+persisted events renders its event count **struck through, not blank** — the
+"suppressed, not deleted" principle applied to missing evidence.
+
+**5. Detail block.** Inline beneath the table, inside a bordered container. Six
+blocks:
+
+- **A. Identity line.** run_id, kind, ref_id, dataset + classification, tier
+  (only for govflow and L3; for the other two the cell says so rather than
+  faking it), outcome, origin, policy version.
+- **B. Decision summary.** Three labelled lines answering the requirement in its
+  own words. **ALLOWED**: what the run was permitted to touch. **CAUGHT**: "N
+  refusals. M stopped the run. K were recorded and the run continued."
+  **APPROVALS**: the chain of custody, ran by → approved by → evidence artifact,
+  with the acting persona's role and attestations, the `CTL-SOD-01` popover
+  where it fired, and one faint honest line that persona selection is a demo
+  sign-in with no credential. The distinction between "nothing was refused on
+  this run" and "no event trail was persisted for this run" is explicit and in
+  danger ink. They are not the same statement and conflating them is the exact
+  failure this product exists to avoid.
+- **C. Step timeline.** One row per step **in the run's own vocabulary**, no
+  invented normalization: analysis renders its spec steps, credit_risk renders
+  profiler → eda → modeler → human gate → validator, govflow and L3 render the
+  nine stages. Each row carries a status glyph, the acting agent, the event
+  count at that step, and the control chip if one fired there. The blocked row
+  is tinted; skipped rows are struck, not hidden.
+- **D. Event stream.** The persisted events: seq, ts, agent, actor, action,
+  level, summary, data_touched, control. Tinted by level using the real semantic
+  tokens. `tokens` and `cost` are deliberately not columns; they are always zero
+  and printing them would be theatre. Above the table, one caption asserting
+  sequence continuity: "seq 0-20, no gaps." An expander per event shows the raw
+  persisted JSON verbatim, so the screen can be diffed against the export.
+- **E. Export.** Two download buttons: events as JSONL byte-identical to what
+  `AuditLog` persists, and the run record as JSON. The first thing the Internal
+  Auditor persona can actually do.
+- **F. Footer caption.** Names what is not captured: rationale on approve or
+  reject, an authenticated principal, tamper evidence. Putting the gap on the
+  screen is stronger than designing an affordance around it.
+
+**6. Empty state.** The app's existing `st.info` convention.
+
+Not gated to the Auditor persona. It is the auditor's natural home, but gating
+it would hide the platform's best argument from a panelist logged in as the
+Analyst, and every other surface is persona-independent.
+
+---
+
+## 5. Engineering, in dependency order
+
+Nothing above renders without (a) and (b).
+
+**(a) Commit the seeded event stream.** Rework `scripts/seed_runs.py` to write
+the full per-event stream to a committed `sentinel/data/seed_audit.jsonl`, and
+add `actor` and `approver` to `SeedRun`. Both are derivable today for
+credit_risk (`started_by` at `orchestrator.py:433`, the `approval_decision`
+actor at `orchestrator.py:296`); analysis needs an `actor` field on
+`AnalysisRun`; govflow and L3 store the persona display name, not the id.
+Cost: roughly 5k event lines committed as source. That is the price of a
+deterministic, git-reviewable demo that survives a redeploy.
+
+**(b) Extend the seeder with refusal runs.** On today's corpus the Caught column
+is empty on 14 of 19 rows, because the analysis runs' `controls_fired` are
+literally `[]`. Four additions, all existing code paths, nothing fabricated:
+
+1. an L3 run with `intent='exfiltrate'` → `CTL-EGRESS-01` blocks at Gate;
+2. a govflow run by `junior_analyst` on a Confidential dataset → the tier
+   refusal at Ask;
+3. a govflow run on a permitted-but-unwired purpose → the honest Access stop;
+4. a credit_risk run where the Analyst tries to approve their own run →
+   `CTL-SOD-01` `approval_denied`.
+
+Say out loud in the caption that refusal density is a seeding choice. The
+alternative is a ledger that implies the platform refuses things at that rate
+naturally.
+
+**(c) `sentinel/platform/audit_store.py`.** The first reader across runs: union
+of the committed seed events and `runtime/audit/*.jsonl`, plus a ~15-line status
+normalization map over the four vocabularies. Note that `blocked_at_gate` is
+actively misleading when the block happened at Ask; normalize on the event, not
+the constant.
+
+**(d) Persist govflow and L3.** Flip `persist=False` at `flow.py:265` and
+`l3.py:169`. Backfill `actor=persona.id` on the nine govflow and eight L3
+emission sites that currently default to the agent string.
+
+**(e) Promote `control_id`.** Add it as a real `AuditEvent` field and populate
+it at the 49 sites that today bury it in prose. Without this the Control filter
+is decorative.
+
+**(f) Shared level-tint helper.** Three untokenized hexes at `app.py:1085` are
+near-misses on the palette. Fix them in one helper and reuse it in the existing
+Pipeline audit tab so the two surfaces converge rather than diverge. An audit
+screen is a bad place to have two reds.
+
+Deferred, and said on the screen rather than designed around: hash chaining, an
+authenticated principal, approval rationale capture, a durable sink.
+
+---
+
+## 6. Tests
+
+- `audit_store` normalization: every status constant across the four kinds maps
+  to exactly one of ok / refused / awaiting, asserted by set equality so a new
+  constant breaks the test.
+- Sequence continuity: for every run in the corpus, seq is 0..N-1 with no gaps.
+- Four-eyes coverage arithmetic: on the seeded corpus with the new refusal run,
+  the tile reads 3 of 4 and the fourth is the self-approval refusal, counted as
+  a refusal and not as coverage.
+- Every control chip the screen renders resolves through `control_info()`. This
+  test already exists in spirit for the govflow notes; extend the same pattern.
+- Refusal split: stopped + withheld equals the refusal count, on the real corpus.
+- The screen renders with an empty store and with a run that has zero persisted
+  events, and says different things in the two cases.
+
+---
+
+## 7. The one decision for you
+
+**Does Sentinel get real dual control, or does the Audit Log faithfully report
+that it has none?**
+
+Option A, **report honestly**. Build sections 4 and 5 as written. The column
+reads `not required` on most rows and `signed` on the credit_risk runs. Cheap,
+truthful, and a careful panelist will notice that the governance-heaviest path
+(govflow, L3) has the thinnest accountability.
+
+Option B, **wire the second signature that already half-exists**. Call
+`sign_evidence_pack()` from the Attest stage, which is currently dead code with
+a working `CTL-SOD-01` refusal in it. That gives govflow and L3 runs one real
+independent signature and makes the column meaningful on every row. Small: one
+call site, one UI affordance, one test.
+
+Option C, **build genuine dual control for high-risk runs**. Require two
+distinct approvers when a run trips a risk trigger (restricted data, or fairness
+below the four-fifths threshold, or tier L3). This is the only option that makes
+"more than one user for additional approvals" literally true, and it is the
+strongest bank-legible story: a quorum policy, a pending-second-signature state,
+and an audit trail showing both signatures. It is also the largest: new state on
+the run record, a new UI surface for the second approver, and a real policy
+config.
+
+**Recommendation: B now, C next.** B is nearly free and removes the worst
+honesty problem in the current design. C is the feature that makes the column
+the best thing on the screen, but it is its own piece of work and should not be
+smuggled into an audit-log build.
+
+Whichever you pick, the Audit Log renders what is true. It does not print a
+column that implies a control the platform does not have.
