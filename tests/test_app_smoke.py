@@ -793,6 +793,74 @@ def test_user_manual_deck_links_out_to_every_nav_screen():
     assert at.session_state["section"] == "Run"
 
 
+# -- FAQ and Ask me (Help) ---------------------------------------------------
+
+
+def test_faq_renders_every_entry():
+    from sentinel.help import faq as faq_mod
+
+    at = _boot()
+    at.button(key="nav_faq").click().run()
+    assert not at.exception
+    assert at.session_state["section"] == "FAQ"
+    labels = {e.label for e in at.expander}
+    for entry in faq_mod.FAQ_ENTRIES:
+        assert entry.question in labels, f"FAQ is missing: {entry.question}"
+
+
+def test_faq_routes_into_the_manual_chapter_it_cites():
+    """The FAQ's job is to hand off. A jump that lands on the deck rather than
+    on the chapter that answers the question is the failure worth catching."""
+    from sentinel.help.corpus_loader import page_by_id
+
+    at = _boot()
+    at.button(key="nav_faq").click().run()
+    button = next(b for b in at.button if b.key and b.key.startswith("faq_go_"))
+    page_id = button.key.removeprefix("faq_go_").rsplit("_", 1)[0]
+    button.click().run()
+    assert not at.exception
+    assert at.session_state["section"] == "User Manual"
+    assert at.session_state["manual_chapter"] == page_by_id(page_id).chapter
+
+
+def test_ask_me_refuses_an_off_topic_question():
+    """The relevance gate, through the screen. Scripted mode, so no model runs
+    and the refusal is the lexical backstop doing its job."""
+    at = _boot()
+    at.button(key="nav_ask").click().run()
+    assert not at.exception
+    at.button(key="ask_offtopic").click().run()
+    assert not at.exception
+    body = " ".join(m.value for m in at.markdown)
+    assert "refused: off topic" in body
+    question, answer = at.session_state["ask_history"][-1]
+    assert answer.verdict == "irrelevant"
+    assert not answer.citations
+
+
+def test_ask_me_answers_an_on_topic_question_with_passages():
+    at = _boot()
+    at.button(key="nav_ask").click().run()
+    at.button(key="ask_sug_What are the nine stages?").click().run()
+    assert not at.exception
+    _, answer = at.session_state["ask_history"][-1]
+    assert answer.verdict == "answered"
+    assert answer.citations
+    body = " ".join(m.value for m in at.markdown)
+    assert "answered from the manual" in body
+
+
+def test_ask_me_labels_scripted_answers_as_scripted():
+    """The honesty rule the whole build follows: a scripted surface may never
+    read as a model having written it."""
+    at = _boot()
+    at.button(key="nav_ask").click().run()
+    at.button(key="ask_sug_Who can approve a run?").click().run()
+    body = " ".join(m.value for m in at.markdown)
+    assert "answer: scripted (passages)" in body
+    assert "gate: lexical" in body
+
+
 # -- the governed-run walkthrough (the Run section) --------------------------
 
 

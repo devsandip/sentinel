@@ -410,6 +410,99 @@ class ModelGateway:
             return _call_anthropic_code(system, user, model)
         raise ValueError(f"code generation not supported for provider {self.provider}")
 
+    # -- free-form completion (Help / Ask me) ---------------------------
+    def complete(
+        self,
+        system: str,
+        user: str,
+        fallback_text: str,
+        *,
+        call_kind: str,
+        stakes: str = "low",
+        max_tokens: int = 400,
+    ) -> Generation:
+        """A system+user completion, governed like every other model call.
+
+        Narration is templated by step, and code generation has canned code to
+        fall back to. Neither shape fits Help, where the prompt is a question a
+        visitor typed. So the caller supplies both the prompt and the text to
+        serve when the gateway declines to spend. Scripted mode, a cap breach
+        and a provider failure all return `fallback_text` and still write a
+        ledger row, so Help degrades to its retrieval-only path rather than
+        erroring, and the degradation is visible in the ledger.
+        """
+        tier = TIER_CAPABLE if stakes == "elevated" else TIER_CHEAP
+        model = _TIER_MODELS.get(self.provider, {}).get(tier, self.model)
+
+        def _served(reason: str, policy: str, tr: str, tm: str) -> Generation:
+            self._log(
+                call_kind, stakes, tr, tm, TEMPLATED, False,
+                tokens=0, cost=0.0, cache="miss", policy=policy,
+            )
+            return Generation(
+                text=fallback_text, tokens=0, cost_usd=0.0, provider=TEMPLATED,
+                live=False, fell_back=bool(reason), fallback_reason=reason,
+            )
+
+        if not self.is_live:
+            return _served("", "scripted (zero cost)", TIER_TEMPLATED, TEMPLATED)
+
+        key = _cache_key(
+            call_kind, {"system": system, "user": user}, f"{self.provider}:{model}"
+        )
+        # A cache hit reports live=True: a live model did write this text, and
+        # Help labels an answer by who wrote it rather than by who was billed.
+        if key in _RESPONSE_CACHE:
+            self._log(
+                call_kind, stakes, tier, model, self.provider, True,
+                tokens=0, cost=0.0, cache="hit", policy="served from cache",
+            )
+            return Generation(
+                text=_RESPONSE_CACHE[key], tokens=0, cost_usd=0.0,
+                provider=self.provider, live=True,
+            )
+
+        if process_live_spent_usd() >= self.monthly_cap_usd:
+            return _served(
+                "cost cap reached",
+                "cost cap reached -> fallback to scripted",
+                tier,
+                model,
+            )
+
+        try:
+            text, tokens, cost = self._call_completion_live(
+                system, user, model, max_tokens
+            )
+        except Exception as exc:  # noqa: BLE001 - any live failure degrades safely
+            return _served(
+                f"live call failed: {exc}",
+                "live call failed -> fallback to scripted",
+                tier,
+                model,
+            )
+
+        self._spent_usd += cost
+        _record_process_spend(cost)
+        _RESPONSE_CACHE[key] = text
+        self._log(
+            call_kind, stakes, tier, model, self.provider, True,
+            tokens=tokens, cost=cost, cache="miss", policy="cost cap ok",
+        )
+        return Generation(
+            text=text, tokens=tokens, cost_usd=round(cost, 6),
+            provider=self.provider, live=True,
+        )
+
+    def _call_completion_live(
+        self, system: str, user: str, model: str, max_tokens: int
+    ) -> tuple[str, int, float]:
+        if self.provider == ANTHROPIC:
+            return _call_anthropic_chat(system, user, model, max_tokens)
+        if self.provider == OPENAI:
+            return _call_openai_chat(system, user, model, max_tokens)
+        raise ValueError(f"unknown provider {self.provider}")
+
 
 def _default_model(provider: str) -> str:
     return {
@@ -495,6 +588,62 @@ def _call_anthropic_code(
     # Rough Sonnet pricing; exact accounting is not the point of the demo.
     cost = (msg.usage.input_tokens * 3e-6) + (msg.usage.output_tokens * 1.5e-5)
     return text.strip(), tokens, cost, msg.stop_reason == "max_tokens"
+
+
+# Rough per-token rates by tier for the completion path, so a cheap-tier call is
+# not costed as if it had run on the capable model. Exact accounting is not the
+# point of the demo; overstating spend by an order of magnitude would be.
+_CHAT_RATES = {
+    TIER_CHEAP: (1e-6, 5e-6),
+    TIER_CAPABLE: (3e-6, 1.5e-5),
+}
+
+
+def _chat_rate(model: str) -> tuple[float, float]:
+    capable = {tiers[TIER_CAPABLE] for tiers in _TIER_MODELS.values()}
+    return _CHAT_RATES[TIER_CAPABLE if model in capable else TIER_CHEAP]
+
+
+def _call_anthropic_chat(
+    system: str, user: str, model: str, max_tokens: int
+) -> tuple[str, int, float]:
+    import anthropic  # lazy: only imported in live mode
+
+    client = anthropic.Anthropic()
+    msg = client.messages.create(
+        model=model,
+        max_tokens=max_tokens,
+        system=system,
+        messages=[{"role": "user", "content": user}],
+    )
+    text = "".join(b.text for b in msg.content if getattr(b, "type", "") == "text")
+    tokens = msg.usage.input_tokens + msg.usage.output_tokens
+    in_rate, out_rate = _chat_rate(model)
+    cost = (msg.usage.input_tokens * in_rate) + (msg.usage.output_tokens * out_rate)
+    return text.strip(), tokens, cost
+
+
+def _call_openai_chat(
+    system: str, user: str, model: str, max_tokens: int
+) -> tuple[str, int, float]:
+    from openai import OpenAI  # lazy
+
+    client = OpenAI()
+    resp = client.chat.completions.create(
+        model=model,
+        max_tokens=max_tokens,
+        messages=[
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ],
+    )
+    text = resp.choices[0].message.content or ""
+    usage = resp.usage
+    tokens = (usage.prompt_tokens + usage.completion_tokens) if usage else 0
+    cost = (
+        (usage.prompt_tokens * 1.5e-7 + usage.completion_tokens * 6e-7) if usage else 0.0
+    )
+    return text.strip(), tokens, cost
 
 
 def _strip_code_fences(text: str) -> str:
