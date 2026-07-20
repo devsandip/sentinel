@@ -25,7 +25,7 @@ Read the mockup's interaction words as follows:
 |---|---|---|
 | Control drawer (4.7), the right-side slide-over | `st.popover` anchored to the chip | `_control_popover` in `sentinel/ui/govflow.py` |
 | Inline expand / collapse on one row or card | `st.expander` | playbook cards, certification cards, audit trail |
-| Controls modal (4.8), centre-screen | `st.popover` off the topbar button | `_controls_plane` in `app.py` |
+| Controls modal (4.8), centre-screen | `st.popover` off the topbar button | `_controls_plane` in `sentinel/ui/shell.py` |
 | A clickable `<span>` chip | a popover trigger button, CSS-skinned to look like the chip | throughout |
 
 Two consequences worth knowing before reading further:
@@ -41,7 +41,7 @@ Two consequences worth knowing before reading further:
 
 **The built app is light-theme only.** Section 1's dark-mode column, and the
 `prefers-color-scheme` / `data-theme` machinery around it, describe the mockup.
-`app.py` ships a single `:root` token block and `.streamlit/config.toml` pins
+`sentinel/ui/theme.py` ships a single `:root` token block and `.streamlit/config.toml` pins
 `base = "light"`; there is no in-app theme toggle. The dark values are kept here
 because they are the design intent if the app ever gains one, not because they
 are live.

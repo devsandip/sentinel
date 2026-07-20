@@ -46,8 +46,9 @@ def checkout(tmp_path: Path) -> Path:
     """A clean checkout on main, with an origin whose main matches HEAD."""
     origin = tmp_path / "origin.git"
     work = tmp_path / "work"
-    subprocess.run(["git", "init", "--bare", "-b", "main", str(origin)], check=True, capture_output=True)
-    subprocess.run(["git", "init", "-b", "main", str(work)], check=True, capture_output=True)
+    init = ["git", "init", "-b", "main"]
+    subprocess.run([*init, "--bare", str(origin)], check=True, capture_output=True)
+    subprocess.run([*init, str(work)], check=True, capture_output=True)
     _git("config", "user.email", "t@example.com", cwd=work)
     _git("config", "user.name", "T", cwd=work)
     (work / "app.py").write_text("x = 1\n")

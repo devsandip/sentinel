@@ -352,8 +352,7 @@ def test_landing_adoption_bars_are_proportional_and_do_not_shrink():
 def test_barchart_css_keeps_the_bar_out_of_the_flex_shrink_pool():
     """The CSS half of the same bug. A bar whose height is data must not be a
     shrink candidate, and the value label must not occupy column height."""
-    with open(APP) as f:
-        css = f.read()
+    from sentinel.ui.theme import APP_CSS as css
     bar_rule = re.search(r"\.barchart \.bar \{(.*?)\}", css, re.S)
     assert bar_rule and "flex:none" in bar_rule.group(1)
     v_rule = re.search(r"\.barchart \.v \{(.*?)\}", css, re.S)
@@ -1371,3 +1370,70 @@ def test_the_gate_screen_does_not_keep_its_own_list_of_the_checks():
     # The panel renders whatever the gate reports, rather than a list of nine
     # labels it holds itself and asserts the gate performs.
     assert "gate.get(\"checks\")" in src
+
+
+def test_app_py_is_a_router_and_holds_no_screen():
+    """`app.py` was 3,200 lines: the stylesheet, every screen, and the routing.
+
+    That is what made it the thing blocking parallel work. Any second branch
+    touching a screen touched this file, and by the time anyone returned to the
+    branch it was unmergeable, so long-lived worktrees produced abandoned
+    branches rather than parallel work.
+
+    Split on 2026-07-21. This test is the ratchet: a screen belongs in
+    sentinel/ui/screens/, the chrome around it in sentinel/ui/shell.py, and the
+    stylesheet in sentinel/ui/theme.py. A `def` here means one has crept back."""
+    import ast
+
+    with open(APP) as f:
+        src = f.read()
+    tree = ast.parse(src)
+    defs = [n.name for n in tree.body if isinstance(n, ast.FunctionDef | ast.ClassDef)]
+    assert not defs, f"app.py has grown definitions again: {defs}"
+
+    # A ceiling with headroom for a few more screens, well under the size at
+    # which this file stopped being reviewable.
+    assert len(src.splitlines()) < 260, "app.py is growing back into a screen file"
+
+    # The stylesheet is the other half of what made it unreadable.
+    assert "<style>" not in src
+
+
+def test_every_sidebar_screen_has_a_dispatch_branch():
+    """The nav is the list of screens, so app.py must route every one of them.
+
+    Kept as a test rather than a convention because the failure is quiet: a nav
+    item with no branch falls through to the Overview redirect at the bottom,
+    which looks like a working button that goes to the wrong place.
+
+    This checks the router, not the filenames. Where a screen's code lives is a
+    judgement (the Audit Log and its run drill-down share `screens/audit.py`
+    because they share a tint map and a control alias table); whether it is
+    routed is not.
+    """
+    from sentinel.ui.agent_templates import SECTION as SECTION_TEMPLATES
+    from sentinel.ui.nav import product_screens
+    from sentinel.ui.screens.audit import SECTION_AUDIT_RUN
+
+    names = {"SECTION_TEMPLATES": SECTION_TEMPLATES, "SECTION_AUDIT_RUN": SECTION_AUDIT_RUN}
+    with open(APP) as f:
+        tree = ast.parse(f.read())
+
+    routed = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Compare) or not isinstance(node.left, ast.Name):
+            continue
+        if node.left.id != "section":
+            continue
+        for c in node.comparators:
+            if isinstance(c, ast.Constant):
+                routed.add(c.value)
+            elif isinstance(c, ast.Name):
+                routed.add(names[c.id])
+
+    missing = [s for s in product_screens() if s not in routed]
+    assert not missing, f"sidebar screens app.py never routes: {missing}"
+
+    # Help is excluded from product_screens() but is still routed, and the run
+    # drill-down is routed without being a nav item at all.
+    assert {"User Manual", "FAQ", "Ask me", SECTION_AUDIT_RUN} <= routed
