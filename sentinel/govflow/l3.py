@@ -298,7 +298,18 @@ def run_l3_analysis(
 
     # Stage 5: Gate -- the broad L3 allowlist, but the same egress/fs/dyncode deny
     # lists as L2. Analytical freedom widens; the hard safety boundary does not.
-    gate = gate_code(code, granted_columns=L3_GRANT, allowed_imports=L3_ALLOWED_IMPORTS)
+    #
+    # The table scope is passed even though no L3 sample writes ctx.sql. Without
+    # it CTL-PURP-01 has no rule to test against and cannot fire at all, and the
+    # Gate screen used to paint that as a clear check. It now paints it amber,
+    # which is what surfaced the omission: a generated L3 program that reached
+    # for another table would have met nothing.
+    gate = gate_code(
+        code,
+        granted_columns=L3_GRANT,
+        allowed_tables=[L3_DATASET],
+        allowed_imports=L3_ALLOWED_IMPORTS,
+    )
     if not gate.passed:
         controls += gate.controls_fired
         for v in gate.violations:

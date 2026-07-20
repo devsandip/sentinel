@@ -494,9 +494,44 @@ technical interviewer will catch it.
 | `CTL-COL-01` | both | Every column literal appears in the grant; no `SELECT *` |
 | `CTL-COMPLEX-01` | sqlglot | No join lacking a condition (Cartesian product); join count within ceiling |
 
-**Out:** pass, or a refusal naming the control and the line.
+**Out:** pass, or a refusal naming the control and the line, plus the *read*:
+what each check examined, what it examined it against, and how it ruled.
 **Fails when:** any check fails. Regenerate with the failure fed back, up to 3
 attempts, then hand to the human.
+
+**The read (2026-07-20).** The gate recorded only its refusals, so it could say
+nothing whatever about a run it cleared. The Gate screen printed nine identical
+ticks over nine unequal checks: the same mark on a check that judged sixteen
+constructs, a check that had nothing in the code to judge, and a check that
+could not run because its rule was never supplied. That is an assertion wearing
+the costume of evidence, and it is the same mistake the Audit Log had to
+unlearn (a control being *consulted* is not the control saying no).
+
+`gate_code` now returns a `CheckReading` per check alongside the verdict:
+`examined` (constructs judged), `items` (the constructs, named), `rule` (what
+they were judged against), and one of four verdicts.
+
+| Verdict | Means |
+|---|---|
+| `cleared` | The check judged N constructs and permitted all of them. |
+| `refused` | The check found something and said no. |
+| `no_subject` | The check was armed; this code held nothing for it to judge. |
+| `not_armed` | The check could not run: its rule was never supplied. |
+
+Only the first two are verdicts on the code. The last two are verdicts on the
+check, and a screen that paints them green claims an assurance nobody
+established. Arming caught a live hole the day it shipped: `l3.py` called
+`gate_code` without `allowed_tables`, so `CTL-PURP-01` had no scope to test
+against and could not fire on any L3 run, while the old screen ticked it.
+
+Allow-list checks (imports, columns, tables) name every construct, because that
+list *is* the evidence. Deny-list sweeps (egress, filesystem, dynamic code,
+dunder escapes) name only their hits and report the size of the sweep, because
+naming the rest means printing the file back.
+
+The nine checks are defined in `gate.py`, not in the screen. The screen used to
+hold its own copy of the list, which is a claim about the gate that nothing
+holds the gate to.
 
 **Why static and not just sandboxing:** a sandbox tells you what happened. A gate
 tells you what was *intended*, before it happens, in language a control tester
