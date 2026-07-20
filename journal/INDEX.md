@@ -1,10 +1,59 @@
 # Sentinel — Journal Index
 
-Last refreshed: 2026-07-20 20:45
+Last refreshed: 2026-07-21 00:15
 
-Latest entry: [2026-07-20-2045-refuse-first-then-retrieve.md](entries/2026-07-20-2045-refuse-first-then-retrieve.md)
+Latest entry: [2026-07-21-0015-a-template-you-can-be-refused-by.md](entries/2026-07-21-0015-a-template-you-can-be-refused-by.md)
 
 ## Where we are now
+
+**Agent Templates ships on a branch, not to prod. 654 tests, 2 skipped, ruff
+clean. Prod still carries PR #33 at `7ac3dde`.** Governance now reads Datasets,
+Agent Templates, Registry, which is lifecycle order: the data you may use, the
+blueprint you build from, the inventory of what got built.
+
+**A template is a document you can be refused by, and that was the whole design
+question.** An editable spec that always saves is a text box with extra steps.
+The way out is that a template names nothing of its own: a purpose is a column
+in the matrix, an import is a name on the codegen allow-list, a tool is in
+`agents.yaml`, a tier is a rung in `tiers.py`, a column is inside a grant in
+`access.py`. So the editor keeps no policy. It reads the enforcing modules and
+refuses what they would refuse, across eleven checks that reuse `CheckReading`
+and `Observation` from `codegen/gate.py` so the panel speaks the Gate stage's
+language and the two cannot drift apart.
+
+**The format is YAML, and the repo had already decided it.** `sentinel/config/`
+is five YAML files and `scaffold.py` already writes an agent spec in YAML, so a
+JSON template would have meant the CLI and the screen emitting two artifacts for
+one object. Serialization goes through `json.dumps` per scalar, since JSON is a
+subset of YAML that PyYAML reads back identically.
+
+**Policy checks and certification gates are kept apart, and that distinction is
+the design.** Policy checks are the fence: a refusal disables the deploy,
+because an illegal blueprint should not reach the registry. Certification gates
+are not: they block `certified` and not the draft. Every shipped template fails
+two gates because all five carry `owner: UNASSIGNED`, which is correct rather
+than unfinished. A blueprint cannot own the instances made from it, and
+`scaffold.py` registers a new agent unowned for the same reason. It is the same
+mistake as painting `no_subject` green: a screen showing "not yet owned" in the
+same red as "reaches for the network" is not telling a reviewer which one is a
+policy violation.
+
+**Deploy is `certification.register()`, not a toast.** It computes the dataset's
+content SHA now, pins it into the contract, and puts a real `RegistryEntry` at
+draft under Analysis-agents where the four gates decide what it may become.
+Verified end to end in the browser. What is simulated is named on the screen:
+nothing written to disk, no process started.
+
+**Adding the tenth screen found a stale number, unprompted.** `manual.py` opened
+its screens chapter with a hand-typed "Nine screens in the sidebar" and nothing
+failed when that stopped being true. The nav definition moved out of `app.py`
+into `sentinel/ui/nav.py`, both read it, the count is computed, and a test fails
+if a number is typed back in. `product_screens()` excludes Help, because the
+manual, the FAQ and Ask me are the manual describing itself.
+
+Everything below is the prior state.
+
+---
 
 **Prod carries PR #33. Bundle `sentinel-20260720-200636.zip`, application
 version `sentinel-eb-applicationversion-pnysewhnfcn2`, EB Ready and Green.
@@ -750,6 +799,7 @@ out).
 
 ## Recent entries
 
+- [2026-07-21-0015-a-template-you-can-be-refused-by.md](entries/2026-07-21-0015-a-template-you-can-be-refused-by.md) — Agent Templates under Governance: an editable YAML spec, eleven checks, and a Deploy that registers a draft. Sandip asked for the section and asked what shape and format it should take; both answers were already in the repo. **YAML because `scaffold.py` already writes an agent spec in YAML** and a JSON template would have meant the CLI and the screen emitting two artifacts for one object. **Editing has to be refusable or it is decoration**, and the way out is that a template names nothing of its own: every field is a value some other module owns, so the editor keeps no policy and reads the enforcing modules instead. Checks reuse `CheckReading`/`Observation` from `codegen/gate.py`. **Policy checks are the fence and certification gates are not**: a policy refusal disables the deploy, a failed gate blocks `certified` and not the draft, which is why all five templates ship at `owner: UNASSIGNED` and deploy fine. Making those block would have put the CLI and the screen in disagreement about day one of an agent. **Deploy is `certification.register()`** with the SHA computed now, verified end to end: deployed the validation template and found `validation v1.0 — DRAFT` under Analysis-agents. The fourth verdict earned its keep again unprompted: flipping a purpose from `fair_lending` to `marketing` in the editor turned the column check amber, because `fair_lending` is the only purpose with a defined grant, so the check reported a hole in the policy on a screen built to check templates. And **the tenth nav item made `manual.py` wrong** — a typed "Nine screens" that nothing failed on — so the nav moved to `sentinel/ui/nav.py` and the count is computed. 654 tests. Not deployed.
 - [2026-07-20-2045-refuse-first-then-retrieve.md](entries/2026-07-20-2045-refuse-first-then-retrieve.md) — Help gained an FAQ and "Ask me", a chat that answers only from the manual. PR #33, merged, deployed as `sentinel-20260720-200636.zip`, EB Green, 606 tests. **The ordering is the feature.** Sandip asked for a relevance test *before* the answer, and the obvious build (retrieve, then let the model decline) fails on exactly the question he chose: a model handed five passages about governance stages and a question about Indian politics will try to bridge them, and the bridge is where a confident falsehood gets built. On prod the live gate refuses it for 175 tokens and $0.0002 with no answer call made. **Three verdicts, not two**, because off-topic and on-topic-but-uncovered are different facts and the second is a gap in the manual that should read like one; same distinction as `NOT_IN_ROUTE` versus `skipped`. **The corpus is a second source of truth, chosen knowingly.** I recommended extracting text from `manual.py` at render time under a recording `st` shim (cannot drift); Sandip picked parallel markdown. The fence is the numbers rule: markdown can read nothing, so the corpus may not restate an enforced value, and `test_corpus_states_no_enforced_number` reads the sandbox caps, disclosure floor and control/persona counts live and fails any page that retypes one. Prose can still drift, and that degradation is survivable in a way a stale cap is not. **The scripted gate needed a second test**: cosine alone answered "Write me a poem about the sea", because a corpus that talks about writing code has plenty of "write" in it, so vocabulary coverage now runs beside it. Also `ModelGateway.complete()`, since Help gets no private path to a model. And I burned a build first: there was no Help section on my branch because the manual was an unmerged PR I never checked for, so I wrote a whole parallel manual against a product that already had one. Checking `origin/main` costs one command.
 - [2026-07-20-2010-the-guard-checks-head-the-bundle-is-the-tree.md](entries/2026-07-20-2010-the-guard-checks-head-the-bundle-is-the-tree.md) — deployed PR #29, #30 and #32 as `sentinel-20260720-191009.zip`, EB Ready and Green. **The interesting part happened before the deploy ran.** The rule I have carried since the v6 near-miss is do-not-deploy-from-a-checkout-not-on-`main`, and there is an open question here about making `deploy.sh` enforce it. I ran that check and it passed: `HEAD` was `29ad22b`, exactly `origin/main`. Then `git status` showed nineteen files staged with 2,699 deletions, a full revert of all three merges sitting in the index. **`deploy.sh` archives the working tree, not `HEAD`,** so the bundle would have shipped without the Gate read or the Live LLM fix, gone Green, and reported success. The guard I had been designing checks the wrong noun. It needs two clauses: `HEAD` is an ancestor of `origin/main`, *and* `git status --porcelain` is empty. Stashed rather than reset, because "nothing here is new" was a conclusion from reading a diff and a hard reset would have made it true by force. Verified prod by the thing that cannot render on the old bundle, and specifically by running **two** requests: the benign L2 run draws 7 green and 2 dashed grey, the SQL wildcard draws 1 red, 7 green, 1 dashed, with `SELECT *` as the refused chip. The same nine cells drawing a different shape on different code is the whole claim the panel makes. PR #30 is shipped but only exercised through the scripted path; confirming the Live LLM fix means a real model call, so it is deployed, not demonstrated.
 - [2026-07-20-1930-nine-ticks-over-nine-unequal-checks.md](entries/2026-07-20-1930-nine-ticks-over-nine-unequal-checks.md) — Sandip said the Gate stage does not really say anything, and **the screen could not have done better**: `gate_code` recorded only its refusals, so a cleared run produced literally nothing and the nine-row "clear/clear/clear" table was the whole of what existed to print. The gate now records what it read. **Four verdicts, not two,** because there are four facts: a check that judged 16 constructs and permitted them cleared the code; a check with nothing here to judge cleared nothing; a check whose rule was never supplied did not run. Only the first two are verdicts on the code. That distinction paid for itself the same hour: `l3.py` called `gate_code` without `allowed_tables`, so **CTL-PURP-01 had no scope to test against and could not fire on any L3 run** while the screen ticked it. The visualization is nine cells carrying each check's count (a tick cannot tell 16 from 0, a number can), plus the read drawn on the code as a per-line construct count, because tinting the refused line shows where the gate said no and not where it looked. The verdict states a reason in both directions: an approval that says "no violations" is an assertion, which is what this stage exists to replace. Also **the screen was keeping its own copy of the nine checks** with nothing holding the gate to it, the fourth instance of that fault in this build. And I caught myself doing the same thing one level up: the verdict read "judged 61 constructs" while the gutter beneath it summed to 27, because 61 is judgements and 27 is constructs. Both are stated now. PR #29, 525 tests, merged, not deployed.
