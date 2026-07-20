@@ -1,10 +1,57 @@
 # Sentinel — Journal Index
 
-Last refreshed: 2026-07-20 20:10
+Last refreshed: 2026-07-20 20:45
 
-Latest entry: [2026-07-20-2010-the-guard-checks-head-the-bundle-is-the-tree.md](entries/2026-07-20-2010-the-guard-checks-head-the-bundle-is-the-tree.md)
+Latest entry: [2026-07-20-2045-refuse-first-then-retrieve.md](entries/2026-07-20-2045-refuse-first-then-retrieve.md)
 
 ## Where we are now
+
+**Prod carries PR #33. Bundle `sentinel-20260720-200636.zip`, application
+version `sentinel-eb-applicationversion-pnysewhnfcn2`, EB Ready and Green.
+Health 200, WebSocket 101. `main` at `7ac3dde`. 606 tests, 2 skipped, ruff
+clean.** Verified by the behaviour that only exists in this build, on prod and
+in live mode: the gate refuses "Who is the PM of India, and what is a good
+recipe for dosa?" for 175 tokens and $0.0002, and an on-topic question answers
+from five cited passages naming CTL-SOD-01 and the Attest stage.
+
+**Help is three screens now: User Manual, FAQ, Ask me.** Ask me runs two
+stages and the order is the design. A relevance gate decides whether the
+question is about Sentinel at all, before any retrieval or answering. Only on
+a pass does it retrieve manual passages and answer strictly from them, showing
+the passages it used. Gating first is what stops the answer stage from being
+handed an off-topic question alongside five plausible passages and asked to
+reconcile them. Three verdicts, never collapsed: off topic, on topic but not
+covered, and answered. The middle one is a gap in the manual and reads like
+one.
+
+**Both stages work with no model, because the public link has no key.** The
+scripted gate is TF-IDF cosine plus vocabulary coverage over the corpus, and
+the scripted answer is the ranked passages, labeled as passages rather than
+dressed up as prose. Cosine alone was not enough: it answered "Write me a poem
+about the sea", because a corpus that talks at length about writing code has
+plenty of "write" in it. Coverage asks the blunter question, how much of this
+sentence is in our vocabulary at all, and refuses on "poem" and "sea" being
+foreign. Every model call routes through `ModelGateway.complete()`, new for
+this, so Help is tier-routed, cost-capped, cached and in the ledger like
+everything else.
+
+**The Ask-me corpus is a second source of truth, and that was a decision, not
+an oversight.** The manual is a screen, which is the right shape for a reader
+and the wrong shape for retrieval. I recommended extracting its prose at render
+time under a recording stand-in for `st`, which cannot drift; Sandip chose a
+parallel markdown corpus, which is simpler to read and edit. The fence around
+that choice is the numbers rule: markdown can read nothing, so the corpus is
+forbidden from stating an enforced value and instead names the cap and points
+at the chapter that prints it. `test_corpus_states_no_enforced_number` reads
+the sandbox caps, the disclosure floor and the control and persona counts live
+off their modules and fails any page that retypes one, the same shape as the
+guard that bans a hardcoded wall clock in `sentinel/ui/`. Prose can still
+drift; that degradation is a worse answer rather than a false claim about what
+the sandbox enforces, which is the trade being made.
+
+Everything below is the prior state.
+
+---
 
 **Prod carries PR #29, #30 and #32. Bundle `sentinel-20260720-191009.zip`, EB
 Ready and Green, application version `sentinel-eb-applicationversion-up7yzgu3eukn`.
@@ -703,6 +750,7 @@ out).
 
 ## Recent entries
 
+- [2026-07-20-2045-refuse-first-then-retrieve.md](entries/2026-07-20-2045-refuse-first-then-retrieve.md) — Help gained an FAQ and "Ask me", a chat that answers only from the manual. PR #33, merged, deployed as `sentinel-20260720-200636.zip`, EB Green, 606 tests. **The ordering is the feature.** Sandip asked for a relevance test *before* the answer, and the obvious build (retrieve, then let the model decline) fails on exactly the question he chose: a model handed five passages about governance stages and a question about Indian politics will try to bridge them, and the bridge is where a confident falsehood gets built. On prod the live gate refuses it for 175 tokens and $0.0002 with no answer call made. **Three verdicts, not two**, because off-topic and on-topic-but-uncovered are different facts and the second is a gap in the manual that should read like one; same distinction as `NOT_IN_ROUTE` versus `skipped`. **The corpus is a second source of truth, chosen knowingly.** I recommended extracting text from `manual.py` at render time under a recording `st` shim (cannot drift); Sandip picked parallel markdown. The fence is the numbers rule: markdown can read nothing, so the corpus may not restate an enforced value, and `test_corpus_states_no_enforced_number` reads the sandbox caps, disclosure floor and control/persona counts live and fails any page that retypes one. Prose can still drift, and that degradation is survivable in a way a stale cap is not. **The scripted gate needed a second test**: cosine alone answered "Write me a poem about the sea", because a corpus that talks about writing code has plenty of "write" in it, so vocabulary coverage now runs beside it. Also `ModelGateway.complete()`, since Help gets no private path to a model. And I burned a build first: there was no Help section on my branch because the manual was an unmerged PR I never checked for, so I wrote a whole parallel manual against a product that already had one. Checking `origin/main` costs one command.
 - [2026-07-20-2010-the-guard-checks-head-the-bundle-is-the-tree.md](entries/2026-07-20-2010-the-guard-checks-head-the-bundle-is-the-tree.md) — deployed PR #29, #30 and #32 as `sentinel-20260720-191009.zip`, EB Ready and Green. **The interesting part happened before the deploy ran.** The rule I have carried since the v6 near-miss is do-not-deploy-from-a-checkout-not-on-`main`, and there is an open question here about making `deploy.sh` enforce it. I ran that check and it passed: `HEAD` was `29ad22b`, exactly `origin/main`. Then `git status` showed nineteen files staged with 2,699 deletions, a full revert of all three merges sitting in the index. **`deploy.sh` archives the working tree, not `HEAD`,** so the bundle would have shipped without the Gate read or the Live LLM fix, gone Green, and reported success. The guard I had been designing checks the wrong noun. It needs two clauses: `HEAD` is an ancestor of `origin/main`, *and* `git status --porcelain` is empty. Stashed rather than reset, because "nothing here is new" was a conclusion from reading a diff and a hard reset would have made it true by force. Verified prod by the thing that cannot render on the old bundle, and specifically by running **two** requests: the benign L2 run draws 7 green and 2 dashed grey, the SQL wildcard draws 1 red, 7 green, 1 dashed, with `SELECT *` as the refused chip. The same nine cells drawing a different shape on different code is the whole claim the panel makes. PR #30 is shipped but only exercised through the scripted path; confirming the Live LLM fix means a real model call, so it is deployed, not demonstrated.
 - [2026-07-20-1930-nine-ticks-over-nine-unequal-checks.md](entries/2026-07-20-1930-nine-ticks-over-nine-unequal-checks.md) — Sandip said the Gate stage does not really say anything, and **the screen could not have done better**: `gate_code` recorded only its refusals, so a cleared run produced literally nothing and the nine-row "clear/clear/clear" table was the whole of what existed to print. The gate now records what it read. **Four verdicts, not two,** because there are four facts: a check that judged 16 constructs and permitted them cleared the code; a check with nothing here to judge cleared nothing; a check whose rule was never supplied did not run. Only the first two are verdicts on the code. That distinction paid for itself the same hour: `l3.py` called `gate_code` without `allowed_tables`, so **CTL-PURP-01 had no scope to test against and could not fire on any L3 run** while the screen ticked it. The visualization is nine cells carrying each check's count (a tick cannot tell 16 from 0, a number can), plus the read drawn on the code as a per-line construct count, because tinting the refused line shows where the gate said no and not where it looked. The verdict states a reason in both directions: an approval that says "no violations" is an assertion, which is what this stage exists to replace. Also **the screen was keeping its own copy of the nine checks** with nothing holding the gate to it, the fourth instance of that fault in this build. And I caught myself doing the same thing one level up: the verdict read "judged 61 constructs" while the gutter beneath it summed to 27, because 61 is judgements and 27 is constructs. Both are stated now. PR #29, 525 tests, merged, not deployed.
 - [2026-07-20-1840-a-live-count-is-not-a-live-claim.md](entries/2026-07-20-1840-a-live-count-is-not-a-live-claim.md) — the User Manual shipped as a screen under Help, opening on a nine-slide deck, ten chapters behind it, PR #28 merged as `3e15f84` and deployed. It is a screen because it describes numbers the code already knows, so it imports the enforcing modules instead of restating them. **The lesson is where that rule leaks.** PR #25 had added `can_view_all_runs` to `Persona`; the manual read personas live, kept the count right, and rendered the new entitlement nowhere. A live read keeps a *count* honest for free and says nothing about a *field*, so the fix is a test that counts rendered entitlement verdicts against the persona set. Found by merging main into the branch before merging the PR, which is the argument for doing that. Also named `GOVFLOW_WALL_CLOCK_S` (the sandbox default is 30s, both governed routes passed a literal 15, every surface printed 30), and rewrote a docstring that tripped the hardcoded-wall-clock guard, because a blunt guard firing on a false positive costs one edit and a clever one missing a real caption costs the claim.
