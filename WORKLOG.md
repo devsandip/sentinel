@@ -851,3 +851,32 @@ Append-only session handoff log. Newest entries at the bottom.
 - Accepted a second source of truth for the corpus, on Sandip's call. I recommended extracting prose from `manual.py` at render time under a recording `st` shim because it cannot drift; he chose parallel markdown, which is simpler to read and edit. The fence is the numbers rule, enforced by test: the corpus names a cap and points at the chapter that prints it, and may never restate the value.
 - The scripted gate is two tests, not one. Cosine alone answered "Write me a poem about the sea", because a corpus that discusses writing code has plenty of "write" in it. Vocabulary coverage asks how much of the sentence is in the corpus at all, which is the question cosine cannot ask.
 - Spent two live model calls to verify on prod. Last session declined to spend one on someone else's PR; this is my own feature, and the gate refusing before the answer stage bills is a claim only a live call can test.
+
+## 2026-07-21 — the Pipeline screen retired, merged with Agent Templates, deployed
+
+**Did:**
+- Implemented the tab-by-tab disposition from the thinking exercise. Gateway ledger to Generate, raw result to Execute, fairness merged into Interpret, cost to header chips, Audit Log as a link out, four tabs discarded, the fixed-control-flow argument salvaged onto Architecture. PR #38.
+- Taught `GovernedRunResult` to carry what it was already computing: `gateway_ledger`, `elapsed_s`, `persona_id`, plus `tokens`, `cost_usd` and `fairness` on `to_public_dict`. No new computation, only a serialization boundary that had been discarding it.
+- Moved Model Card to the Registry rather than Attest, against the plan, because no govflow run trains a model so the Attest conditional would never have fired. Needed `model_card` in the seed store, which forced the re-seed.
+- Re-seeded all 24 runs. Cards on credit-risk records, real `cost` on govflow and L3 records that had been writing `None`, real `cycle_time_s`. Run ids preserved by plan slot.
+- Made the six control toggles read-only and deleted the UNGOVERNED badge, their only consumer having been the retired screen's Run button.
+- Merged PR #37 (Agent Templates, from a parallel session), then merged main into this branch and resolved the nav conflict. Merged PR #38 as `7e51602`.
+- Deployed `main` at `7e51602`. Bundle `sentinel-20260721-002533.zip`, EB Green. Verified by running a governed analysis on prod and clicking every changed panel, plus the Audit trail link.
+
+**State now:**
+- `main` at `7e51602` and prod carries it. 665 tests, 2 skipped, ruff clean. Working tree clean.
+- Nine product screens in the sidebar, computed from `sentinel/ui/nav.py`. Pipeline gone, Agent Templates in.
+- Nine stage stops in the Run rail under a "STAGE n OF 9" counter. Architecture is a topbar popover beside Controls.
+- `stash@{0}` on the primary checkout still holds the stale pre-merge revert from 2026-07-20. Still worth reading once and dropping.
+
+**Next:**
+- Put the two-clause guard in `deploy/aws/deploy.sh`: refuse unless `HEAD` is an ancestor of `origin/main` AND `git status --porcelain` is empty. Carried for three sessions now.
+- Split `app.py` into `sentinel/ui/screens/*.py`. The nav conflict this session is the first evidence for it from the other direction: the collision landed in the small extracted file and was legible because of it.
+- The engine fork for the modeling route is still unresolved and still mine not to pick. Sandip dismissed the question in an earlier session.
+
+**Decisions:**
+- Model Card to the Registry, not Attest. A conditional that can never fire is dead code wearing the costume of a feature. The Registry is also the better anchor, since a card documents a model and not whichever run you last executed.
+- Fairness computed on the screened frame, carrying the suppressed band labels. A ratio that quietly read the cells CTL-DISC-02 removed would make that control decorative.
+- Audit Log links out rather than rendering a third copy of the event stream inside a stage panel. The shared tint map has already been paid for once.
+- Toggles read-only rather than removed. The runs that exercised them are still in the ledger, and a switch that changes nothing is worse than a disabled one that explains why.
+- Merged PR #37 before this branch, so the conflict resolution happened locally where the full suite could check it, rather than being pushed into a PR I did not author.
