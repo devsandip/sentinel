@@ -1,8 +1,8 @@
 # Audit Log
 
-**Status:** data layer built (section 5 a-d complete); screen not built
+**Status:** built — data layer, screen, and the run drill-down
 **Nav:** Platform group, immediately after Adoption
-**Owner surface:** `render_audit_log()` in `app.py`, data layer in `sentinel/platform/audit_store.py`
+**Owner surface:** `render_audit_log()` + `render_audit_run()` in `app.py`, data layer in `sentinel/platform/audit_store.py`
 **Approval model:** Option A of section 7 — report what is true, add nothing
 
 ---
