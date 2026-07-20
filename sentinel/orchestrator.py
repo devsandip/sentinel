@@ -376,6 +376,9 @@ class Orchestrator:
             fairness_pass=fairness.passes if fairness else None,
             status=status,
             ungoverned=rs.controls.any_disabled,
+            # As a dict, matching what the seed store holds and what the
+            # Registry reconstructs a ModelCard from. shared[] keeps the object.
+            model_card=card.to_dict() if (card := rs.shared.get("model_card")) else None,
         )
         rs.deps.audit.record(
             agent="orchestrator",

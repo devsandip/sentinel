@@ -63,6 +63,8 @@ from ..govflow.tiers import (
     ROLE_EXECUTIVE,
     ROLE_MODEL_VALIDATOR,
 )
+from ..platform.audit_store import from_govflow_pub
+from ..platform.run_history import KIND_GOVFLOW, KIND_L3
 from ..sandbox.execute import DEFAULT_WALL_CLOCK_S
 from .tables import table_head, table_row, td
 
@@ -77,6 +79,12 @@ STAGES = [
 # entry point moved, so `render_architecture` is the public way in.
 ARCHITECTURE = "Architecture"
 NAV_STOPS = list(STAGES)
+
+# Gateway ledger rows that belong to Generate. `generate` is what
+# ModelGateway.generate_code defaults its call_kind to; `repair` is the same
+# call on a second round after a gate refusal. Named here rather than matched
+# by substring so a future call_kind has to be filed deliberately.
+_GEN_CALL_KINDS = {"generate", "repair"}
 
 # The neutral badge next to "Stage N of 9" in each panel head (mockup phead).
 _STAGE_KICKER = {
@@ -602,6 +610,29 @@ def purpose_extra(dataset: str) -> str:
             else f"No purpose is permitted on {dataset}."
         )
     )
+
+
+def _run_economics(pub: dict) -> str:
+    """Tokens, spend and wall clock as header chips.
+
+    These were four of the six metrics on the retired Cost & KPIs tab. They are
+    cross-cutting -- no single stage owns what a run cost -- so they belong
+    beside the run id rather than inside a panel. The other two do not follow
+    them here: eval pass-rate and human-override count were the orchestrator's
+    model-promotion gate, which is a different control from this route's Gate
+    stage and has no meaning without a model to promote.
+
+    Zero is rendered, not hidden. A scripted run costing nothing is the claim
+    the product makes about scripted mode, and a blank chip would leave a
+    visitor unsure whether it was free or merely unmeasured.
+    """
+    tokens = pub.get("tokens", 0)
+    cost = pub.get("cost_usd", 0.0)
+    elapsed = pub.get("elapsed_s", 0.0)
+    bits = [_chip(f"{tokens:,} tokens"), _chip(f"${cost:.4f}")]
+    if elapsed:
+        bits.append(_chip(f"{elapsed:.1f}s"))
+    return " " + " ".join(bits)
 
 
 def _stage_rec(pub: dict | None, stage: str) -> dict | None:
@@ -1231,7 +1262,18 @@ def _run_flow(  # noqa: ANN001
             repair_of=repair_of,
             repair_feedback=repair_feedback,
         )
-    return result.to_public_dict()
+    pub = result.to_public_dict()
+    # Register the run with the Audit Log before returning it. audit_runs() has
+    # always taken a `live` list and never been given one, so the ledger held
+    # seeded rows only; the stepper now links its header at the drill-down, and
+    # a link that lands on "no run on file" is worse than no link. Kept in
+    # session state because that is the only store this app has: the harness
+    # builds govflow's AuditLog with persist=False, so there is no file to read
+    # back, and the Audit Log screen already tells the reader that live runs do
+    # not survive a restart.
+    live = st.session_state.setdefault("live_audit_runs", [])
+    live.append(from_govflow_pub(pub, run_kind=KIND_L3 if cfg["is_l3"] else KIND_GOVFLOW))
+    return pub
 
 
 # --------------------------------------------------------------------------
@@ -1581,6 +1623,7 @@ def _panel_generate(pub: dict | None, cfg: dict | None, persona) -> None:  # noq
                     verdict += f", then discarded: {a['rejected_by']}"
                 st.markdown(f"**Attempt {a['attempt']}** — {verdict}")
                 st.code(a["code"], language="python")
+    _gateway_ledger(pub)
     with st.expander("What the model is told (the prompt)"):
         if not live:
             st.caption(
@@ -1603,6 +1646,49 @@ def _panel_generate(pub: dict | None, cfg: dict | None, persona) -> None:  # noq
                 ),
                 language="text",
             )
+
+
+def _gateway_ledger(pub: dict) -> None:
+    """The model gateway's record of this run's calls, at the stage that made them.
+
+    The retired Pipeline screen had this as its own tab, which put the routing
+    decision three clicks from the code it produced. Generate is where the
+    tokens are spent on this route, so the ledger renders here.
+
+    Scoped to Generate on purpose. It reads every row whose call_kind is a code
+    generation, which today is all of them: this route composes its narration
+    deterministically from the screened table rather than asking a model for
+    it. If a stage ever starts calling the gateway, its rows will not silently
+    appear under Generate -- they will be missing, which is the failure that
+    gets noticed.
+    """
+    rows = [e for e in (pub.get("gateway_ledger") or []) if e["call_kind"] in _GEN_CALL_KINDS]
+    if not rows:
+        return
+    with st.expander(f"Model gateway ledger ({len(rows)} call(s))"):
+        st.caption(
+            "The central control point for model access. Every call is classified "
+            "by stakes, routed to a model tier, checked against the cache and "
+            "cost-capped. In scripted mode the call executes as a template at zero "
+            "cost and the routing decision is still recorded, so you can read how "
+            "a live call would have been routed."
+        )
+        _html_table(
+            ["#", "call", "stakes", "routed to", "provider", "cache", "tokens", "cost", "policy"],
+            [
+                f"<tr><td class='mono'>{e['seq']}</td><td>{_esc(e['call_kind'])}</td>"
+                f"<td>{_esc(e['stakes'])}</td>"
+                f"<td class='mono'>{_esc(e['routed_tier'])} / {_esc(e['routed_model'])}</td>"
+                f"<td>{_esc(e['provider'])}</td><td>{_esc(e['cache'])}</td>"
+                f"<td>{e['tokens']:,}</td><td>${e['cost_usd']:.4f}</td>"
+                f"<td class='muted'>{_esc(e['policy'])}</td></tr>"
+                for e in rows
+            ],
+            "Elevated-stakes calls (code generation, model performance, promotion) "
+            "route to a capable model; routine narration routes to a cheap one. The "
+            "cap is enforced at this boundary, not inside each caller.",
+        )
+        _control_chip_row(["CTL-COST-01"], pub)
 
 
 def _gate_verdict(gate: dict, checks: list[dict]) -> None:
@@ -2029,10 +2115,19 @@ def _panel_execute(pub: dict | None, cfg: dict | None, persona) -> None:  # noqa
     st.success(f"Ran in the sandbox: {rec.get('detail', '')}")
     emitted = ex.get("emitted")
     if isinstance(emitted, list):
+        st.markdown("**What the code emitted** <span class='muted'>(raw, unscreened)</span>",
+                    unsafe_allow_html=True)
+        # The raw result, shown before the Screen has touched it. This is the
+        # only place in the app where the unscreened numbers are visible, and
+        # that is the point: the Screen panel next door shows the same table
+        # with cells removed, and the two side by side are what makes the
+        # disclosure control legible as something that acted rather than
+        # something that was declared.
+        st.dataframe(pd.DataFrame(emitted), width="stretch", hide_index=True)
         st.caption(
-            f"The code emitted a grouped table: {len(emitted)} rows × "
-            f"{len(emitted[0]) if emitted else 0} columns. The values go to the "
-            "Screen next; what you may see is decided there, not here."
+            f"{len(emitted)} rows × {len(emitted[0]) if emitted else 0} columns, "
+            "straight off the sandbox's emit channel. Nothing downstream reads "
+            "this: what may be published is decided at the Screen, not here."
         )
     elif isinstance(emitted, dict):
         st.markdown("**Emitted result** (aggregate; no individual-level cells)")
@@ -2213,6 +2308,48 @@ def _panel_interpret(pub: dict | None, cfg: dict | None, persona) -> None:  # no
         f"{verdict} <span class='muted'>{_esc(rec.get('detail', '') if rec else '')}</span>",
         unsafe_allow_html=True,
     )
+    _fairness_verdict(pub)
+
+
+def _fairness_verdict(pub: dict) -> None:
+    """The four-fifths reading of this run, merged into Interpret.
+
+    Not a move of the retired Fairness tab so much as a merge: the screened
+    table already IS the fairness analysis on this route, because the result
+    contract will not accept a result that is not a selection rate per group.
+    Rendering a second Fairness panel next to Screen would have been the same
+    numbers under two headings. What the tab had that this route did not was
+    the vocabulary -- disparity ratio, threshold, verdict -- which is what a
+    fair-lending reviewer actually asks for, so that is what moved.
+    """
+    fr = pub.get("fairness") or {}
+    if not fr:
+        return
+    passes = fr["passes"]
+    badge = (
+        "<span class='ok'>within the four-fifths threshold</span>"
+        if passes
+        else "<span class='flag'>below threshold — flagged for review</span>"
+    )
+    st.markdown(
+        f"<span class='muted'>Disparity ratio</span> <b>{fr['disparity_ratio']:.3f}</b> "
+        f"<span class='muted'>(min/max selection rate across "
+        f"{_esc(fr['protected_attribute'])}; threshold {fr['threshold']})</span> — {badge}",
+        unsafe_allow_html=True,
+    )
+    if fr.get("suppressed"):
+        # Never let the ratio imply it saw the whole picture. A suppressed band
+        # could be the extreme one, and the number is computed without it.
+        st.caption(
+            "Computed on the screened table, so the suppressed band(s) "
+            f"({', '.join(fr['suppressed'])}) are not in this ratio. The spread "
+            "across all bands may be wider than the number above."
+        )
+    st.caption(
+        "This is a disparity in flagging rates, not a finding of discrimination. "
+        "Whether a gap has a business necessity is a Legal and Compliance "
+        "judgment; the platform's job is that the number is on the record."
+    )
 
 
 def _panel_attest(pub: dict | None, cfg: dict | None, persona) -> None:  # noqa: ANN001
@@ -2369,6 +2506,39 @@ def _panel_architecture(pub: dict | None, cfg: dict | None, persona) -> None:  #
                 )
                 for c in ctls:
                     _control_popover(c, pub, key=f"arch_{stage}_{c}")
+    # Salvaged from the retired Pipeline screen, which made this argument about
+    # its LangGraph DAG and was the only place in the app that made it at all.
+    # The argument is about control flow, not about LangGraph, so it survives
+    # the screen: it is now made about the nine stages, which are the thing the
+    # app actually runs.
+    st.markdown("**Fixed control flow, not an autonomous agent**")
+    st.markdown(
+        "<span class='muted'>The stage order is a constant in "
+        "<code>govflow/flow.py</code>, not a plan the model draws up per "
+        "request. Nothing here decomposes itself into sub-tasks, spawns "
+        "workers, or chooses its next step. That is a deliberate limit rather "
+        "than a missing feature: an examiner can read the whole path a request "
+        "takes before any request takes it, and the same nine stages in the "
+        "same order are what every run in the Audit Log went through. A model "
+        "that picks its own control flow cannot offer that, and the thing being "
+        "sold here is the offer.<br><br>"
+        "The model's autonomy is real but bounded, and the boundary is what is "
+        "on screen: it writes the code at Generate, and it chooses the analysis "
+        "and its parameters at Plan. Everything around that is fixed by the "
+        "platform. The credit-risk route in the Audit Log is a LangGraph "
+        "StateGraph with a human interrupt at its gate, built on the same "
+        "principle: static nodes and edges.</span>",
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        "<div style='margin:8px 0 14px'>"
+        + " &rarr; ".join(
+            f"<span class='ctlchip pass'><span class='st'></span>{html.escape(s)}</span>"
+            for s in STAGES
+        )
+        + "</div>",
+        unsafe_allow_html=True,
+    )
     st.markdown("**The import allowlist, as the governed catalogue**")
     st.markdown(
         "<span class='muted'>What the model may reach for at L2 (green) and what "
@@ -2606,16 +2776,34 @@ def render_govflow(persona) -> None:  # noqa: ANN001
             if stopped:
                 verb = "refused" if stopped["status"] == "blocked" else "errored"
                 status_label = f"{verb} at {stopped['stage']}"
-        left, right = st.columns([5, 1])
+        left, mid, right = st.columns([5, 1.4, 1])
         left.markdown(
             f"{_chip('run ' + pub['run_id'])} {_chip(status_label, status_kind)} "
             f"{_chip('tier ' + pub['tier'])} "
             f"{_chip('live LLM' if pub.get('live') else 'scripted')} "
             + (_chip('repair of ' + pub['repaired_from']) if pub.get('repaired_from') else "")
+            + _run_economics(pub)
             + f" <span class='muted'>{len(pub.get('controls_fired', []))} control(s) fired"
             f"</span>",
             unsafe_allow_html=True,
         )
+        # The retired Pipeline screen carried a whole Audit Log tab. A third
+        # rendering of the event stream is what the tint map at app.py already
+        # paid to avoid, so this links to the drill-down instead of rebuilding
+        # it. _open_audit is injected by app.py for the same reason the manual
+        # takes _nav_to: importing app.py back would be a cycle.
+        opener = st.session_state.get("_govflow_open_audit")
+        if opener is not None:
+            # Imperative rather than on_click: the opener navigates, and a
+            # rerun inside a callback is a no-op that Streamlit warns about on
+            # screen. Same reason the Overview tiles call _nav_to in the body.
+            if mid.button(
+                "Audit trail",
+                icon=":material/gavel:",
+                key="gv_audit",
+                help="Open this run's full event stream in the Audit Log.",
+            ):
+                opener(pub["run_id"])
         right.button("New run", on_click=_reset_run)
     else:
         st.info(

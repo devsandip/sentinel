@@ -286,7 +286,27 @@ def _run_credit_risk(
         actor=state.started_by,
         approver=_approver_from_audit(events),
         steps=_steps_from_orchestrator(pub),
+        # Only a promoted run has one: the card is generated after the human
+        # gate clears, so a rejected or self-approved run carries None and the
+        # Registry says so rather than showing a card for a model nobody signed.
+        model_card=pub.get("model_card"),
     ), events
+
+
+def _govflow_cost(r) -> dict:  # noqa: ANN001
+    """What the nine-stage run spent, in the shape the store already uses.
+
+    `cycle_time_s` is the real elapsed time of the seeding execution, not the
+    demo-timeline date: the record is what the run did, and pretending a
+    duration would be the one invented number in a store whose whole claim is
+    that nothing is.
+    """
+    return {
+        "tokens": r.generation.tokens if r.generation else 0,
+        "cost_usd": r.generation.cost_usd if r.generation else 0.0,
+        "cycle_time_s": r.elapsed_s,
+        "narration_mode": "live" if (r.generation and r.generation.live) else "scripted",
+    }
 
 
 def _run_govflow(params: dict) -> tuple[SeedRun, list[dict]]:
@@ -308,7 +328,11 @@ def _run_govflow(params: dict) -> tuple[SeedRun, list[dict]]:
         status=r.status,
         metrics=metrics,
         controls_fired=list(r.controls_fired),
-        cost=None,
+        # Was None while nothing rendered it, so a seeded run showed a blank
+        # where a live one now shows chips. The flow always computed these; it
+        # just did not carry them out of the door until the Run header needed
+        # them. Zero on a scripted run is the real number, not a placeholder.
+        cost=_govflow_cost(r),
         actor=persona.id,
         # The nine-stage route has no human promotion gate. Left empty rather
         # than filled with the author, which would read as a signature.
@@ -338,7 +362,7 @@ def _run_l3(params: dict) -> tuple[SeedRun, list[dict]]:
         status=r.status,
         metrics=metrics,
         controls_fired=list(r.controls_fired),
-        cost=None,
+        cost=_govflow_cost(r),
         actor=persona.id,
         approver="",
         steps=_steps_from_stages(r),

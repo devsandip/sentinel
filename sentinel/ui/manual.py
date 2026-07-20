@@ -274,7 +274,6 @@ _BUILT: list[tuple[str, str]] = [
 _SCREEN_MAP: list[tuple[str, str, str]] = [
     ("Overview", "Overview", "Four live tiles and the CTA into a governed run."),
     ("Run", "Run", "The nine-stage walkthrough. The centre of the product."),
-    ("Pipeline", "Pipeline", "The four-agent credit-risk pipeline and its ten evidence tabs."),
     (
         "Analyses",
         "Analyses",
@@ -1138,9 +1137,14 @@ def _quick_start(nav_to) -> None:  # noqa: ANN001
                 "No cell values, no distributions, no samples.",
             ),
             (
-                "Approve a model",
-                "Run the credit pipeline from Pipeline, then switch to the MRM Approver to clear "
-                "the human gate. The analyst who ran it cannot approve it.",
+                "Read a model card",
+                "Registry, then Models, then the card on any promoted row. An SR 11-7 style "
+                "document generated from that run, not written by hand.",
+            ),
+            (
+                "Watch four eyes refuse",
+                "Audit Log, then any run whose author signed it themselves. The refusal is "
+                "CTL-SOD-01, and it compares identities rather than roles.",
             ),
         ]
     )
@@ -1604,8 +1608,13 @@ def _screens_chapter(nav_to) -> None:  # noqa: ANN001
         [
             (
                 "The rail",
-                "Nine stages plus an Architecture appendix. Each stage marks itself clear, refused "
-                "or skipped once a run exists.",
+                "Nine stages. Each marks itself clear, refused or skipped once a run exists. "
+                "Architecture is a topbar popover, not a tenth stop.",
+            ),
+            (
+                "The header",
+                "Run id, status, tier, generation mode, then what the run cost: tokens, dollars "
+                "and wall clock. An Audit trail button opens this run in the ledger.",
             ),
             (
                 "Each panel",
@@ -1623,9 +1632,24 @@ def _screens_chapter(nav_to) -> None:  # noqa: ANN001
                 "scripted or live generation.",
             ),
             (
+                "Generate",
+                "The unexecuted code, the attempt history, the prompt the model is given, and the "
+                "gateway ledger: every model call, its stakes and the tier it routed to.",
+            ),
+            (
                 "Gate",
                 "Nine static checks with a verdict on each, the offending line highlighted, and a "
                 "Fix it button that resubmits to the same gate.",
+            ),
+            (
+                "Execute",
+                "The sandbox spelled out, then what the code emitted: the raw table, before the "
+                "Screen has removed anything from it.",
+            ),
+            (
+                "Interpret",
+                "The narration, its faithfulness verdict, and the four-fifths disparity ratio "
+                "against its threshold. Suppressed bands are named as absent from the ratio.",
             ),
             (
                 "Attest",
@@ -1636,52 +1660,6 @@ def _screens_chapter(nav_to) -> None:  # noqa: ANN001
                 "Policy explorer",
                 "Inside Access: the purpose-by-dataset matrix and an interactive tier resolver.",
             ),
-        ],
-    )
-    _screen(
-        "Pipeline",
-        "Pipeline",
-        "The four-agent credit-risk pipeline, and ten tabs of evidence from one run.",
-        [
-            (
-                "Pipeline",
-                "The LangGraph orchestration graph, the control envelope, and one card per step. "
-                "The human gate lives here.",
-            ),
-            (
-                "Results",
-                "AUC, accuracy, the confusion matrix, top features by coefficient, the ROC curve.",
-            ),
-            ("Audit Log", "This run's append-only event trail, tinted by level."),
-            (
-                "Fairness",
-                "The four-fifths disparity ratio against its threshold, selection rate by group.",
-            ),
-            (
-                "Model Card",
-                "An SR 11-7 style model-risk document generated from the run, exportable to PDF.",
-            ),
-            (
-                "Cost & KPIs",
-                "Tokens, dollars, cycle time, eval pass-rate, human overrides, and the eval gate's "
-                "verdict.",
-            ),
-            (
-                "Gateway",
-                "The model-gateway ledger: every call, its stakes, the tier it routed to, cache "
-                "hits and cost.",
-            ),
-            (
-                "Knowledge",
-                "Retrieved policy passages with provenance, marked public or synthetic, and which "
-                "backend served them.",
-            ),
-            (
-                "Memory",
-                "Short-term working context (ephemeral) and long-term precedents, with their "
-                "retention class.",
-            ),
-            ("Traces", "OpenTelemetry spans, one per agent, with durations and attributes."),
         ],
     )
     _screen(
@@ -1731,6 +1709,11 @@ def _screens_chapter(nav_to) -> None:  # noqa: ANN001
                 "Models",
                 "What a run produced. One row per run that trained something, with AUC, disparity, "
                 "fairness verdict and promotion status.",
+            ),
+            (
+                "Model card",
+                "Each model's SR 11-7 documentation, opened from its own row and exportable to "
+                "PDF. A run that never cleared the human gate has none, and says so.",
             ),
             (
                 "Agents",
@@ -2156,10 +2139,15 @@ def _architecture_chapter() -> None:
     )
 
     _note(
-        "<b>Known documentation drift, stated rather than hidden.</b> The README "
-        "still describes a six-tab UI and a plain-Python orchestrator. The "
-        "Pipeline screen has ten tabs, and the orchestrator has been a LangGraph "
-        "StateGraph since the interrupt-based human gate landed."
+        "<b>Known documentation drift, stated rather than hidden.</b> The README's "
+        "quick-start still quotes a test count from an early cut of the project; "
+        "the suite is the source of truth for that number, not the prose. Its "
+        "description of the UI and the orchestrator was wrong for longer and is "
+        "now corrected: the tab set is gone entirely, folded into the nine stages, "
+        "and the orchestrator has been a LangGraph StateGraph since the "
+        "interrupt-based human gate landed. That orchestrator still runs -- the "
+        "credit-risk runs in the Audit Log are its work -- but it no longer has a "
+        "screen of its own."
     )
 
 

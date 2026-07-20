@@ -29,20 +29,15 @@ from sentinel.datasets import available as dataset_available
 from sentinel.govflow.controls_info import control_info, implemented_ids
 from sentinel.govflow.purpose_matrix import PURPOSE_LABEL, PURPOSES, matrix_rows
 from sentinel.govflow.tiers import CLASSIFICATION_CEILING
-from sentinel.harness.controls import CONTROL_CATALOG, ControlSettings, from_disabled
+from sentinel.harness.controls import CONTROL_CATALOG
 from sentinel.harness.identity import (
     all_personas,
-    default_persona,
     get_persona,
     policy_version,
 )
 from sentinel.harness.model_card import ModelCard, render_markdown, render_pdf
 from sentinel.orchestrator import (
-    STATUS_AWAITING,
-    STATUS_BLOCKED,
-    STATUS_COMPLETED,
     STATUS_REJECTED,
-    Orchestrator,
 )
 from sentinel.platform import (
     adoption_metrics,
@@ -72,7 +67,6 @@ from sentinel.platform.certification import evaluate as evaluate_cert
 from sentinel.platform.patterns import AVOIDED, IN_USE, PLANNED
 from sentinel.platform.run_history import KIND_CREDIT_RISK
 from sentinel.platform.templates import AVAILABLE, LIVE
-from sentinel.rag import corpus_summary
 from sentinel.sandbox.warmup import start_background_warmup
 from sentinel.ui.brand import SHIELD_SVG
 from sentinel.ui.govflow import (
@@ -778,11 +772,6 @@ _LOGIN_CSS = """
     </style>
 """
 
-if "orch" not in st.session_state:
-    st.session_state.orch = Orchestrator()
-    st.session_state.run_id = None
-orch: Orchestrator = st.session_state.orch
-
 if "analysis_engine" not in st.session_state:
     st.session_state.analysis_engine = AnalysisEngine()
     st.session_state.analysis_run = None
@@ -971,26 +960,28 @@ def _controls_plane(persona) -> None:  # noqa: ANN001
         "the governed-codegen controls by stage. Disabling is audited and marks "
         "the run UNGOVERNED."
     )
-    can_toggle = persona is not None and persona.can_toggle_controls
     st.markdown("<span class='eyebrow'>Pipeline harness</span>", unsafe_allow_html=True)
     catalog = {c[0]: c for c in CONTROL_CATALOG}
     for cid in _PLANE_CATALOG:
         info = control_info(cid)
-        if cid in catalog and can_toggle:
-            st.checkbox(
-                f"Disable {info.name}",
-                key=f"ctrl_off_{cid}",
-                help=f"{info.what} If off: {catalog[cid][3]}",
-            )
-        else:
-            st.markdown(
-                f"<div style='margin:4px 0'><span class='ctlchip pass'>"
-                f"<span class='st'></span>{info.name}</span> "
-                f"<span class='muted'>{info.what}</span></div>",
-                unsafe_allow_html=True,
-            )
-    if not can_toggle:
-        st.caption("Toggling requires the Platform Admin persona.")
+        st.markdown(
+            f"<div style='margin:4px 0'><span class='ctlchip pass'>"
+            f"<span class='st'></span>{info.name}</span> "
+            f"<span class='muted'>{info.what}</span></div>",
+            unsafe_allow_html=True,
+        )
+    # These six were toggleable while the Pipeline screen could start a run
+    # with one switched off, and the point of the switch was to watch the
+    # failure the control prevents. Retiring that screen took the run with it,
+    # so the switches would have stayed on screen changing nothing. A control a
+    # visitor can flick with no effect argues the opposite of what this page
+    # claims, so they are read-only, and the runs that did exercise them are
+    # still in the Audit Log rather than deleted along with the screen.
+    st.caption(
+        f"Enforced on the credit-risk route ({', '.join(sorted(catalog))}). Those "
+        "runs are in the Audit Log, including the ones a control refused. The "
+        "governed-codegen route below is what the Run screen executes."
+    )
     st.markdown(
         "<span class='eyebrow'>Governed codegen (by stage)</span>",
         unsafe_allow_html=True,
@@ -1046,16 +1037,12 @@ def header(persona) -> None:  # noqa: ANN001
     a different role. The run-context chips (Data, Purpose) were removed: they
     restated globally what the Run flow already states where it is actionable.
     The resolved tier is run-scope too, so it lives in the Run flow rather than
-    on this global bar, and the governed badge shows only as a warning when a
-    control is toggled off."""
-    # The governed badge earns its place only as a warning: shown when a control
-    # is disabled for the next run, and nothing (not a decorative green) when on.
-    # It is global state, not run scope, so it shows on every screen.
-    gov_badge = (
-        "<span class='badge warn'>UNGOVERNED next run</span>"
-        if _control_settings(persona).any_disabled
-        else ""
-    )
+    on this global bar.
+
+    The UNGOVERNED badge that used to sit here went with the Pipeline screen.
+    It warned that the next run would execute with a control switched off, and
+    no run the app can now start is capable of that: the governed-codegen route
+    has no disable path, by construction rather than by policy."""
     # One flex row (ui-spec 2.1): brand left, everything else right, each item
     # sized to its content.
     bar = st.container(
@@ -1078,8 +1065,6 @@ def header(persona) -> None:  # noqa: ANN001
             horizontal=True, vertical_alignment="center", key="topbarctx"
         )
         with ctx:
-            if gov_badge:
-                st.markdown(gov_badge, unsafe_allow_html=True)
             _persona_switcher(persona)
             with st.popover("Controls"):
                 _controls_plane(persona)
@@ -1124,176 +1109,15 @@ def _persona_switcher(persona) -> None:  # noqa: ANN001
         st.caption(persona.description)
 
 
-def _control_settings(persona) -> ControlSettings:  # noqa: ANN001
-    """Read the header-chip toggles into the settings for the next run. Only a
-    persona holding toggle authority can have live toggles; anyone else runs
-    fully governed even if stale ctrl_off_* keys linger from an Admin session."""
-    if persona is None or not persona.can_toggle_controls:
-        return ControlSettings()
-    return from_disabled(
-        [c[0] for c in CONTROL_CATALOG if st.session_state.get(f"ctrl_off_{c[0]}")]
-    )
 
 
-def controls(persona) -> None:
-    questions = orch.questions()
-    labels = {q["id"]: q["label"] for q in questions}
-    c1, c2, c3 = st.columns([4, 2, 1])
-    with c1:
-        qid = st.selectbox(
-            "Preset question",
-            options=list(labels),
-            format_func=lambda k: labels[k],
-        )
-        st.selectbox(
-            "Dataset", ["UCI German Credit (1,000 loan applicants)"], disabled=True
-        )
-    with c2:
-        mode = st.radio(
-            "Narration",
-            ["scripted", "live"],
-            format_func=lambda m: "Scripted (free)" if m == "scripted" else "Live LLM",
-            horizontal=True,
-        )
-        st.caption(
-            "Scripted = deterministic narration over a live analysis (zero cost). "
-            "Live = real model, cost-capped."
-        )
-    with c3:
-        st.write("")
-        st.write("")
-        run_clicked = st.button(
-            "Run", type="primary", width="stretch", disabled=not persona.can_run
-        )
-    if not persona.can_run:
-        st.caption(
-            f"Your role ({persona.name}) cannot run analyses. "
-            "Switch to an Analyst or Admin to run."
-        )
-
-    settings = _control_settings(persona)
-    if settings.any_disabled:
-        st.error(
-            "Controls disabled via the header's Controls popover: "
-            + ", ".join(settings.disabled_names())
-            + ". The next run executes UNGOVERNED and the disabling is audited."
-        )
-    elif persona.can_toggle_controls:
-        st.caption(
-            "Admin: open Controls in the header to disable a control for the "
-            "next run and watch the failure it prevents."
-        )
-
-    if run_clicked:
-        state = orch.start_run(
-            qid, narration_mode=mode, controls=settings, actor=persona
-        )
-        st.session_state.run_id = state.run_id
-        # The header renders above this call, so it read the pre-run scope and
-        # would show no Data chip until the next interaction. Rerun so the topbar
-        # picks up the run; the run itself is already stored in the orchestrator.
-        st.rerun()
 
 
 # --------------------------------------------------------------------------
 # Tab renderers
 # --------------------------------------------------------------------------
-def tab_pipeline(pub: dict, state) -> None:
-    st.subheader("Agent pipeline")
-    st.caption(f"Narration: {pub['narration_label']}")
-    with st.expander("Orchestration graph (LangGraph)", expanded=False):
-        st.graphviz_chart(orch.graph_dot(), width="stretch")
-        st.caption(
-            "A LangGraph workflow, not an autonomous agent. The graph is static: "
-            "fixed nodes and edges an examiner can read. The human gate is a "
-            "LangGraph interrupt; the approve/reject branch is the dashed edge. "
-            "Dynamic self-decomposition (orchestrator-workers) is deliberately "
-            "avoided so the control flow stays fixed and auditable."
-        )
-
-    # Control envelope: the guardrails wrapped around this run, on or off.
-    disabled = set(pub.get("controls_disabled", []))
-    chips = []
-    for _cid, name, _desc, _breaks in CONTROL_CATALOG:
-        on = name not in disabled
-        cls = "pill-in_use" if on else "pill-avoided"
-        chips.append(f"<span class='pill {cls}'>{name}: {'on' if on else 'OFF'}</span>")
-    st.markdown(
-        "<span class='muted'>Control envelope:</span> " + " ".join(chips),
-        unsafe_allow_html=True,
-    )
-
-    for step in pub["steps"]:
-        icon = {
-            "done": "[done]",
-            "approved": "[approved]",
-            "awaiting_approval": "[awaiting approval]",
-            "rejected": "[rejected]",
-        }.get(step["status"], f"[{step['status']}]")
-        tag = "LIVE" if step["live"] else "scripted"
-        with st.container(border=True):
-            st.markdown(f"**{step['title']}**  `{icon}`  · _{tag}_")
-            st.write(step["narration"])
-            if step["fell_back"]:
-                st.warning(f"Live narration fell back to scripted: {step['fallback_reason']}")
-            if step["status"] == "awaiting_approval":
-                persona = get_persona(
-                    st.session_state.get("persona_id", default_persona().id)
-                )
-                st.info(
-                    "Human-in-the-loop gate: approve to promote this model, or "
-                    f"reject. Acting as **{persona.name}** — "
-                    + (
-                        "holds promotion authority."
-                        if persona.can_approve
-                        else "does NOT hold promotion authority (segregation of "
-                        "duties); an Approve attempt will be denied and logged."
-                    )
-                )
-                a, r, _ = st.columns([1, 1, 4])
-                if a.button("Approve", type="primary"):
-                    orch.approve(state.run_id, approved=True, actor=persona)
-                    st.rerun()
-                if r.button("Reject"):
-                    orch.approve(state.run_id, approved=False, actor=persona)
-                    st.rerun()
-    if pub.get("summary_narration"):
-        st.success(pub["summary_narration"])
-    if pub["status"] == STATUS_REJECTED:
-        st.error("Run stopped by human rejection. No model promoted.")
 
 
-def tab_results(pub: dict) -> None:
-    model = pub.get("model")
-    if not model:
-        st.info("Run a model to see results.")
-        return
-    m = model["metrics"]
-    cols = st.columns(5)
-    for col, (k, v) in zip(cols, m.items(), strict=True):
-        col.metric(k.upper(), v)
-
-    c1, c2 = st.columns(2)
-    with c1:
-        st.markdown("**Class balance**")
-        cb = model["profile"]["class_balance"]
-        st.bar_chart(pd.DataFrame({"count": cb}))
-        st.markdown("**Confusion matrix (test)**")
-        cm = model["confusion"]
-        st.dataframe(
-            pd.DataFrame(
-                [[cm["tn"], cm["fp"]], [cm["fn"], cm["tp"]]],
-                index=["actual good", "actual default"],
-                columns=["pred good", "pred default"],
-            )
-        )
-    with c2:
-        st.markdown("**Top features (|coefficient|)**")
-        tf = pd.DataFrame(model["top_features"]).set_index("name")["coefficient"]
-        st.bar_chart(tf)
-        st.markdown("**ROC curve**")
-        roc = model["roc_curve"]
-        st.line_chart(pd.DataFrame({"TPR": roc["tpr"]}, index=roc["fpr"]))
 
 
 # Row tint by audit level, shared by the Pipeline audit tab and the Audit Log's
@@ -1312,241 +1136,52 @@ def _audit_level_style(row):  # noqa: ANN001, ANN201
     return [_AUDIT_LEVEL_TINT.get(row["level"], "")] * len(row)
 
 
-def tab_audit(pub: dict) -> None:
-    st.subheader("Audit log (append-only)")
-    st.caption(
-        "Every agent action, incl. one RBAC denial and one PII redaction. Each "
-        "event is stamped with the acting identity and the policy version."
-    )
-    rows = []
-    for e in pub["audit"]:
-        rows.append(
-            {
-                "seq": e["seq"],
-                "level": e["level"],
-                "actor": e.get("actor", e["agent"]),
-                "action": e["action"],
-                "summary": e["output_summary"],
-                "data_touched": ", ".join(e["data_touched"]),
-                "policy": e.get("policy_version", ""),
-            }
-        )
-    df = pd.DataFrame(rows)
-
-    st.dataframe(
-        df.style.apply(_audit_level_style, axis=1), width="stretch", height=460
-    )
 
 
-def tab_fairness(pub: dict) -> None:
-    fr = pub.get("fairness")
-    if not fr:
-        st.info("Approve the model to run the fairness review.")
-        return
-    verdict = (
-        "<span class='ok'>within tolerance</span>"
-        if fr["passes"]
-        else "<span class='flag'>FLAGGED for review</span>"
-    )
-    st.subheader(f"Fairness across {fr['protected_attribute']}")
-    st.markdown(
-        f"Disparity ratio **{fr['disparity_ratio']}** "
-        f"(threshold {fr['threshold']}) — {verdict}",
-        unsafe_allow_html=True,
-    )
-    groups = pd.DataFrame(fr["groups"])
-    st.bar_chart(groups.set_index("group")["selection_rate"])
-    st.dataframe(groups, width="stretch")
-    st.caption(fr["note"])
 
 
-def tab_model_card(pub: dict) -> None:
-    card_dict = pub.get("model_card")
+def _model_card_popover(version: str, card_dict: dict | None, container) -> None:  # noqa: ANN001
+    """One model's SR 11-7 documentation, opened from its registry row.
+
+    This was the Pipeline screen's Model Card tab, where it hung off whichever
+    run you had just executed. That was the wrong anchor: a card documents a
+    model, and the place a bank looks for a model's documentation is the model
+    inventory. Here it is one click from the row, which is also the only place
+    it can be shown for the seeded runs, since the run objects it was generated
+    from do not outlive the process that made them.
+    """
     if not card_dict:
-        st.info("Approve the model to generate the model card.")
+        with container.popover("no card", use_container_width=True):
+            st.caption(
+                "No model card. The card is generated after a model clears the "
+                "human gate, so a run that was rejected, blocked, or refused "
+                "before the gate has none. That absence is the record."
+            )
         return
     card = ModelCard(**card_dict)
-    st.markdown(render_markdown(card))
-    pdf_path = render_pdf(card, "runtime/model_card_download.pdf")
-    st.download_button(
-        "Download model card (PDF)",
-        data=pdf_path.read_bytes(),
-        file_name=f"model_card_{pub['run_id']}.pdf",
-        mime="application/pdf",
-        type="primary",
-    )
-
-
-def tab_cost(pub: dict) -> None:
-    c = pub["cost"]
-    st.subheader("Cost & KPIs")
-    a, b, d, e = st.columns(4)
-    a.metric("Tokens", c.get("tokens", 0))
-    b.metric("Cost (USD)", f"${c.get('cost_usd', 0)}")
-    d.metric("Cycle time", f"{c.get('cycle_time_s', 0)}s")
-    e.metric("Eval pass-rate", c.get("eval_pass_rate", 0))
-    f, g = st.columns(2)
-    f.metric("Human overrides", c.get("human_overrides", 0))
-    g.metric("Narration mode", c.get("narration_mode", "templated"))
-    evals = pub.get("evals")
-    if evals:
-        st.markdown("**Eval gate**")
-        promoted = evals["promoted"]
-        st.markdown(
-            f"{evals['passed']}/{evals['passed'] + evals['failed']} checks passed — "
-            + (
-                "<span class='ok'>promotion allowed</span>"
-                if promoted
-                else "<span class='flag'>BLOCKED from promotion</span>"
-            ),
-            unsafe_allow_html=True,
+    with container.popover("card", use_container_width=True):
+        st.markdown(render_markdown(card))
+        # Rendered to a version-scoped path: a single shared filename meant two
+        # rows opened in one session could hand you the other one's PDF.
+        pdf_path = render_pdf(card, f"runtime/model_card_{version}.pdf")
+        st.download_button(
+            "Download model card (PDF)",
+            data=pdf_path.read_bytes(),
+            file_name=f"model_card_{version}.pdf",
+            mime="application/pdf",
+            key=f"mcdl_{version}",
+            type="primary",
         )
-        st.dataframe(pd.DataFrame(evals["results"]), width="stretch")
 
 
-def tab_knowledge(pub: dict) -> None:
-    st.subheader("Knowledge & citations")
-    st.caption(
-        "Agents ground compliance claims in the governed corpus and cite the "
-        "passage, instead of asserting it. Retrieval runs on a local vector index "
-        "by default; a real-AWS pgvector store is available behind a config switch."
-    )
-    retrieval = pub.get("retrieval")
-    if not retrieval:
-        st.info("Approve the model to run the fairness review and its retrieval.")
-    else:
-        st.markdown(
-            f"**Retrieval query** (via `{retrieval['backend']}` vector store)"
-        )
-        st.code(retrieval["query"], language="text")
-        st.markdown("**Retrieved passages (cited into the fairness review)**")
-        for c in retrieval["citations"]:
-            tag = "public" if c["provenance"] == "public" else "synthetic"
-            cls = "pill-in_use" if c["provenance"] == "public" else "pill-planned"
-            st.markdown(
-                f"<span class='pill {cls}'>{tag}</span> "
-                f"**{c['citation']}** &nbsp;<span class='muted'>score "
-                f"{c['score']}</span>",
-                unsafe_allow_html=True,
-            )
-            st.markdown(f"<span class='muted'>{c['text']}</span>", unsafe_allow_html=True)
-            st.write("")
-
-    st.divider()
-    st.markdown("**Corpus**")
-    st.caption(
-        "Real public regulation plus synthetic internal standards, labeled by "
-        "provenance. No confidential bank documents are used."
-    )
-    st.dataframe(pd.DataFrame(corpus_summary()), width="stretch")
 
 
-def tab_traces(pub: dict) -> None:
-    st.subheader("Traces (OpenTelemetry)")
-    st.caption(
-        "Every agent step and gateway call emits an OpenTelemetry span, the "
-        "recognized tracing standard. An OTLP exporter can ship these to Jaeger, "
-        "Tempo, or Honeycomb without changing the call sites."
-    )
-    traces = pub.get("traces", [])
-    if not traces:
-        st.info("Run an analysis to produce a trace.")
-        return
-    total = round(sum(t["duration_ms"] for t in traces), 2)
-    st.metric("Spans", len(traces), f"{total} ms total")
-    rows = [
-        {
-            "span": t["name"],
-            "duration_ms": t["duration_ms"],
-            **{k: v for k, v in t.get("attributes", {}).items()},
-        }
-        for t in traces
-    ]
-    st.dataframe(pd.DataFrame(rows), width="stretch", height=360)
 
 
-def tab_memory(pub: dict) -> None:
-    st.subheader("Memory & retention")
-    st.caption(
-        "Governed memory is a data-retention control. Short-term working context "
-        "is ephemeral; long-term precedent is retained under policy."
-    )
-    mem = pub.get("memory", {})
-
-    st.markdown("**Short-term (working context)**")
-    st.caption("Held for this run only, then discarded. Retention: ephemeral.")
-    st_keys = mem.get("short_term", [])
-    if st_keys:
-        st.markdown(
-            " ".join(f"<span class='ctrl-chip'>{k}</span>" for k in st_keys),
-            unsafe_allow_html=True,
-        )
-    else:
-        st.caption("No working context yet.")
-
-    st.divider()
-    st.markdown("**Long-term (precedent)**")
-    st.caption(
-        "Prior outcomes for this question, retained to inform future runs. "
-        "Retention: records-retention policy."
-    )
-    lt = mem.get("long_term", [])
-    if lt:
-        rows = []
-        for p in lt:
-            d = dict(p)
-            d["origin"] = "seeded" if p.get("seeded") else "live"
-            rows.append(d)
-        st.dataframe(
-            pd.DataFrame(rows)[
-                ["question_id", "status", "disparity_ratio", "origin", "created_at"]
-            ],
-            width="stretch",
-        )
-    else:
-        st.info("No precedent recorded for this question yet.")
 
 
-def tab_gateway(pub: dict) -> None:
-    st.subheader("Model gateway ledger")
-    st.caption(
-        "The central control point for model access. Every call is classified, "
-        "routed to a model tier, checked against the cache, and cost-capped. In "
-        "scripted mode calls execute as templates (zero cost); the routing "
-        "decision is still recorded so you can see how live calls would be routed."
-    )
-    ledger = pub.get("gateway_ledger", [])
-    if not ledger:
-        st.info("Run an analysis to populate the gateway ledger.")
-        return
-    total_cost = sum(e["cost_usd"] for e in ledger)
-    hits = sum(1 for e in ledger if e["cache"] == "hit")
-    elevated = sum(1 for e in ledger if e["stakes"] == "elevated")
-    a, b, c, d = st.columns(4)
-    a.metric("Calls", len(ledger))
-    b.metric("Elevated-stakes", elevated)
-    c.metric("Cache hits", hits)
-    d.metric("Cost (USD)", f"${round(total_cost, 6)}")
-    df = pd.DataFrame(ledger)[
-        [
-            "seq",
-            "call_kind",
-            "stakes",
-            "routed_tier",
-            "routed_model",
-            "provider",
-            "cache",
-            "tokens",
-            "cost_usd",
-            "policy",
-        ]
-    ]
-    st.dataframe(df, width="stretch", height=360)
-    st.caption(
-        "Routing: elevated-stakes narration (model performance, promotion) routes "
-        "to a capable model; routine narration to a cheap one. Re-run the same "
-        "question to see cache hits."
-    )
+
+
 
 
 # --------------------------------------------------------------------------
@@ -1667,7 +1302,7 @@ def render_platform() -> None:
         st.write("")
 
 
-_MV_COLS = (2.6, 2.0, 1.2, 1.5, 1.4, 1.6, 1.3, 1.5)
+_MV_COLS = (2.6, 1.9, 1.1, 1.4, 1.3, 1.5, 1.2, 1.3, 1.2)
 _MV_HEAD = (
     "version",
     "question",
@@ -1677,6 +1312,7 @@ _MV_HEAD = (
     "status",
     "origin",
     "created",
+    "card",
 )
 # Status words as markdown badges (a popover label cannot carry a .badge span).
 _STATUS_MD = {
@@ -1783,10 +1419,12 @@ def render_registry() -> None:
                 )
             td(cols[6], origin)
             td(cols[7], d["created_at"][:10])
+            _model_card_popover(d["version"], m.model_card, cols[8])
         st.caption(
             "Status comes from the eval gate and the human decision: promoted, "
             "blocked, or rejected. 'seeded' rows are labeled demo history; 'live' "
-            "rows accumulate as you complete runs this session."
+            "rows accumulate as you complete runs this session. The card column "
+            "opens each model's SR 11-7 documentation, generated from that run."
         )
     else:
         st.info("No models registered yet.")
@@ -2780,7 +2418,7 @@ def _audit_open(run_id: str) -> None:
 def render_audit_run(persona) -> None:  # noqa: ANN001
     """One run, full screen: the evidence for a single execution."""
     run_id = st.session_state.get("aud_sel") or st.query_params.get("run", "")
-    all_runs = audit_runs()
+    all_runs = audit_runs(live=st.session_state.get("live_audit_runs", []))
     run = next((r for r in all_runs if r.run_id == run_id), None)
     # The same entitlement the ledger applies, applied again here. This screen
     # is reachable by typing ?run=<id>, so checking only on the ledger would
@@ -2830,7 +2468,7 @@ def render_audit_log(persona) -> None:  # noqa: ANN001
     # The ledger is scoped to what this role may read before anything is
     # counted, so the tiles below describe the reader's own view and not the
     # platform. Every number on this screen is derived from `runs`.
-    all_runs = audit_runs()
+    all_runs = audit_runs(live=st.session_state.get("live_audit_runs", []))
     runs = visible_runs(all_runs, persona)
     hidden = len(all_runs) - len(runs)
     m = audit_summary(runs)
@@ -3450,7 +3088,7 @@ def render_home(persona) -> None:  # noqa: ANN001
 # Platform would imply otherwise.
 _NAV_GROUPS: list[tuple[str | None, list[str]]] = [
     (None, ["Overview"]),
-    ("Workspace", ["Run", "Pipeline", "Analyses"]),
+    ("Workspace", ["Run", "Analyses"]),
     ("Governance", ["Datasets", "Registry"]),
     ("Platform", ["Platform", "Adoption", "Audit Log"]),
     ("Help", ["User Manual", "FAQ", "Ask me"]),
@@ -3458,7 +3096,6 @@ _NAV_GROUPS: list[tuple[str | None, list[str]]] = [
 _NAV_KEYS = {
     "Overview": "nav_home",
     "Run": "nav_run",
-    "Pipeline": "nav_pipeline",
     "Analyses": "nav_analyses",
     "Datasets": "nav_datasets",
     "Registry": "nav_registry",
@@ -3471,13 +3108,12 @@ _NAV_KEYS = {
 }
 # Nav icons (ui-spec 2.2, sentinel-stepper-mockup.html sidenav). Material
 # Symbols, rounded/outline style, matching the mockup's stroked SVG set:
-# home, play, database, verified-check, grid, bar-chart. Pipeline (the
-# credit-risk DAG) and Analyses are app-only items not in the mockup; they
-# get the nearest matching glyphs (a branching tree and a stats magnifier).
+# home, play, database, verified-check, grid, bar-chart. Analyses is an
+# app-only item not in the mockup; it gets the nearest matching glyph (a stats
+# magnifier).
 _NAV_ICONS = {
     "Overview": ":material/home:",
     "Run": ":material/play_arrow:",
-    "Pipeline": ":material/account_tree:",
     "Analyses": ":material/query_stats:",
     "Datasets": ":material/database:",
     "Registry": ":material/verified:",
@@ -3545,6 +3181,12 @@ if section == "Overview":
     st.stop()
 
 if section == "Run":
+    # The stepper's "Audit trail" button needs _audit_open, and govflow cannot
+    # import it: app.py imports sentinel.ui.govflow, so importing back would be
+    # a cycle. Same injection the manual and FAQ take, through session state
+    # rather than an argument because the panel that needs it is four calls
+    # deep and threading it down would touch every panel signature.
+    st.session_state["_govflow_open_audit"] = _audit_open
     render_govflow(persona)
     st.stop()
 
@@ -3592,63 +3234,9 @@ if section == _SECTION_AUDIT_RUN:
     render_audit_run(persona)
     st.stop()
 
-# Fall-through: the credit-pipeline hero ("Pipeline" in the sidebar).
-controls(persona)
-st.divider()
-
-run_id = st.session_state.get("run_id")
-state = orch.get_run(run_id) if run_id else None
-
-if state is None:
-    st.info("Choose a preset question and click Run to start a governed analysis.")
-else:
-    pub = state.to_public_dict()
-    status_note = {
-        STATUS_AWAITING: "Paused at the human approval gate.",
-        STATUS_COMPLETED: "Completed and promoted.",
-        STATUS_BLOCKED: "Completed but blocked from promotion by the eval gate.",
-        STATUS_REJECTED: "Rejected by the human reviewer.",
-    }.get(pub["status"], pub["status"])
-    st.caption(f"Run {pub['run_id']} · {status_note}")
-    if pub.get("ungoverned"):
-        st.error(
-            "UNGOVERNED demo run — controls disabled: "
-            + ", ".join(pub["controls_disabled"])
-            + ". This is not a governed run; the disabling is recorded in the "
-            "audit log. Re-run with controls on for a governed analysis."
-        )
-
-    tabs = st.tabs(
-        [
-            "Pipeline",
-            "Results",
-            "Audit Log",
-            "Fairness",
-            "Model Card",
-            "Cost & KPIs",
-            "Gateway",
-            "Knowledge",
-            "Memory",
-            "Traces",
-        ]
-    )
-    with tabs[0]:
-        tab_pipeline(pub, state)
-    with tabs[1]:
-        tab_results(pub)
-    with tabs[2]:
-        tab_audit(pub)
-    with tabs[3]:
-        tab_fairness(pub)
-    with tabs[4]:
-        tab_model_card(pub)
-    with tabs[5]:
-        tab_cost(pub)
-    with tabs[6]:
-        tab_gateway(pub)
-    with tabs[7]:
-        tab_knowledge(pub)
-    with tabs[8]:
-        tab_memory(pub)
-    with tabs[9]:
-        tab_traces(pub)
+# Fall-through. Every section above stops explicitly, so reaching here means
+# st.session_state.section holds a screen that no longer exists -- in practice
+# "Pipeline", left in a session that was open when the screen was retired.
+# Land on Overview rather than rendering a blank page below the nav.
+st.session_state["section"] = "Overview"
+render_home(persona)

@@ -15,6 +15,7 @@ method, labelled honestly for what it assumes.
 
 from __future__ import annotations
 
+import time
 import uuid
 from datetime import UTC, datetime
 
@@ -164,6 +165,7 @@ def run_l3_analysis(
     ``repair_of`` marks this run as the "Fix it" repair of an earlier
     gate-blocked L3 run: the seeded repaired sample replaces the adversarial
     one and the gate re-reads it (L3 is scripted in this build)."""
+    t0 = time.perf_counter()
     persona = persona or default_persona()
     run_id = uuid.uuid4().hex[:12]
     audit = audit or AuditLog(run_id=run_id, persist=False, policy_version=policy_version())
@@ -194,6 +196,7 @@ def run_l3_analysis(
             question=question,
             tier=tier,
             persona=persona.name,
+            persona_id=persona.id,
             dataset=L3_DATASET,
             purpose=L3_PURPOSE,
             status=status,
@@ -212,6 +215,12 @@ def run_l3_analysis(
             # Linked only when the repair actually engaged at Generate; a
             # tier-blocked attempt repaired nothing and must not claim to.
             repaired_from=repair_of if repair_engaged else "",
+            # No gateway_ledger and no tokens: L3 is scripted in this build, so
+            # no model is called and the ledger is empty because nothing was
+            # routed, not because nobody recorded it. The header renders the
+            # zero rather than hiding the chips, which is the same reason the
+            # scripted L2 run shows a zero-cost ledger row.
+            elapsed_s=round(time.perf_counter() - t0, 3),
         )
 
     # Stage 1: Ask -- the tier must be L3. On Public data only a certified analyst

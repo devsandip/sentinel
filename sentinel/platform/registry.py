@@ -33,6 +33,10 @@ class ModelVersion:
     created_at: str
     ungoverned: bool = False
     seeded: bool = False
+    # The run's model card, kept off to_dict(): the dict feeds the table cells
+    # and a whole nested document in there would be carried by every caller
+    # that only wants a number. The Registry reads it off the object.
+    model_card: dict | None = None
 
     def to_dict(self) -> dict:
         return {
@@ -62,6 +66,7 @@ def _seed_rows() -> list[ModelVersion]:
                 status=r.status,
                 created_at=r.demo_date,
                 seeded=True,
+                model_card=r.model_card,
             )
         )
     return rows
@@ -80,6 +85,7 @@ def register_model(
     fairness_pass: bool | None,
     status: str,
     ungoverned: bool = False,
+    model_card: dict | None = None,
 ) -> ModelVersion:
     entry = ModelVersion(
         version=f"credit-lr-{run_id[:6]}",
@@ -90,6 +96,11 @@ def register_model(
         status=status,
         created_at=datetime.now(UTC).isoformat(),
         ungoverned=ungoverned,
+        # Carried so a live row and a seeded row are the same kind of thing.
+        # Without it the Registry would show documentation for the models it
+        # inherited and none for the ones it watched being made, which is the
+        # wrong way round for an inventory.
+        model_card=model_card,
     )
     _MODEL_REGISTRY.append(entry)
     return entry

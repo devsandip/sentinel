@@ -16,7 +16,11 @@ The gap is not a better model. It is the harness around the model: the controls 
 
 Treat governance as the product, not the paperwork. Build the agent pipeline and the control plane together, so every autonomous step is mediated by a control and emits an audit event. The ML underneath can be deliberately simple (a logistic-regression baseline here); the differentiation is that the same run produces the evidence a bank needs to trust it.
 
-Sentinel demonstrates this with one dataset (UCI German Credit) and a four-agent pipeline (Profiler, EDA, Modeler, Validator) plus an orchestrator. The analysis is always real: metrics, fairness numbers, and the model card are computed live and change with the data and seed. The agent narration is scripted by default (zero cost, safe for a public link) and labeled honestly; a live-LLM toggle exists behind a cost cap. The point the demo makes is that the controls are real, visible, and load-bearing.
+Sentinel demonstrates this as a nine-stage governed walkthrough: Ask, Plan, Access, Generate, Gate, Execute, Screen, Interpret, Attest. The model writes the analysis code, a static gate reads it before the machine does, a sandbox contains it, and a disclosure screen removes small cells before anything narrates the result. Every stage shows the controls armed on it, and each one can refuse.
+
+The stages are the product's one vocabulary for reading a run, which is why they are also how the evidence is laid out: the gateway ledger sits at Generate because that is where tokens are spent, the raw emitted table at Execute because the screened one next door is what a control did to it, the disparity ratio at Interpret. What a run cost is a header chip, because no single stage owns it.
+
+A second route, a four-agent LangGraph pipeline with an interrupt-based human gate, produced the credit-risk runs in the Audit Log and the models in the Registry. It no longer has a screen of its own. The analysis is real on both routes: metrics, fairness numbers and the model card are computed from the run and change with the data and seed. Generation is scripted by default (zero cost, safe for a public link) and labeled honestly; a live-LLM path exists behind a cost cap. The point the demo makes is that the controls are real, visible, and load-bearing.
 
 ## 3. Governance controls and the regulation each answers to
 
