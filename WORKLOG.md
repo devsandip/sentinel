@@ -823,3 +823,31 @@ Append-only session handoff log. Newest entries at the bottom.
 - Verified with two requests rather than one. The Gate panel's claim is that it reads rather than badges, and only a second run with a different shape tests that claim; a single green run is indistinguishable from a badge.
 - Stashed rather than hard-reset. "Nothing here is new" was a conclusion from reading a diff, and a hard reset would have made it true by force. Nothing untracked was present, so the stash cost nothing and kept the conclusion falsifiable.
 - Did not spend a live model call to verify someone else's PR. Reported it as shipped, not demonstrated.
+
+## 2026-07-20 (evening, cont.) — FAQ and Ask me under Help, merged and deployed
+
+**Did:**
+- Built the two remaining Help surfaces: an FAQ (17 entries, each routing to the manual chapter carrying the long version) and Ask me, a chat that answers only from the manual. PR #33, merged as `7ac3dde`.
+- Ask me runs a relevance gate before any retrieval or answering, then answers strictly from retrieved passages and shows them. Three verdicts: off topic, on topic but not covered, answered.
+- Added `ModelGateway.complete()`, a system+user completion with a caller-supplied fallback, so both stages are tier-routed, cost-capped, cached and in the ledger. Help gets no private path to a model.
+- Wrote the corpus guard: `test_corpus_states_no_enforced_number` reads the sandbox caps, disclosure floor and control/persona counts live and fails any corpus page that retypes one.
+- Deployed `main` at `7ac3dde`. Bundle `sentinel-20260720-200636.zip`, version `sentinel-eb-applicationversion-pnysewhnfcn2`, EB Ready and Green, health 200, WebSocket 101.
+- Verified the live path on prod, which local could not do: the gate refuses "Who is the PM of India, and what is a good recipe for dosa?" for 175 tokens and $0.0002 with no answer call made; an on-topic question answers from five cited passages naming CTL-SOD-01 at Attest.
+
+**State now:**
+- `main` at `b6d0b20` (the journal commit). Prod carries `7ac3dde`; nothing behavioural has landed since the bundle was cut.
+- 606 tests, 2 skipped, ruff clean.
+- Help is three screens: User Manual, FAQ, Ask me.
+- `stash@{0}` on the primary checkout still holds the stale pre-merge revert from the earlier session. Still worth dropping once it is clearly junk.
+
+**Next:**
+- Put the two-clause guard in `deploy/aws/deploy.sh`: refuse unless `HEAD` is an ancestor of `origin/main` AND `git status --porcelain` is empty. Carried over from the previous session and still not done; it is the one that would have fired on the near-miss.
+- Ask me has no conversation memory. A follow-up like "and what about L3" carries no antecedent and retrieves on those words alone. Decide whether that is worth fixing or worth stating on the page.
+- Split `app.py` into `sentinel/ui/screens/*.py`. Still deferred, now with two more screens routed through it.
+
+**Decisions:**
+- Gate before retrieval, not after. The obvious build is to retrieve and let the model decline, and it fails on the exact question Sandip named: a model handed five plausible passages and an off-topic question will try to bridge them. Refusing first means the answer stage is never asked to reconcile a question it has no business answering.
+- Three verdicts, not two. Off-topic and on-topic-but-uncovered are different facts, and the second is a gap in the manual that should read like one. Same distinction as `NOT_IN_ROUTE` versus `skipped` in the audit stages.
+- Accepted a second source of truth for the corpus, on Sandip's call. I recommended extracting prose from `manual.py` at render time under a recording `st` shim because it cannot drift; he chose parallel markdown, which is simpler to read and edit. The fence is the numbers rule, enforced by test: the corpus names a cap and points at the chapter that prints it, and may never restate the value.
+- The scripted gate is two tests, not one. Cosine alone answered "Write me a poem about the sea", because a corpus that discusses writing code has plenty of "write" in it. Vocabulary coverage asks how much of the sentence is in the corpus at all, which is the question cosine cannot ask.
+- Spent two live model calls to verify on prod. Last session declined to spend one on someone else's PR; this is my own feature, and the gate refusing before the answer stage bills is a claim only a live call can test.
