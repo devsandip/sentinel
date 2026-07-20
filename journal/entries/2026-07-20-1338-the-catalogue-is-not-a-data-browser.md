@@ -1,0 +1,29 @@
+# The catalogue is not a data browser
+
+2026-07-20 13:38. Previous: [2026-07-20-1121-chrome-recedes-and-an-audit-finds-the-landmine.md](2026-07-20-1121-chrome-recedes-and-an-audit-finds-the-landmine.md)
+
+Sandip looked at the Datasets surface and said what everyone says about it: it lists the datasets, which really is not much of a demo. Add an "Explore this dataset" button that opens the data in an EDA view. Then, in the same message, he asked the question that made the session worth having. Would that violate the governance we have built? And if it does, name the button something else and show tables, columns, relationships, types and descriptions instead.
+
+He answered his own question. I want to write down why the answer is yes, because the reasoning is the feature.
+
+An EDA view that shows values bypasses four controls the rest of the app spends its whole time proving. Purpose limitation is the first: Access is gated on why, not only on who, and an Explore button carries no purpose at all. Six of the eight datasets are Restricted or Confidential. The second is the autonomy ceiling, which resolves as the lower of what the data allows and what the person has earned. Confidential caps at L1, meaning pick a certified analysis and fill typed parameters and write no code. Free-form exploration of the Berka tables is above that ceiling by construction, not by policy oversight. The third is the column grant: Access builds a scoped table so that a withheld column does not exist on the object the generated code receives, and a view that renders every column puts back exactly what minimisation removed. On german_credit that is `applicant_email`, `applicant_ssn`, `sex`, and raw `age_years`. The fourth is the disclosure screen, because a value-counts panel is a grouped count and cells under the k-anonymity floor get suppressed before a model ever sees them.
+
+So the Governance section of a governance demo would have been the one place in the app handing out ungoverned data. That is worse than no drill-down.
+
+What I built instead is a data contract view, and I want to be clear that this is not a consolation prize. It is the layer the platform was missing. Every bank runs a catalogue, Collibra or Alation or a Glue or Unity metastore, and the entire point of a catalogue is that metadata is published to a far wider audience than data. You read the catalogue to decide what to ask for. Then you declare a purpose to get values. Metadata access and data access are two different grants, and conflating them is the mistake the Explore button would have been.
+
+Each registry row now ends in a Contract button. It opens provenance, license, classification and the tier ceiling that classification sets; the purposes permitted and refused, read off the same `PURPOSE_MATRIX` that CTL-PURP-01 enforces at Access so the page cannot disagree with the control; rows at source against rows onboarded locally, because the big sets ship sampled; tables with row counts; foreign keys with cardinality; and the column dictionary, which is name, logical type, role, description, and a derived tag for the columns the loader produces rather than the file. Above the dictionary is a legend saying what each role costs a requester at Access.
+
+It publishes nothing else. No values, no samples, no distributions, no missingness, no cardinality, no top values.
+
+That last part took the most thought. Missingness and cardinality look like metadata. They are not. They are computed from values, which makes them profile outputs, and profiling is already a governed analysis in this app: `data_profiling` loads under a license check, audits the access, and gates on blocking failures. So the line I drew is that the catalogue knows the shape and the profile knows the contents, and only the profile is data access. The page ends with two buttons that route into Run and into Analyses rather than shortcutting past them.
+
+There is one place the catalogue does touch the file. Logical types are inferred by reading a bounded 200-row head. That is the platform reading data to build metadata, which is not a disclosure to the reader, and I did not want that to be a claim I merely asserted. There is a test that takes every string the schema publishes and checks it against the actual first rows of the file. If a value ever leaks into a type, a role, or a description, it fails. Most of the twelve new tests are negative like that: no profile statistic may appear on the dataclasses, registry roles and catalogue roles must agree or the two disagree in public, foreign keys must reference tables and columns that exist.
+
+Two smaller calls worth keeping.
+
+The synthetic PII is published, not hidden. `applicant_email` and `applicant_ssn` are injected at load and exist only so the redaction control has something real to redact. They appear in the dictionary marked `pii` and `derived`. Hiding them would have been the dishonest option: they are columns an analysis actually meets, and a catalogue that omits the sensitive ones is not a catalogue.
+
+And documentation coverage is reported rather than smoothed over. german_credit is at 100 percent. LendingClub is at 40 of 152 columns, which shows as a 26 percent bar on its own page. I could have written 112 plausible sentences and had every dataset read 100 percent. Instead an undocumented column says so, because an undocumented column is one nobody can request responsibly, and coverage is a metric a data governance office genuinely reports. LendingClub being the worst-documented set in the registry is the same fact that makes it the data-quality dataset.
+
+Merged as PR #19, squashed to `4e106ec`. 406 tests pass. Not deployed: prod is still v10, and the Live LLM path there still fails every time with the allowlist traceback the audit found this morning. Nothing in this session touched that.
