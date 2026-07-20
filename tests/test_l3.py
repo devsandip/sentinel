@@ -16,6 +16,7 @@ from sentinel.codegen.gate import gate_code
 from sentinel.evidence import render_quarto, to_marimo_notebook
 from sentinel.govflow import run_l3_analysis
 from sentinel.govflow.flow import STATUS_BLOCKED, STATUS_COMPLETED
+from sentinel.govflow.l3 import L3_DATASET
 from sentinel.harness.identity import get_persona
 
 # -- the gate: broad allowlist, same hard deny lists -----------------------
@@ -114,3 +115,15 @@ def test_l3_evidence_makes_valid_downstream_outputs(tmp_path):
     res = render_quarto(r.evidence, tmp_path)
     assert res.qmd_path.exists()
     assert "parallel-trends" in res.qmd_path.read_text()
+
+
+def test_l3_arms_every_check_the_gate_has():
+    """The L3 gate call omitted the table scope, so CTL-PURP-01 had no rule to
+    test against and could not fire on any L3 run. The old Gate screen painted
+    that as a clear check; the read now separates armed-and-clear from never
+    armed, which is what surfaced it. Nothing may go back to unarmed silently.
+    """
+    r = run_l3_analysis("estimate", persona=get_persona("admin"))
+    unarmed = [c.key for c in r.gate.checks if not c.armed]
+    assert unarmed == [], f"L3 leaves these checks with no rule to apply: {unarmed}"
+    assert r.gate.scope["allowed_tables"] == [L3_DATASET]

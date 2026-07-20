@@ -558,6 +558,90 @@ st.markdown(
       .gv-below { color:var(--warn-ink); font-size:0.75rem; font-weight:600; white-space:nowrap; }
       .stage-status { margin:6px 0 10px 0; }
 
+      /* ---------- the Gate's read (Gate stage) ---------- */
+      /* Nine checks as nine cells, each carrying the count of constructs it
+         actually judged. The count is the point: a tick mark cannot tell a
+         check that read 16 names from one that had nothing to read, and the
+         four states below are four different facts (see codegen/gate.py). */
+      .gatein { display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr));
+                gap:10px; margin:4px 0 18px; }
+      .gatein .t { background:var(--surface); border:1px solid var(--border);
+                border-radius:var(--r-md); padding:10px 13px; box-shadow:var(--shadow-sm); }
+      .gatein .t .k { font-size:9.5px; font-weight:700; letter-spacing:.11em;
+                text-transform:uppercase; color:var(--faint); margin-bottom:5px; }
+      .gatein .t .v { font-size:13px; color:var(--ink); font-weight:600; }
+      .gatein .t .s { font-family:var(--mono); font-size:11px; color:var(--muted);
+                margin-top:3px; word-break:break-word; }
+
+      .gateread { display:grid; grid-template-columns:repeat(auto-fit,minmax(148px,1fr));
+                gap:9px; margin:4px 0 6px; }
+      .gateread .cell { border:1px solid var(--border); border-radius:var(--r-md);
+                padding:9px 11px 10px; background:var(--surface); min-width:0; }
+      .gateread .cell .cid { font-family:var(--mono); font-size:9.5px; font-weight:700;
+                letter-spacing:.04em; color:var(--faint); display:flex; align-items:center;
+                gap:5px; }
+      .gateread .cell .cid .d { width:7px; height:7px; border-radius:50%;
+                background:var(--faint); flex:none; }
+      /* The count and its unit are siblings, not nested: nesting the unit inside
+         the mono number would inherit mono, and there is no sans token to
+         override it with. */
+      .gateread .cell .nrow { display:flex; align-items:baseline; gap:5px;
+                margin:5px 0 1px; min-width:0; }
+      .gateread .cell .n { font-family:var(--mono); font-size:23px; font-weight:700;
+                font-variant-numeric:tabular-nums; line-height:1.15; color:var(--ink); }
+      .gateread .cell .nu { font-size:10.5px; font-weight:600; letter-spacing:.02em;
+                color:var(--muted); overflow:hidden; text-overflow:ellipsis;
+                white-space:nowrap; }
+      .gateread .cell .lab { font-size:11px; line-height:1.32; color:var(--muted); }
+      .gateread .cell.cleared { background:var(--ok-soft); border-color:var(--ok-border); }
+      .gateread .cell.cleared .cid, .gateread .cell.cleared .n { color:var(--ok-ink); }
+      .gateread .cell.cleared .cid .d { background:var(--ok); }
+      .gateread .cell.cleared .lab { color:var(--ok-ink); opacity:.86; }
+      .gateread .cell.refused { background:var(--danger-soft); border-color:var(--danger-border); }
+      .gateread .cell.refused .cid, .gateread .cell.refused .n { color:var(--danger-ink); }
+      .gateread .cell.refused .cid .d { background:var(--danger); }
+      .gateread .cell.refused .lab { color:var(--danger-ink); opacity:.86; }
+      /* Armed, but this code held nothing for it to judge. Not an assurance. */
+      .gateread .cell.none { background:var(--surface-2); border-style:dashed; }
+      .gateread .cell.none .n { color:var(--faint); }
+      /* Could not run: its rule was never supplied. A gap, so it reads amber. */
+      .gateread .cell.unarmed { background:var(--warn-soft); border-color:var(--warn-border); }
+      .gateread .cell.unarmed .cid, .gateread .cell.unarmed .n { color:var(--warn-ink); }
+      .gateread .cell.unarmed .cid .d { background:var(--warn); }
+      .gateread .cell.unarmed .lab { color:var(--warn-ink); opacity:.86; }
+
+      /* The verdict, stated once, with the reason under it. */
+      .gvd { border:1px solid var(--border); border-left-width:4px;
+             border-radius:var(--r-md); padding:12px 15px; margin:2px 0 14px;
+             background:var(--surface); }
+      .gvd.pass { border-left-color:var(--ok); background:var(--ok-soft);
+             border-color:var(--ok-border); border-left-color:var(--ok); }
+      .gvd.block { border-left-color:var(--danger); background:var(--danger-soft);
+             border-color:var(--danger-border); border-left-color:var(--danger); }
+      .gvd .h { font-size:15px; font-weight:700; letter-spacing:.01em; margin-bottom:5px; }
+      .gvd.pass .h { color:var(--ok-ink); }
+      .gvd.block .h { color:var(--danger-ink); }
+      .gvd .why { font-size:13px; line-height:1.5; color:var(--ink); max-width:78ch; }
+      .gvd .why code { font-family:var(--mono); font-size:11.5px; background:var(--surface);
+             padding:1px 5px; border-radius:4px; border:1px solid var(--border); }
+      .gvd .then { font-size:12px; color:var(--muted); margin-top:6px; }
+
+      /* Evidence chips: one construct the gate judged. */
+      .ev { display:inline-block; font-family:var(--mono); font-size:11px; font-weight:600;
+            padding:2px 7px; border-radius:6px; margin:2px 4px 2px 0;
+            background:var(--ok-soft); color:var(--ok-ink);
+            border:1px solid var(--ok-border); white-space:nowrap; }
+      .ev.no { background:var(--danger-soft); color:var(--danger-ink);
+            border-color:var(--danger-border); }
+      .ev.muted { background:var(--surface-2); color:var(--muted); border-color:var(--border);
+            font-family:inherit; font-style:italic; }
+      .evline { font-size:11.5px; color:var(--faint); font-family:var(--mono); }
+      /* The read, drawn in the code gutter: which check judged this line. */
+      .codeblk td.rd { width:74px; padding-right:12px; text-align:right;
+            font-size:9.5px; font-weight:700; letter-spacing:.03em;
+            color:var(--code-ln); user-select:none; white-space:nowrap; opacity:.85; }
+      .codeblk tr.viol td.rd { color:var(--code-viol-ln); }
+
       /* ---------- sidebar nav groups (ui-spec 2.2) ---------- */
       /* Rhythm from the mockup's .sidenav: rows stack flush (the padding is the
          row height), and the only vertical air is between groups. Streamlit's

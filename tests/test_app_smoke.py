@@ -786,3 +786,91 @@ def test_admin_header_chip_toggle_degrades_and_recovers():
     # their runs or their banner. The switcher now lives in the header popover.
     at.selectbox(key="persona_switch").set_value("analyst").run()
     assert not any("UNGOVERNED" in e.value for e in at.error)
+
+
+# -- the Gate stage's read (2026-07-20) -------------------------------------
+def _gate_panel(at, style: str | None = None):  # noqa: ANN001
+    """Run the walkthrough to the Gate stage and return its markdown."""
+    at.button(key="nav_run").click().run()
+    at.button(key="gv_ds_confirm").click().run()
+    if style is not None:
+        at.selectbox(key="govflow_style").set_value(style).run()
+    at.radio(key="govflow_stage").set_value("Plan").run()
+    at.button(key="gv_run").click().run()
+    at.radio(key="govflow_stage").set_value("Gate").run()
+    assert not at.exception
+    return " ".join(m.value for m in at.markdown)
+
+
+def test_gate_read_strip_reports_what_each_check_examined():
+    """Nine identical ticks over nine unequal checks was the whole complaint.
+
+    The strip has to carry the size of each read, and it has to distinguish a
+    check that judged sixteen constructs from one that had nothing in this code
+    to judge. Those are not the same assurance and cannot paint the same.
+    """
+    body = _gate_panel(_boot(timeout=120))
+    cells = re.findall(r"<div class='cell (\w+)'>(.*?)</div></div>", body, re.S)
+    assert len(cells) == 9, "the Gate read strip is not rendering nine checks"
+    kinds = [c[0] for c in cells]
+    # The benign L2 sample is pandas, not SQL, so the two SQL checks have no
+    # subject. If they ever paint 'cleared' the screen is claiming a read that
+    # never happened.
+    assert kinds.count("cleared") == 7
+    assert kinds.count("none") == 2
+    assert "refused" not in kinds
+    # Every cleared cell states a count, and the counts are not all the same.
+    counts = [int(n) for n in re.findall(r"<span class='n'>(\d+)</span>", body)]
+    assert len(counts) == 7 and len(set(counts)) > 1
+
+
+def test_gate_states_why_it_cleared_and_what_it_did_not_cover():
+    """An approval needs a reason as much as a refusal does, and the reason has
+    to include the checks that cleared nothing."""
+    body = _gate_panel(_boot(timeout=120))
+    verdict = re.search(r"<div class='gvd pass'>(.*?)</div></div>", body, re.S)
+    assert verdict, "the Gate verdict block is not rendering as a pass"
+    text = verdict.group(1)
+    assert "constructs" in text and "refused none of them" in text
+    assert "which is not the same as clearing it" in text, (
+        "a green verdict that does not name the checks with nothing to read is "
+        "claiming more assurance than the gate established"
+    )
+    # And the inputs it judged against are on the page, or the verdict is
+    # unreadable: "inside the grant" means nothing without the grant.
+    assert "What the gate was given" in body
+    assert "Import allowlist" in body and "Column grant" in body
+    assert "age_band" in body, "the grant is named as a count but never listed"
+
+
+def test_gate_refusal_names_the_construct_the_line_and_the_rule():
+    body = _gate_panel(_boot(timeout=120), style="Adversarial: exfiltrate results to a webhook")
+    verdict = re.search(r"<div class='gvd block'>(.*?)</div></div>", body, re.S)
+    assert verdict and "CTL-EGRESS-01" in verdict.group(1)
+    assert "requests" in verdict.group(1)
+    assert "The code did not run" in verdict.group(1)
+    # Exactly one check refuses; the other eight still report their own read
+    # rather than going dark behind the one that fired.
+    kinds = re.findall(r"<div class='cell (\w+)'>", body)
+    assert kinds.count("refused") == 1
+    assert kinds.count("cleared") == 6
+
+
+def test_gate_gutter_shows_where_the_parsers_looked():
+    """Tinting the refused line shows where the gate said no. It does not show
+    where the gate looked, which is the claim a reviewer has to take on trust."""
+    body = _gate_panel(_boot(timeout=120))
+    gutter = re.findall(r"<td class='rd'>(\d+) read</td>", body)
+    assert len(gutter) >= 8, "the code block is not carrying the gate's read"
+    assert any(int(g) > 1 for g in gutter)
+
+
+def test_the_gate_screen_does_not_keep_its_own_list_of_the_checks():
+    """The screen used to declare the nine checks itself, which is a claim about
+    the gate that nothing holds to the gate. It reads the catalogue now."""
+    with open(os.path.join(os.path.dirname(APP), "sentinel", "ui", "govflow.py")) as f:
+        src = f.read()
+    assert "_GATE_CHECKS = [" not in src
+    # The panel renders whatever the gate reports, rather than a list of nine
+    # labels it holds itself and asserts the gate performs.
+    assert "gate.get(\"checks\")" in src

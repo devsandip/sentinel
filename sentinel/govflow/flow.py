@@ -128,16 +128,7 @@ class GovernedRunResult:
             "plan_agent": self.plan_agent,
             "stages": [s.to_dict() for s in self.stages],
             "generated_code": self.generated_code,
-            "gate": {
-                "passed": self.gate.passed,
-                "controls_fired": self.gate.controls_fired,
-                "violations": [
-                    {"control": v.control, "line": v.line, "message": v.message}
-                    for v in self.gate.violations
-                ],
-            }
-            if self.gate
-            else None,
+            "gate": self.gate.to_public_dict() if self.gate else None,
             "live": self.generation.live if self.generation else False,
             "attempts": self.generation.attempt_count if self.generation else 0,
             "screen": self.screen.to_dict() if self.screen else None,

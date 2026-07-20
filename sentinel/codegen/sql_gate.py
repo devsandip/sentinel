@@ -65,9 +65,34 @@ class SqlViolation:
 
 
 @dataclass(frozen=True)
+class SqlReading:
+    """What the sqlglot half actually read out of one query.
+
+    The violations say what was refused. This says what was *examined*, which is
+    the other half of an audit answer and the half a passing gate has no other
+    way to show: the columns and tables the query names, how many joins it
+    carries, whether it projects a wildcard. A reviewer can check the refusal
+    against this rather than taking "no violations" on trust.
+    """
+
+    query: str
+    parsed: bool
+    columns: tuple[str, ...] = ()
+    tables: tuple[str, ...] = ()
+    joins: int = 0
+    # Joins carrying neither ON nor USING. A Cartesian product is refused at any
+    # count, so this is tracked apart from the ceiling: one unconditioned join is
+    # a refusal while one conditioned join is not.
+    cartesian: int = 0
+    star: bool = False
+
+
+@dataclass(frozen=True)
 class SqlGateResult:
     passed: bool
     violations: list[SqlViolation] = field(default_factory=list)
+    # What the parse saw. None only when the query never parsed.
+    reading: SqlReading | None = None
 
     @property
     def controls_fired(self) -> list[str]:
@@ -86,11 +111,16 @@ class SqlGateResult:
 def _parse(query: str) -> exp.Expression:
     """Parse one statement. A parse failure or a multi-statement string is a
     refusal: the gate cannot reason about what it cannot parse."""
+    unread = SqlReading(query=query, parsed=False)
     try:
         statements = sqlglot.parse(query, read="duckdb")
     except Exception as ex:  # noqa: BLE001 - sqlglot raises several parse types
         raise SqlGateError(
-            SqlGateResult(False, [SqlViolation(CTL_COL_01, f"SQL does not parse: {ex}")])
+            SqlGateResult(
+                False,
+                [SqlViolation(CTL_COL_01, f"SQL does not parse: {ex}")],
+                reading=unread,
+            )
         ) from ex
     parsed = [s for s in statements if s is not None]
     if len(parsed) != 1:
@@ -98,6 +128,7 @@ def _parse(query: str) -> exp.Expression:
             SqlGateResult(
                 False,
                 [SqlViolation(CTL_COL_01, "exactly one SQL statement is allowed")],
+                reading=unread,
             )
         )
     return parsed[0]
@@ -154,25 +185,31 @@ def gate_sql(
     grant = {c.lower() for c in (granted_columns or set())}
     tables_ok = {t.lower() for t in allowed_tables} if allowed_tables is not None else None
 
+    columns = _column_names(tree)
+    tables = _table_names(tree)
+    joins = list(tree.find_all(exp.Join))
+    star = _has_star(tree)
+
     # CTL-COL-01: SELECT * and ungranted columns.
-    if _has_star(tree):
+    if star:
         violations.append(SqlViolation(CTL_COL_01, "SELECT * is not permitted"))
     if grant:
-        for col in _column_names(tree):
+        for col in columns:
             if col.lower() not in grant:
                 violations.append(SqlViolation(CTL_COL_01, f"column {col!r}"))
 
     # CTL-PURP-01: tables outside the purpose scope.
     if tables_ok is not None:
-        for tbl in _table_names(tree):
+        for tbl in tables:
             if tbl.lower() not in tables_ok:
                 violations.append(SqlViolation(CTL_PURP_01, f"table {tbl!r}"))
 
     # CTL-COMPLEX-01: Cartesian products (a join with neither ON nor USING,
     # including a comma join) and the join-count ceiling.
-    joins = list(tree.find_all(exp.Join))
+    cartesian = 0
     for j in joins:
         if not j.args.get("on") and not j.args.get("using"):
+            cartesian += 1
             violations.append(
                 SqlViolation(CTL_COMPLEX_01, "join without a condition (Cartesian product)")
             )
@@ -189,7 +226,19 @@ def gate_sql(
     for v in violations:
         if v not in unique:
             unique.append(v)
-    return SqlGateResult(passed=not unique, violations=unique)
+    return SqlGateResult(
+        passed=not unique,
+        violations=unique,
+        reading=SqlReading(
+            query=query,
+            parsed=True,
+            columns=tuple(columns),
+            tables=tuple(tables),
+            joins=len(joins),
+            cartesian=cartesian,
+            star=star,
+        ),
+    )
 
 
 def rewrite_sql(
