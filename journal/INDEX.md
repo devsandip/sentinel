@@ -1,10 +1,56 @@
 # Sentinel — Journal Index
 
-Last refreshed: 2026-07-20 10:55
+Last refreshed: 2026-07-20 11:21
 
-Latest entry: [2026-07-20-1055-the-row-becomes-the-control-v9.md](entries/2026-07-20-1055-the-row-becomes-the-control-v9.md)
+Latest entry: [2026-07-20-1121-chrome-recedes-and-an-audit-finds-the-landmine.md](entries/2026-07-20-1121-chrome-recedes-and-an-audit-finds-the-landmine.md)
 
 ## Where we are now
+
+**v10 is merged and LIVE in prod: a small chrome pass. The bigger news is not
+in it. A cold-visit audit of the live site found that the Live LLM path fails
+100% of the time and prints a Python traceback on screen, because the codegen
+allowlist advertises packages that are not installed. Nothing from the audit is
+fixed yet.**
+
+v10 (PR #14, `58e51dd`, bundle `sentinel-20260720-111254.zip`) is three things.
+The sidebar group headers were being painted over by the first nav row in each
+group: Streamlit puts `margin-bottom:-16px` on every `stMarkdownContainer` to
+cancel the 16px a markdown `<p>` carries, `.gl` is a bare div with a 6px bottom
+margin, so the -16px over-pulled by 10px and dragged the row up over the label,
+which then painted its hover/active background across the group name. Six other
+custom divs sit in the same over-pulled state and none are occluded, because a
+nav row is the only thing in the app that paints a background over the element
+above it. One bug, not seven. The topbar Data and Purpose chips are gone from
+every screen (duplication: since v9 the Ask row carries the classification and
+the permitted purposes where they are actionable). The identity chip was removed
+in the same pass and put back deliberately, because switching persona is the only
+in-app way to demonstrate the autonomy ladder. Sidebar nav counts are gone.
+
+**The audit findings, none fixed.** In priority order:
+
+1. `sentinel/codegen/allowlist.py` advertises `statsmodels.api`,
+   `statsmodels.formula.api`, `lifelines`, `shap`, `dowhy`, `econml` at L2 and
+   **none are in `requirements.txt`**. `statsmodels` is installed locally as a
+   transitive dependency, so it passes here and dies on the instance. The Gate
+   stamps "imports on the tier's allowlist, clear" and Execute throws
+   `ModuleNotFoundError`. The governance half matters more than the crash: the
+   gate approved code the sandbox could not run.
+2. The Adoption bar chart on the landing tile renders four identical flat
+   rectangles. The column needs ~78px for value + bar + caption, the chart gives
+   it 56px, and `.bar` has default `flex-shrink`, so every bar squashes to 17px
+   regardless of value.
+3. An L0 persona is told to "switch persona in the sidebar"
+   (`sentinel/ui/govflow.py:1365`). Identity moved to the topbar in v7.
+4. Six seconds of blank white on a cold load. Streamlit's bundle, not an EB cold
+   start: TTFB is under a second.
+5. **Not a bug, the biggest gap:** on the default path the gate never refuses
+   anything. Nine checks, all clear, every time. The most compelling thing in
+   the build is a gate refusing generated code by name, and a visitor following
+   the obvious path never sees it fire. The claim is asserted, not shown.
+
+Everything below is the prior state: v9 in prod.
+
+---
 
 **v9 is merged and LIVE in prod. The Ask stage's dataset table is now the
 control rather than decoration beside one, and every dropdown in the stage
@@ -415,6 +461,7 @@ out).
 
 ## Recent entries
 
+- [2026-07-20-1121-chrome-recedes-and-an-audit-finds-the-landmine.md](entries/2026-07-20-1121-chrome-recedes-and-an-audit-finds-the-landmine.md) : demo prep for the hiring manager, which turned into a chrome pass plus a cold-visit audit of the live site. The chrome (PR #14, `58e51dd`, v10): sidebar group headers were being painted over by the first nav row in each group, because Streamlit's `margin-bottom:-16px` on `stMarkdownContainer` exists to cancel a markdown `<p>`'s 16px and `.gl` is a bare div with 6px, so it over-pulled 10px; six other divs are over-pulled the same way and none are occluded, since a nav row is the only thing that paints over the element above it. Topbar Data/Purpose chips removed everywhere (duplication after v9 put both on the Ask row); the identity chip was removed too and **put back**, because switching persona is the only in-app way to show the ladder. Sidebar counts removed. Merged against a v9 that landed mid-session by resetting onto main and re-applying, rather than resolving markers. Deployed and verified live. 386 passed, 3 skipped. **The audit is the real output and nothing from it is fixed:** the codegen allowlist advertises statsmodels/lifelines/shap/dowhy/econml at L2 and none are in `requirements.txt`, so the Live LLM path fails 100% in prod with a visible `ModuleNotFoundError` while the Gate stamps the imports clear; the Adoption chart renders four flat bars from a flex-shrink squash; an L0 persona is pointed at a sidebar that has not held identity since v7; and on the default path the gate never refuses anything, so the headline claim is asserted rather than shown. prod is v10.
 - [2026-07-20-1055-the-row-becomes-the-control-v9.md](entries/2026-07-20-1055-the-row-becomes-the-control-v9.md) : the Ask stage stopped showing information beside a control that ignored it. Step 1's dataset table is now the control: a one-option radio per row labelled with the dataset id, exclusivity enforced in a callback (and tested, since Streamlit has no radio group spanning containers), the `.row-sel` tint and `.rowgood` bar built for the first time, and the mockup's `.pmatrix` showing all six purposes for the picked dataset off the real matrix. **Confirm Dataset gates steps 2 and 3** and changing the pick clears the drafted question, because a purpose and an analysis are declared against a dataset. Step 2 sentence-cased with a covers/excludes block from a new `PURPOSE_SCOPE` in the policy module; step 3 renamed "Select the Analysis" and stating method + libraries that genuinely run, with the refusing control named. Those ids are re-derived from the real gate by test rather than asserted. Rejected: `st.dataframe` single-row selection, which is a real row click but would have cost the classification popover 4.3 requires. Table helpers extracted to `sentinel/ui/tables.py`; `govflow_mode` deleted (the L3 route is now the synthetic_its row). PR #13, bundle `sentinel-20260720-104529.zip`, EB Green, verified live by run `e168559a3501`. 392 tests. Found: the deploy folder was 3 days stale, and the permission classifier now blocks `gh pr merge` outright. prod is v9.
 - [2026-07-19-1522-chips-that-explain-themselves-v8.md](entries/2026-07-19-1522-chips-that-explain-themselves-v8.md) : closed the control-chip gap and got a decision on OPA. The rule, now in ui-spec 4.3: a chip is clickable when it names a governance decision, inert when it names a fact. `_control_popover` was already the right mechanism and already proven at three sites while the engine bar built dead spans thirty lines below it. Wired: engine bar (all nine stages), Architecture stop, import allowlist (grouped by the control that denies each row, four popovers not thirty-six), topbar Data/Purpose chips (both onto CTL-PURP-01, whose two axes they name), certification gate rows, the Screen PII finding. Not wired, deliberately: the chips inside the Controls popover, since popovers should not nest. Datasets and both Registry tables rebuilt off `st.dataframe` into hand-laid tables so cells can carry chips; cost is lost sorting. Found on the way: the dataset registry had no classification column at all, and CTL-CODE-00 / CTL-DISC-03 were missing from their engine lists. PR #11, bundle `sentinel-20260719-151623.zip`, EB Green, verified live. 382 tests. **OPA externalisation ruled out by Sandip: not in scope for the foreseeable future.** prod is v8.
 - [2026-07-19-1354-chrome-that-tells-the-truth-v7.md](entries/2026-07-19-1354-chrome-that-tells-the-truth-v7.md) : a chrome pass, all of it the same theme: the shell claiming what the page could not back. PR #8 (identity in one place, the header popover; tier off the global bar; the green governed badge becomes a warning that only warns; nav icons + in-app Back). PR #9 (Data/Purpose chips scoped to screens with a run, no more hardcoded german_credit/fair-lending on the dashboard and catalogs; sidebar rhythm matched to the mockup, 590px rail to 410px by zeroing Streamlit's 16px block gap). Deployed bundle `sentinel-20260719-133917.zip`, EB Green, live-LLM on, verified by clicking through the live site. 371 tests. ui-spec 2.1/2.2 updated. Also corrects my own earlier claim that OPA externalisation was killed: it was not, it still waits on Sandip. prod is v7.
@@ -452,6 +499,7 @@ out).
 ## Working hypotheses
 
 - Health 200 is necessary but not sufficient to call a deploy verified: Streamlit's health endpoint answers before app.py runs, so an import crash returns 200 while every page is broken (this happened 2026-07-18). Verify a deploy by loading a page and running a flow, not by probing health. And requirements.txt is a second dependency list that drifts from pyproject/uv.lock unless something regenerates it; the fix is to generate it at deploy time or diff it in CI.
+- **A control that approves something the environment then refuses is not a control that held, it is a control that guessed.** Found 2026-07-20: the codegen allowlist is a *third* dependency list, and nothing reconciles it with `requirements.txt`. The Gate stamps "imports on the tier's allowlist, clear" for `statsmodels`, and Execute throws `ModuleNotFoundError` because it was never installed. `requirements.txt` and `uv.lock` agree perfectly here, so the existing deploy guard cannot see it: they are both simply missing what the allowlist promises. Any list that grants permission must be checked against the thing that has to honour it, not just against the list next to it. Local environments hide this precisely when it matters, since `statsmodels` is installed here transitively and absent in prod.
 - A naturally-flagging fairness result is more convincing than a staged one. Keep it real. This now extends to the gate: if the demo shows generated code being blocked, the block must be genuine, never seeded.
 - The evidence pack with its "what this does not say" block is now built (v3) and is the showpiece the model card PDF pointed toward. The negative statement is assembled from what the run did (the suppressed band, the flagged proxy), not from boilerplate, which is what makes it more than a dashboard. The model card PDF survives as prior art.
 - A control is only credible if it can be seen firing. Force RBAC and PII to fire every run.
@@ -467,7 +515,8 @@ out).
 - ~~Should linear analysis runs feed the adoption metrics and model registry?~~ Resolved 2026-07-19 (H phase). Linear analysis, govflow, and L3 runs now feed the adoption totals and the weekly/per-dataset cuts via the seeded run-history store. The model registry stays scoped to credit_risk runs only, since it is a model inventory and only that path promotes a model. Per-agent invocation counts are likewise scoped to the credit pipeline.
 - Retrieval ranking: the SR 11-7 query ranks the internal modeling standard above the SR 11-7 document itself (SR 11-7 chunks still return at ranks 2-3). Worth a later look at chunking or reranking.
 - Should `deploy.sh` refuse when `HEAD` is not an ancestor of `origin/main`? Opened 2026-07-20: the primary checkout had been parked on `docs/v6-deploy-record` since Sunday, 16 commits behind, and a deploy from it would have shipped v6 while reporting success. Nothing keeps that folder current, and it is the only place the gitignored live-LLM key exists, so it cannot simply be abandoned for a worktree. A one-line guard in the script would have caught it. The related structural question is whether the primary checkout should hold `main` at all, given another worktree currently does and git refuses the same branch twice.
-- How should concurrent sessions on this repo be handled? Opened 2026-07-20: a second session pushed `claude/demo-prep-hiring-manager-5c0866` (a real nav-bar paint fix) mid-conversation, while I was reporting the branch list as settled. Sandip chose to deploy without it. There is no convention yet for noticing another live session, and the branch list is not a reliable signal because it changes underneath you.
+- How should concurrent sessions on this repo be handled? Opened 2026-07-20: a second session pushed `claude/demo-prep-hiring-manager-5c0866` (a real nav-bar paint fix) mid-conversation, while I was reporting the branch list as settled. Sandip chose to deploy without it. There is no convention yet for noticing another live session, and the branch list is not a reliable signal because it changes underneath you. **Update the same day:** that branch shipped four hours later as v10, after Sandip looked at it, and the merge needed a reset-onto-main-and-reapply because v9 had restructured the same regions underneath it. The question stands; the specific instance resolved the ordinary way, by a human looking. The practical lesson is narrower: when main moves under a branch, re-applying a small diff onto the new main beats resolving conflict markers in a file that has been restructured.
+- Should the demo's default path include a refusal? Opened 2026-07-20 by the cold-visit audit. Today the happy path runs nine checks and clears all nine, so a visitor never sees the gate refuse anything, and the gate refusing generated code by name is the most compelling thing in the build. Making the default path include one genuine block would show the claim instead of asserting it. The constraint is the standing rule that a block must be real and never seeded, so this is a question about which genuine request to put on the default path, not about staging one.
 - ~~`synthetic_its` is registered but has no onboarder~~ Resolved: onboarded in v4 (generated with a known +12 effect), and in v6 (2026-07-19) it gained CAP_TABULAR so profiling is legal on it too. It is the Public-class L3 home.
 - Demo GIF/Loom for the README: dropped for now per Sandip (2026-07-14).
 
