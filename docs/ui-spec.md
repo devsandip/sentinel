@@ -598,6 +598,25 @@ muted label, an optional small detail line. Bar chart: flexbox columns of
 height-proportional gradient bars (accent gradient, or an ok-gradient variant
 for "agent utilization"), value printed above each bar, a mono caption below.
 
+**"Printed above each bar" is load-bearing, not a stylistic note.** As built
+until 2026-07-20 the Adoption tile made the value a flex *sibling* above the
+bar, and a pale `accent-soft` fill rather than the gradient. The first of those
+was the bug the cold-visit audit found: the label took 16.8px out of a 56px
+column, the bar was the only child with no intrinsic height, so it absorbed the
+whole deficit. Every column carries identical text, so every bar shrank to an
+identical 17.2px and four weeks of different data drew four identical
+rectangles, while the inline heights stayed correct the whole time.
+
+The rule that fixes it generalises: **an element whose size encodes data must be
+out of the flex-shrink pool, and anything decorating it must be out of flow.**
+So the value is `position:absolute` inside the bar, the bar is `flex:none`, and
+the chart sizes from its content (`min-height`) rather than pinning a height the
+content then has to fit inside. The column no longer takes `height:100%`. Bars
+scale against the series peak rather than a fixed ceiling, so the tallest bar is
+always the full 46px and the geometry has to accommodate that every time, not
+only when the numbers happen to be small. `tests/test_app_smoke.py` pins both
+the markup and the CSS.
+
 ### 4.11 Buttons (`.btn`)
 
 Two variants: default (bordered, surface background, hovers to accent border)

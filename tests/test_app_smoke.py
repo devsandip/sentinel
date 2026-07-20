@@ -7,6 +7,7 @@ every top-level section.
 
 from __future__ import annotations
 
+import itertools
 import os
 import re
 
@@ -160,6 +161,64 @@ def test_model_status_chips_explain_the_eval_gate():
     for m in model_versions():
         assert m.version in body, m.version
         assert f"Here: {m.version}" in captions, m.version
+
+
+def test_landing_adoption_bars_are_proportional_and_do_not_shrink():
+    """The Adoption tile's weekly bars encode the data in their height, and the
+    audit on 2026-07-20 found all four rendering at an identical 17.2px.
+
+    The cause was layout, not data: the value label was a flex sibling of the
+    bar, so it took 16.8px out of a 56px column, and the bar - the only child
+    with no intrinsic height - absorbed the whole deficit. Identical text in
+    every column meant an identical leftover in every column, so four different
+    weeks drew four identical rectangles while carrying correct inline heights.
+
+    Both halves are pinned here, because the inline heights alone were never
+    wrong and a test that only checked them would have passed throughout.
+    """
+    at = _boot()
+    assert not at.exception
+    body = " ".join(m.value for m in at.markdown)
+
+    n_cols = body.count("<div class='bcol'>")
+    assert n_cols >= 3, "the weekly bar chart is not on the landing tile"
+    heights = [int(h) for h in re.findall(r"class='bar' style='height:(\d+)px'", body)]
+    values = [int(v) for v in re.findall(r"class='v'>(\d+)</span>", body)]
+    assert len(heights) == len(values) == n_cols
+
+    # Height tracks value: equal values give equal bars, and the largest value
+    # gives the tallest bar. This is what "four identical rectangles" violated.
+    assert len(set(heights)) > 1, "every bar is the same height; the series is flat"
+    assert heights[values.index(max(values))] == max(heights)
+    for i, j in itertools.combinations(range(len(values)), 2):
+        if values[i] == values[j]:
+            assert heights[i] == heights[j]
+        elif values[i] < values[j]:
+            assert heights[i] < heights[j]
+
+    # And the label sits inside the bar rather than above it as a sibling, which
+    # is what stopped it consuming the column's height. ui-spec 4.10.
+    assert re.search(r"<div class='bar'[^>]*><span class='v'>", body), (
+        "the value label is a sibling of the bar again; it will steal the "
+        "column height and squash every bar to the same size"
+    )
+
+
+def test_barchart_css_keeps_the_bar_out_of_the_flex_shrink_pool():
+    """The CSS half of the same bug. A bar whose height is data must not be a
+    shrink candidate, and the value label must not occupy column height."""
+    with open(APP) as f:
+        css = f.read()
+    bar_rule = re.search(r"\.barchart \.bar \{(.*?)\}", css, re.S)
+    assert bar_rule and "flex:none" in bar_rule.group(1)
+    v_rule = re.search(r"\.barchart \.v \{(.*?)\}", css, re.S)
+    assert v_rule and "position:absolute" in v_rule.group(1)
+    # A fixed height on the chart plus height:100% on the column is the exact
+    # geometry that left the bar 17px to live in.
+    chart_rule = re.search(r"\.barchart \{(.*?)\}", css, re.S)
+    assert chart_rule and "min-height" in chart_rule.group(1)
+    col_rule = re.search(r"\.barchart \.bcol \{(.*?)\}", css, re.S)
+    assert col_rule and "height:100%" not in col_rule.group(1)
 
 
 def test_adoption_section_renders_seeded_history():

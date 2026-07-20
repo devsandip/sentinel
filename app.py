@@ -501,13 +501,32 @@ st.markdown(
         font-variant-numeric:tabular-nums; color:var(--ink); }
       .tile-stat .unit { font-size:12.5px; color:var(--muted); }
       .breakrow { display:flex; gap:6px; flex-wrap:wrap; margin:10px 0 4px 0; }
-      .barchart { display:flex; align-items:flex-end; gap:10px; height:70px;
-        padding-top:14px; margin-top:6px; }
+      /* ui-spec 4.10: height-proportional accent-gradient bars, the value
+         printed *above* each bar, a mono caption below. Both halves of that had
+         drifted, and the second half was a bug, not a style difference.
+         The value was a flex sibling of the bar rather than a label floating
+         over it, so it took 16.8px out of every column. With the chart at a
+         fixed 70px and the column at height:100%, each column had 56px to hold
+         38.8px of value + caption + gaps, and the bar - the only element with
+         no intrinsic size - absorbed the entire 23px deficit. Every column
+         carries identical text, so every bar shrank to an identical 17.2px:
+         four weeks of different data rendered as four identical rectangles.
+         Taking the value out of flow (position:absolute, per the mockup) gives
+         the space back, flex:none stops the bar being a shrink candidate at
+         all, and the chart sizes from its content so the tallest bar has
+         somewhere to go: 46px peak + 3px gap + 16px caption + 14px of padding
+         for the floating label is ~79px. */
+      /* padding-top clears the floating value label (17px above the tallest
+         bar) with 3px to spare, so a slightly larger font does not clip it. */
+      .barchart { display:flex; align-items:flex-end; gap:10px; min-height:70px;
+        padding-top:20px; margin-top:6px; }
       .barchart .bcol { flex:1; display:flex; flex-direction:column; align-items:center;
-        justify-content:flex-end; height:100%; gap:3px; }
-      .barchart .bar { width:100%; background:var(--accent-soft);
-        border:1px solid var(--accent-soft-border); border-radius:4px 4px 0 0; }
-      .barchart .v { font-family:var(--mono); font-size:10.5px; color:var(--muted); }
+        justify-content:flex-end; gap:3px; }
+      .barchart .bar { width:100%; flex:none; position:relative; min-height:4px;
+        background:linear-gradient(180deg,var(--accent),var(--accent-strong));
+        border-radius:4px 4px 0 0; }
+      .barchart .v { position:absolute; top:-17px; left:0; right:0; text-align:center;
+        font-family:var(--mono); font-size:10.5px; font-weight:700; color:var(--muted); }
       .barchart .bcap { font-size:10px; color:var(--faint); }
     </style>
     """,
@@ -2111,9 +2130,14 @@ def render_home(persona) -> None:  # noqa: ANN001
     )
     weekly = m["weekly"]
     peak = max((n for _, n in weekly), default=1)
+    # The value rides inside the bar as an absolutely-positioned label (ui-spec
+    # 4.10, "printed above each bar"), not as a sibling above it. As a sibling
+    # it consumed column height, which is what squashed every bar to the same
+    # 17px; see the .barchart rules for the full account.
     bars = "".join(
-        f"<div class='bcol'><span class='v'>{n}</span>"
-        f"<div class='bar' style='height:{max(6, int(n / peak * 46))}px'></div>"
+        f"<div class='bcol'>"
+        f"<div class='bar' style='height:{max(6, int(n / peak * 46))}px'>"
+        f"<span class='v'>{n}</span></div>"
         f"<span class='bcap'>{wk.split('-')[-1]}</span></div>"
         for wk, n in weekly
     )
