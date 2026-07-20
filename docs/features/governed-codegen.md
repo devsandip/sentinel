@@ -908,18 +908,52 @@ real `max_tokens`, so nothing but a real call could have found 6.3.
 | prompt | question | conforming | notes |
 | --- | --- | --- | --- |
 | old | benign | 0/5 | all five emit `n`, none emit `selection_rate` |
-| new | benign | 4/5 | one refused, see below |
+| new | benign | 5/5 | 4/5 before 6.5; the fifth was a false positive |
 | old | "using SQL..." | 5/5 | but 0/5 use `ctx.sql`; the model writes pandas |
 | new | "using SQL..." | 5/5 | 5/5 use `ctx.sql`; the SQL gate is reachable |
 | new | "select everything" | 5/5 | 0/5 write `SELECT *`; the model declines |
 
-The one refusal in new/benign is a known false positive, not a contract miss:
-`df['decline'] = 1 - df['pred']` assigns a *derived* column on the table
-variable, and CTL-COL-01 reads the subscript without distinguishing a write from
-a read, so it refuses a column the model is creating rather than one it is
-reading. The identical code on `df.copy()` passes, which is arbitrary from the
-model's side. Not fixed here: relaxing a column control is a security change and
-wants its own review.
+### 6.5 CTL-COL-01 read a write as a read
+
+One real generation in five did this:
+
+```python
+df['decline'] = 1 - df['pred']
+```
+
+and was refused: *column is not in the grant for this purpose -- df["decline"]*.
+The model was not reading a column it lacked, it was **creating** one out of two
+it had. The check looked at the subscript without looking at its context, so a
+write judged as a read. The identical code on `df.copy()` passed, which is not a
+distinction anything on the model's side can see.
+
+A column the analysis builds now joins the effective grant, including reads of it
+afterwards. That is safe for a reason worth stating precisely, because it is not
+leniency: the Access stage **projects the frame to the granted columns**, so an
+ungranted column is not in the object at all. A read of one is a `KeyError` in
+the sandbox, and no assignment can conjure data that was never handed over --
+the right-hand side can only be built from what the frame already holds.
+CTL-COL-01 is the declaration of intent over that projection; the projection is
+what withholds the data. Relaxing the declaration where it contradicted itself
+does not move the enforcement.
+
+Two things the fix is careful about, both found by testing the relaxation rather
+than assuming it:
+
+**A read is not excused by a later write.** `x = df['applicant_ssn']` followed by
+`df['applicant_ssn'] = 1` would, under an order-blind rule, retroactively clear
+the read. Harmless to the data for the reason above, but it would let generated
+code silence a control by adding a line, and a control that can be talked out of
+firing is not one a tester can trust. Derived names carry the line they are
+created on, and only clear reads at or below it.
+
+**Multi-column selection was never judged at all.** The check asked for a string
+constant; a list is not one. So CTL-COL-01 refused `df["applicant_email"]` and
+cleared `df[["age_band", "applicant_email"]]` -- the ordinary way to project a
+frame, and the more likely thing for a model to write. That was a hole in the
+control the whole time, unrelated to the false positive, and it is closed here:
+list and tuple subscripts are judged element by element. Non-literal keys remain
+unreadable to the gate and remain covered by the projection.
 
 ---
 

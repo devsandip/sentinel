@@ -441,9 +441,13 @@ class _GateVisitor(ast.NodeVisitor):
         allowed_tables: set[str] | None,
         join_ceiling: int,
         allowed_imports: frozenset[str],
+        derived_columns: dict[str, int] | None = None,
     ) -> None:
         self.granted_columns = granted_columns
         self.table_vars = table_vars
+        # Columns the analysis builds on the scoped table; see
+        # _collect_derived_columns for why they join the effective grant.
+        self.derived_columns = derived_columns or {}
         self.allowed_tables = allowed_tables
         self.join_ceiling = join_ceiling
         self.allowed_imports = allowed_imports
@@ -731,16 +735,25 @@ class _GateVisitor(ast.NodeVisitor):
         # string-literal subscripts, handled in visit_Subscript.
         self.generic_visit(node)
 
+    def _column_ok(self, key: str, line: int) -> bool:
+        """A column read is permitted if the purpose granted it, or if this code
+        built it earlier out of granted data (see _collect_derived_columns).
+        `earlier` is load-bearing: a name created below the read does not excuse
+        it."""
+        if key in self.granted_columns:
+            return True
+        created = self.derived_columns.get(key)
+        return created is not None and created <= line
+
     # -- subscripts: df["col"] against the grant (CTL-COL-01) --------------
     def visit_Subscript(self, node: ast.Subscript) -> None:
         if self.granted_columns and isinstance(node.value, ast.Name):
             if node.value.id in self.table_vars:
-                key = _string_const(node.slice)
-                if key is not None:
+                for key in _subscript_columns(node.slice):
                     self._count(_COLUMNS)
                     self._touch(node.lineno)
                     shown = f'{node.value.id}["{key}"]'
-                    ok = key in self.granted_columns
+                    ok = self._column_ok(key, node.lineno)
                     if not ok:
                         self._add(CTL_COL_01, node.lineno, shown)
                     self._note(
@@ -756,6 +769,25 @@ class _GateVisitor(ast.NodeVisitor):
                         ),
                     )
         self.generic_visit(node)
+
+
+def _subscript_columns(slice_node: ast.expr) -> list[str]:
+    """Every column name a subscript names, as string literals.
+
+    `df["pred"]` names one. `df[["age_band", "pred"]]` names two, and until now
+    named none as far as the gate was concerned: the check asked for a string
+    constant, a list is not one, so multi-column selection -- the ordinary way to
+    project a frame -- went unjudged. CTL-COL-01 would refuse
+    `df["applicant_email"]` and clear `df[["age_band", "applicant_email"]]`.
+    Non-literal keys are still unreadable and still skipped; enforcement by
+    construction is what covers those.
+    """
+    key = _string_const(slice_node)
+    if key is not None:
+        return [key]
+    if isinstance(slice_node, ast.List | ast.Tuple):
+        return [k for k in (_string_const(e) for e in slice_node.elts) if k is not None]
+    return []
 
 
 def _string_const(node: ast.expr) -> str | None:
@@ -780,6 +812,51 @@ def _collect_table_vars(tree: ast.AST) -> set[str]:
                 if isinstance(target, ast.Name):
                     table_vars.add(target.id)
     return table_vars
+
+
+def _collect_derived_columns(tree: ast.AST, table_vars: set[str]) -> dict[str, int]:
+    """Column names the analysis *creates* on a scoped table.
+
+    `df["decline"] = 1 - df["pred"]` is a write, not a read. CTL-COL-01 judged
+    the subscript without looking at its context, so it refused a column the
+    model was building out of granted data, and the identical code written on
+    `df.copy()` passed -- a distinction with no meaning from the model's side.
+    One live generation in five hit this.
+
+    Reading such a column back is equally safe, so a derived name joins the
+    effective grant. The reason it is safe is enforcement by construction, not
+    leniency: the Access stage projects the frame to the granted columns, so an
+    ungranted column is not in the object at all. A read of one raises KeyError
+    in the sandbox, and no assignment can conjure data that was never handed
+    over -- the right-hand side can only be built from what the frame already
+    holds. CTL-COL-01 is the declaration of intent over that projection, and
+    the projection is what actually withholds the data.
+
+    Returns each derived name with the line it is first created on, because the
+    grant it joins starts there. Without the line, `x = df["applicant_ssn"]`
+    followed by `df["applicant_ssn"] = 1` would retroactively excuse the read:
+    harmless to the data, since the projection means that read is a KeyError,
+    but it would let generated code silence a control by writing a line that
+    never runs. A control that can be talked out of firing is not one a tester
+    can trust.
+    """
+    derived: dict[str, int] = {}
+    for node in ast.walk(tree):
+        targets: list[ast.expr] = []
+        if isinstance(node, ast.Assign):
+            targets = list(node.targets)
+        elif isinstance(node, ast.AugAssign | ast.AnnAssign):
+            targets = [node.target]
+        for target in targets:
+            if (
+                isinstance(target, ast.Subscript)
+                and isinstance(target.value, ast.Name)
+                and target.value.id in table_vars
+            ):
+                key = _string_const(target.slice)
+                if key is not None:
+                    derived[key] = min(derived.get(key, node.lineno), node.lineno)
+    return derived
 
 
 def _is_ctx_table_call(value: ast.expr) -> bool:
@@ -868,6 +945,7 @@ def gate_code(
     visitor = _GateVisitor(
         granted_columns=granted,
         table_vars=table_vars,
+        derived_columns=_collect_derived_columns(tree, table_vars),
         allowed_tables=tables,
         join_ceiling=join_ceiling,
         allowed_imports=allowed_imports,
