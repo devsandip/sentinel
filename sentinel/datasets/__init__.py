@@ -7,6 +7,14 @@
 
 from __future__ import annotations
 
+from .catalog import (
+    ColumnDoc,
+    DatasetSchema,
+    Relationship,
+    TableDoc,
+    role_note,
+    schema,
+)
 from .contracts import (
     ALL_CAPABILITIES,
     ALL_ROLES,
@@ -24,8 +32,14 @@ from .registry import (
 __all__ = [
     "ALL_CAPABILITIES",
     "ALL_ROLES",
+    "ColumnDoc",
     "DataContract",
+    "DatasetSchema",
+    "Relationship",
+    "TableDoc",
     "contract",
+    "role_note",
+    "schema",
     "DATASETS",
     "DatasetSpec",
     "all_datasets",
