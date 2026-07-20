@@ -880,3 +880,29 @@ Append-only session handoff log. Newest entries at the bottom.
 - Audit Log links out rather than rendering a third copy of the event stream inside a stage panel. The shared tint map has already been paid for once.
 - Toggles read-only rather than removed. The runs that exercised them are still in the ledger, and a switch that changes nothing is worse than a disabled one that explains why.
 - Merged PR #37 before this branch, so the conflict resolution happened locally where the full suite could check it, rather than being pushed into a PR I did not author.
+
+## 2026-07-21 (cont.) — the deploy guard, the app.py split, and a prod bug the deploy exposed
+
+**Did:**
+- Wrote the two-clause deploy guard, carried since 2026-07-20: `HEAD` an ancestor of `origin/main` AND `git status --porcelain` empty. Untracked files count. `tests/test_deploy_guard.py` slices the guard out of `deploy.sh` and runs it in a throwaway repo, with one case reproducing the near-miss exactly. PR #40.
+- Read `stash@{0}` (2,699 deletions, all of it work now on main), archived the patch to the scratchpad, dropped it.
+- Split `app.py` from 3,208 lines to 157. Stylesheet to `sentinel/ui/theme.py`, chrome to `sentinel/ui/shell.py`, nine screen modules under `sentinel/ui/screens/`. Driven off the AST so comment blocks travelled with their code; both CSS strings asserted byte-identical.
+- Removed the `nav_to` callback injection from `render_manual`, `render_faq` and `render_ask`. The cycle those worked around only existed because `app.py` owned both the callback and the import. The govflow injection stays; that cycle is real.
+- Deployed, then clicked every screen on prod and found the Registry throwing `FileNotFoundError: 'runtime/model_card_...pdf'`. Fixed in `render_pdf`, added a test that writes into a path that does not exist, redeployed. PR #41.
+
+**State now:**
+- `main` at `b810557`, prod carries it. Bundle `sentinel-20260721-012204.zip`, EB Green. 674 tests, 2 skipped, ruff clean. Working tree clean, no open PRs, no stashes.
+- `app.py` is the router only, enforced by a test that fails on any `def` or `<style>` in it.
+- The Registry's model-card PDF works on the live site, verified by opening the popover there.
+
+**Next:**
+- Record the walkthrough video and write the hiring-manager email. Both were blocked on the consolidation, which is now done and deployed.
+- Audit the test fixtures for what they hand over free. `tmp_path` already existing is what hid the PDF bug; the same shape probably hides others.
+- Nothing else carried. The three items that had been rolling across sessions are closed.
+
+**Decisions:**
+- Guard clauses are fatal only when verifiable. No git, no `origin/main`: warn and proceed, matching the requirements guard beside it. A deploy from a non-git copy is unusual, not wrong.
+- Being behind `origin/main` passes the guard. An older commit is still one main reviewed, and refusing it would block a rollback, which is the deploy you least want to argue with.
+- The screen-coverage test checks the dispatch table, not filenames. Where a screen's code lives is a judgement (the Audit Log and its drill-down share one module because they share a tint map); whether it is routed is not.
+- Fixed the PDF path in `render_pdf` rather than at the call site, so `scripts/generate_model_card.py` cannot hit it either. The call site fix would have been smaller and would have left the CLI broken.
+- Kept absolute imports in the moved modules rather than converting to the package-relative style used elsewhere in `sentinel/ui/`. The move then changed no import line and could not silently repoint one, which mattered more than uniformity for a 2,500-line move.
