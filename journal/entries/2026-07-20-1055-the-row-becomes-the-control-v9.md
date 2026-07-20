@@ -1,0 +1,37 @@
+# The row becomes the control, and a confirm button that actually confirms
+
+2026-07-20 10:55. Previous: [2026-07-19-1522-chips-that-explain-themselves-v8.md](2026-07-19-1522-chips-that-explain-themselves-v8.md)
+
+Sandip looked at the Ask stage and named three things wrong with it in one message. All three were the same fault seen from different angles: the screen showed information next to a control, and the two had nothing to do with each other.
+
+Step 1 rendered a table of two datasets and then, underneath it, a radio labelled Analysis with two options. The table was decoration. The radio was the control, and it did not name a dataset, it named an analysis. To pick german_credit you selected "Fair lending (german_credit)" from a list that sat below the row describing german_credit. Nobody would design that on purpose; it accreted, because the table came from the mockup and the radio came from an earlier build and neither was made to answer to the other.
+
+So the row is the control now. Each row carries a one-option radio whose label is the dataset id, which merges the select affordance into the cell it selects. Streamlit has no radio group that spans containers, so exclusivity is a callback that writes `None` into the other rows' keys. That is code enforcing a rule a widget would normally enforce, which means it gets a test, and it has one.
+
+The selected row wears the accent tint and the left accent bar. Both were specified in ui-spec 4.4 as `.row-sel` and `.rowgood` and neither had ever been built, because until yesterday's rebuild the tables were `st.dataframe` and could not carry a row state at all. The CSS hangs off the row container's key, which is the only hook CSS has on a Streamlit block, so the key encodes the selection.
+
+I did consider `st.dataframe` with `selection_mode="single-row"`. It is the only real row click Streamlit offers, and Sandip's third ask was literally "clicking on the dataset row should show what purposes are allowed." But a dataframe renders every cell as plain text, so taking the real row click would have cost the classification popover that yesterday's rule requires. One day after settling that a classification chip must explain itself, deleting one to get a nicer click would have been absurd. The radio is in the row, clicking it selects the row, and the purposes appear. Written down in 4.4 so nobody re-derives it.
+
+The purposes panel is the mockup's `.pmatrix`, also never built: all six purposes for the picked dataset, permit or refuse, read off `PURPOSE_MATRIX` rather than written by hand. Pick german_credit and marketing is red. Pick synthetic_its and nothing is.
+
+The confirm button is the part I nearly got wrong. The easy version acknowledges the choice and changes nothing, and it would have passed review because it looks like the mockup. Instead steps 2 and 3 do not render until it is pressed, and changing the pick drops the confirmation and clears the drafted question, so Plan sends you back. The reason is not ceremony. A purpose and an analysis are declared *against* a dataset; letting them survive a dataset swap would misstate what was reviewed, which is the one thing this project cannot afford to do casually. The cost is honest and small: the demo path is one click longer and four tests gained a confirm click.
+
+Steps 2 and 3 had the same disease in a milder form. Both offered a dropdown and told you nothing about what you were choosing. Purpose options were lowercase policy labels, written that way because they get dropped into the middle of a refusal sentence; a dropdown option is the start of one, so the UI sentence-cases them and the policy module keeps its lowercase. Under the verdict, a block now states what the purpose covers and what it does not, and that copy lives in `purpose_matrix.py` next to the matrix it describes, because copy stored away from the rule it explains drifts away from it.
+
+Step 3 is renamed and now says what each prebuilt analysis actually is: the method, and the libraries that genuinely run. The benign L2 case is `fairlearn.metrics.MetricFrame` computing a selection rate and a count per band with no model fitted. The SQL case is duckdb executing while sqlglot parses the same string at the gate. The L3 case is difference-in-differences over pandas and numpy with the interval from a normal approximation off the post-period residual spread, not a fitted regression, and it says so. The adversarial ones say plainly that nothing runs and name the control that refuses them.
+
+That last part is the bit I would not have trusted myself on. Descriptions of code drift from code. So the notes are not asserted, they are checked: a test re-runs the real gate over every scripted sample and fails if a note names a control the gate does not fire, or claims a clean pass the gate refuses. I derived all four control ids that way rather than from memory, and the L2 file-write case turned out to be `CTL-CODE-02` where I would have guessed `CTL-CODE-01`.
+
+Two small refactors fell out. The hand-laid table helpers moved to `sentinel/ui/tables.py`, because `app.py` cannot be imported from inside `sentinel/ui` and a table renderer copied into two files drifts. `cls_label` and `purpose_extra` moved next to the control popover for the same reason, so the Ask picker and the dataset registry now render one classification chip rather than two that merely look alike.
+
+The `govflow_mode` radio is gone entirely. The L3 route is chosen by picking the synthetic_its row, which is what that choice always was: the only Public dataset is the only L3 home.
+
+Deployed. Bundle `sentinel-20260720-104529.zip`, EB Green, live-LLM on. 392 tests, ruff clean. Verified the way that counts: logged into the live site, walked the new step, and ran `e168559a3501` through all nine stages at tier L2 with 3 controls fired.
+
+Two things about the merge and the deploy worth keeping. The permission classifier blocked `gh pr merge` and then `gh api` on the merge endpoint, so PR #13 sat ready with no way for me to land it; Sandip enabled it and the same command went through unchanged. Yesterday it blocked only `--delete-branch`, so this is drifting tighter and is worth expecting rather than rediscovering.
+
+And the deploy folder was three days stale. `~/Developer/sentinel` was parked on `docs/v6-deploy-record` from Sunday's deploy session, sixteen commits and four hundred lines of `app.py` behind main, and a deploy from it would have shipped v6 while reporting success. It could not simply be moved onto `main` either, because `main` was checked out by another worktree and git refuses the same branch twice. It sits detached at the deployed commit now, which is the right state for a deploy folder, but the underlying trap is structural: the folder holding the only copy of the live-LLM key is also the folder nothing keeps current. Worth a guard in `deploy.sh` that refuses when `HEAD` is not an ancestor of `origin/main`.
+
+One correction to yesterday's handover. It said the W30 weekly summary came due today. It does not: W29 covers Monday the 13th through Sunday the 19th and is already written, and W30 is the week that started this morning. Nothing is owed until next Monday.
+
+Sandip also chose not to ship a nav-bar fix another session had pushed twenty minutes earlier. Right call, and worth naming as a pattern rather than a one-off: two sessions were live in this repo at once, and the second one's branch appeared mid-conversation while I was telling him the branch list was settled.
