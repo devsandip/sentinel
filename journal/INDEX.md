@@ -7,9 +7,14 @@ Latest entry: [2026-07-20-1345-three-registries-under-one-heading.md](entries/20
 ## Where we are now
 
 **v12 is merged to main but NOT deployed. The Registry screen now says what
-each agent does and what the three registries on it are. Prod is still v10,
-the Live LLM path there still fails 100% of the time with a visible traceback,
-and nothing from the cold-visit audit is fixed.**
+each agent does and what the three registries on it are. Prod is still v10, so
+the Live LLM path there still fails 100% of the time with a visible traceback.
+The audit findings are fixed in PR #17 (`claude/remaining-tasks-545806`), which
+is open and not yet merged: it installs the five allowlisted packages, adds
+`tests/test_allowlist_env.py` to reconcile the grant against the environment,
+and closes the other four findings. Corrected 2026-07-20 13:55; the v12 entry
+and the two blocks below say the audit is untouched, which was true when each
+was written and is no longer.**
 
 v12 (PR #18, `a924ffe`) started from Sandip asking what the agents on the
 Registry screen actually do, and what the difference is between Models, Agents,

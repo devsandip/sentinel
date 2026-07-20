@@ -675,9 +675,9 @@ Append-only session handoff log. Newest entries at the bottom.
 - Registry reads correctly end to end: three sections, each with its own subtitle, agent descriptions sourced from the classes.
 
 **Next:**
-- Unchanged and still the top item: fix the allowlist drift, either by adding `statsmodels`, `lifelines`, `shap`, `dowhy`, `econml` to `requirements.txt` or by narrowing the advertised allowlist to what is installed.
-- Then the Adoption chart flex-shrink squash and the stale "switch persona in the sidebar" string at `sentinel/ui/govflow.py:1365`.
-- Deploy once the allowlist fix lands, so v11, v12 and the fix ship together.
+- ~~Fix the allowlist drift.~~ Corrected 2026-07-20 13:55: this was written without checking the open PRs. All five audit findings are already fixed in PR #17 (`claude/remaining-tasks-545806`), open and unmerged, which installs `statsmodels`, `lifelines`, `shap`, `dowhy`, `econml` and adds `tests/test_allowlist_env.py` to reconcile the grant against the environment. Nothing to do here beyond merging it. The same correction is on the INDEX.
+- Merge PR #17, then deploy, so v11, v12 and the audit fixes ship together.
+- Note for whoever merges: PR #17 also edits `journal/INDEX.md` and `WORKLOG.md` from a base before v11 and v12 landed, so expect conflicts in both.
 
 **Decisions:**
 - **The agent description lives on the agent class, not in the registry.** A dict of descriptions in `registry.py` is a copy of a fact, and copies drift. Same rule the model-status popover already follows by computing off the row.
