@@ -1,10 +1,33 @@
 # Sentinel — Journal Index
 
-Last refreshed: 2026-07-20 18:13
+Last refreshed: 2026-07-20 19:30
 
-Latest entry: [2026-07-20-1813-prod-carries-the-scope.md](entries/2026-07-20-1813-prod-carries-the-scope.md)
+Latest entry: [2026-07-20-1930-nine-ticks-over-nine-unequal-checks.md](entries/2026-07-20-1930-nine-ticks-over-nine-unequal-checks.md)
 
 ## Where we are now
+
+**The Gate stage shows what it read, not just what it refused (PR #29, merged,
+525 tests).** Sandip said the stage does not really say anything, and the fault
+was not on the screen: `gate_code` recorded only its refusals, so a run it
+cleared produced nothing at all and nine ticks was all there was to print. Each
+check now returns the constructs it judged, the rule it judged them against,
+and one of four verdicts. `cleared` and `refused` are verdicts on the code;
+`no_subject` (armed, nothing here to judge) and `not_armed` (rule never
+supplied) are verdicts on the check, and painting those green claims an
+assurance nobody established.
+
+That fourth state found a live hole the hour it shipped: `l3.py` called
+`gate_code` without `allowed_tables`, so **CTL-PURP-01 could not fire on any L3
+run** while the old screen ticked it. Armed, with a test that fails if any check
+loses its rule. The panel is now the decision with its reason in both
+directions, what the gate was given (grant, allowlist, scope, printed not
+counted), nine cells carrying each check's count, and the read drawn on the
+code as a per-line construct count. The screen no longer keeps its own copy of
+the nine checks. **Merged but not deployed; prod is one merge behind.**
+
+Everything below is the prior state.
+
+---
 
 **Prod is in sync with `main` at `174df5e`. PR #25 deployed as bundle
 `sentinel-20260720-180457.zip`, EB Health Green, health 200, root 200 in
@@ -636,6 +659,7 @@ out).
 
 ## Recent entries
 
+- [2026-07-20-1930-nine-ticks-over-nine-unequal-checks.md](entries/2026-07-20-1930-nine-ticks-over-nine-unequal-checks.md) — Sandip said the Gate stage does not really say anything, and **the screen could not have done better**: `gate_code` recorded only its refusals, so a cleared run produced literally nothing and the nine-row "clear/clear/clear" table was the whole of what existed to print. The gate now records what it read. **Four verdicts, not two,** because there are four facts: a check that judged 16 constructs and permitted them cleared the code; a check with nothing here to judge cleared nothing; a check whose rule was never supplied did not run. Only the first two are verdicts on the code. That distinction paid for itself the same hour: `l3.py` called `gate_code` without `allowed_tables`, so **CTL-PURP-01 had no scope to test against and could not fire on any L3 run** while the screen ticked it. The visualization is nine cells carrying each check's count (a tick cannot tell 16 from 0, a number can), plus the read drawn on the code as a per-line construct count, because tinting the refused line shows where the gate said no and not where it looked. The verdict states a reason in both directions: an approval that says "no violations" is an assertion, which is what this stage exists to replace. Also **the screen was keeping its own copy of the nine checks** with nothing holding the gate to it, the fourth instance of that fault in this build. And I caught myself doing the same thing one level up: the verdict read "judged 61 constructs" while the gutter beneath it summed to 27, because 61 is judgements and 27 is constructs. Both are stated now. PR #29, 525 tests, merged, not deployed.
 - [2026-07-20-1813-prod-carries-the-scope.md](entries/2026-07-20-1813-prod-carries-the-scope.md) — deployed PR #25, bundle `sentinel-20260720-180457.zip`, EB Green, prod in sync with `main` at `174df5e`. Two things worth keeping. **The deploy is not incremental**, so batching merges into one deploy is free in effort and costs bisection: the previous deploy carried four changes after three stale sessions, this one carried a single tested change. That is the argument for deploying on merge, and it holds only while merges stay small, which is the same reason the `app.py` split matters. And **verification used the behaviour that only exists in the new build**, because health 200 passes on the old bundle: Streamlit answers that endpoint before `app.py` runs, which is how the first prod deploy returned 200 with every page broken. Checked the scope banner, the disabled "Ran by", and events filed under all eight stages. A deploy is verified when the change is visible, not when the instance is up.
 - [2026-07-20-1758-the-caption-was-the-bug.md](entries/2026-07-20-1758-the-caption-was-the-bug.md) — the two Audit Log follow-ups, merged as PR #25. **An honest caption is still a gap:** the screen admitted it could not file govflow/L3 events under a stage, and that admission made the gap tolerable enough that I stopped looking at it. Inferring the stage from the action string was rejected because it needs a second table kept in step with 30 call sites and misfiles silently, which on an audit surface beats an admitted absence. So `AuditEvent` carries a `stage` written by the call site: 22 edits in `flow.py`, 8 in `l3.py`, empty on routes with no stage spine and a test asserting they leave it empty. Considered a context manager on the log (9 edits not 30) and rejected it: flow.py's stages are sequential top-level code with early returns, and explicit-per-site reads better in a governance file. Second: **the screen about access control had none**, so `can_view_all_runs` now lives in `personas.yaml` defaulting to deny, one `visible_runs()` predicate scopes the rows, the filter options and the drill-down, and the drill-down is the one that matters because `?run=` would otherwise be the bypass. The scope is announced rather than silently applied, and a withheld run says it exists. Re-seeding preserved all 24 run ids by plan slot, five lines that saved every bookmarked link. 494 tests. Also checked the other ten worktrees expecting to sequence around parallel work: there is none, nine are idle and two branches are dead. **Long-lived worktrees over a 3,400 line `app.py` do not produce parallel work, they produce abandoned branches.**
 - [2026-07-20-1655-what-counts-as-a-refusal.md](entries/2026-07-20-1655-what-counts-as-a-refusal.md) — the Audit Log ships; what counts as a refusal, and no dual control anywhere.
@@ -679,6 +703,8 @@ out).
 
 ## Working hypotheses
 
+- **A control that records only its refusals cannot be audited on the runs it cleared.** Found 2026-07-20 in the gate, one layer below where the Audit Log found the same shape a session earlier. `GateResult` was `passed` plus violations, so a clear verdict carried no evidence and the screen had nothing to render but a tick. The rule generalises past this build: **a control has to record what it examined, not only what it rejected**, because the passing case is the common case and it is the one a reviewer cannot check. The corollary is that the states must not collapse. Judged-and-permitted, nothing-here-to-judge, and rule-never-supplied are three different facts, and only the first is an assurance about the code; a screen that paints all three green is claiming coverage nobody established. Worth testing every other control surface in this build against the question "what does this say on a run where nothing fired".
+- **Show the size of the read, and make it checkable against itself.** Same session. Nine ticks could not distinguish a check that judged sixteen constructs from one that judged none, and a count can, which is what turned the Gate panel from a badge into a reading. But the moment there are two related numbers on a screen they must be labelled as two: the verdict said "judged 61 constructs" while the per-line gutter below it summed to 27, because 61 counts judgements (one import is judged by four checks) and 27 counts constructs. A reader who checked the screen against itself would have found it off by more than a factor of two, on the one screen whose argument is that its numbers can be checked.
 - **An honest caption about a gap is a way of living with the gap.** Found 2026-07-20. The Audit Log admitted, on every govflow and L3 run, that it could not file events under a stage. The admission was accurate and I felt fine about it for a whole session, which is exactly the problem: saying what you cannot do buys enough credibility to stop working on it. Worth re-reading every "we cannot do X because Y" caption in this build and asking whether Y is a fact about the world or a thing nobody has fixed yet. The related rule, for audit surfaces specifically: **prefer an admitted absence to a silent inference**, because an inference table drifts from its 30 call sites and misfiles quietly, and a governance record that is quietly wrong is worse than one that is loudly incomplete. Both halves of that matter. The first says fix the gap; the second says do not fix it by guessing.
 - **A claim stated in prose is not a control; it drifts the moment nothing enforces it.** Found three times in one session (2026-07-20): the L2 allowlist named five packages that were installed nowhere, the Execute panel's caption claimed a 15s wall clock while the code enforced 10, and the stepper doc listed DoWhy/lifelines/SHAP as permitted directly beneath its own rule to claim only libraries that actually run. Each was written once and true once. The fix in each case was the same shape: make the claim read from the thing that enforces it, and add a test that fails when the two diverge. The allowlist reconciles against `requirements.txt`, the caption interpolates `DEFAULT_WALL_CLOCK_S`, the permitted column renders from `ALLOWED_IMPORTS`. Worth applying to any number or list this build shows a visitor.
 - **An import grant is also a time budget, and a version ceiling.** Adding shap/dowhy/econml to the allowlist (2026-07-20) pinned the whole numerical stack down a major version, because econml and numba cap it, and charged 4.2-4.6s of warm import to every sandbox run against what was a 10s wall clock. Widening an allowlist is never only a policy change.
