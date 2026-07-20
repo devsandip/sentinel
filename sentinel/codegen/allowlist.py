@@ -42,8 +42,14 @@ CTL_COMPLEX_01 = "CTL-COMPLEX-01"  # Cartesian join, or join count over the ceil
 # with ModuleNotFoundError. That is not a control that held, it is a control
 # that guessed. `tests/test_allowlist_env.py` reconciles this list against
 # `requirements.txt` (the artifact prod installs) and fails on any drift.
-# lifelines, shap, dowhy and econml were removed on 2026-07-20 for exactly that
-# reason: advertised here, installed nowhere, used by nothing.
+#
+# All six of statsmodels, lifelines, shap, dowhy and econml were advertised here
+# and installed nowhere from v1 until 2026-07-20, when a cold-visit audit found
+# the Live LLM path dying on every run. They are dependencies now. Nothing in
+# the platform imports the last four; the model reaches for them in generated
+# code, which is what an allowlist is for. Note the cost that bought: econml and
+# numba pin the numerical stack down a major version (pandas 3 -> 2.3), so
+# widening this list is not free even when the packages install cleanly.
 ALLOWED_IMPORTS: frozenset[str] = frozenset(
     {
         "pandas",
@@ -56,6 +62,10 @@ ALLOWED_IMPORTS: frozenset[str] = frozenset(
         "sklearn.model_selection",
         "fairlearn.metrics",
         "fairlearn.reductions",
+        "lifelines",
+        "shap",
+        "dowhy",
+        "econml",
     }
 )
 

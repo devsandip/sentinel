@@ -15,6 +15,8 @@ import pytest
 pytest.importorskip("streamlit.testing.v1")
 from streamlit.testing.v1 import AppTest  # noqa: E402
 
+from sentinel.sandbox.execute import DEFAULT_WALL_CLOCK_S  # noqa: E402
+
 # pyarrow's mimalloc allocator segfaults on macOS when Streamlit serializes a
 # DataFrame; route to the system allocator before anything imports pyarrow.
 os.environ.setdefault("ARROW_DEFAULT_MEMORY_POOL", "system")
@@ -245,16 +247,37 @@ def test_architecture_stop_wires_its_controls_and_import_rows():
     for cid in ("CTL-CODE-01", "CTL-EGRESS-01", "CTL-CODE-02", "CTL-CODE-03"):
         assert cid in labels, cid
     # The permitted column is the real allowlist, so it may only name libraries
-    # the sandbox can import. Until 2026-07-20 it advertised four that were
-    # installed nowhere; this screen is where a visitor reads the claim.
-    # Word-bounded: the page's CSS carries 'shape', which naive substring
+    # the sandbox can import. Until 2026-07-20 it advertised five that were
+    # installed nowhere; this screen is where a visitor reads the claim. That
+    # the names appear here is only half the check, and the weaker half:
+    # test_allowlist_env.py is what holds them to being installed.
+    # Word-bounded because the page's CSS carries 'shape', which naive substring
     # matching reads as 'shap'.
     body = " ".join(m.value for m in at.markdown)
-    assert re.search(r"\bstatsmodels\b", body)
-    for gone in ("lifelines", "shap", "dowhy", "econml"):
-        assert not re.search(rf"\b{gone}\b", body), (
-            f"{gone} is advertised at L2 but is not installed"
-        )
+    for lib in ("statsmodels", "lifelines", "shap", "dowhy", "econml"):
+        assert re.search(rf"\b{lib}\b", body), f"{lib} is granted at L2 but not shown here"
+
+
+def test_no_screen_hardcodes_the_wall_clock():
+    """The Execute panel's mechanics caption claimed a 15s wall clock from v6
+    while the sandbox enforced 10s, and now 30s. It reads DEFAULT_WALL_CLOCK_S
+    instead of restating it, which is the allowlist lesson applied to a number:
+    what a visitor reads should come from the thing that enforces it.
+
+    Checked against the source rather than a rendered page because the caption
+    only renders once a run is published, and the regression to catch is someone
+    retyping the number, which is visible here and cheap to see.
+    """
+    ui = os.path.join(os.path.dirname(os.path.dirname(__file__)), "sentinel", "ui")
+    for name in os.listdir(ui):
+        if not name.endswith(".py"):
+            continue
+        with open(os.path.join(ui, name)) as f:
+            src = f.read()
+        hits = re.findall(r"\d+\s*s(?:ec|econds)? wall clock", src)
+        assert not hits, f"{name} states a wall clock literally: {hits}"
+    # And the constant is what the caption interpolates.
+    assert DEFAULT_WALL_CLOCK_S > 0
 
 
 def test_certification_gates_explain_their_control():

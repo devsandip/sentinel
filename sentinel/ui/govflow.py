@@ -59,6 +59,7 @@ from ..govflow.tiers import (
     ROLE_EXECUTIVE,
     ROLE_MODEL_VALIDATOR,
 )
+from ..sandbox.execute import DEFAULT_WALL_CLOCK_S
 from .tables import table_head, table_row, td
 
 STAGES = [
@@ -1715,8 +1716,12 @@ def _panel_execute(pub: dict | None, cfg: dict | None, persona) -> None:  # noqa
             unsafe_allow_html=True,
         )
     st.caption(
-        "Mechanics: gated code runs in a subprocess with a 15s wall clock "
-        "(CTL-TIME-01), best-effort memory and CPU rlimits, and a single "
+        # Read from the constant, not retyped: this line claimed 15s while the
+        # code enforced 10s, which is the same defect as the allowlist naming
+        # packages that were never installed. A number a visitor reads should
+        # come from the thing that enforces it.
+        f"Mechanics: gated code runs in a subprocess with a {DEFAULT_WALL_CLOCK_S:.0f}s "
+        "wall clock (CTL-TIME-01), best-effort memory and CPU rlimits, and a single "
         "ctx.emit() channel for the result. The gate is the import fence; the "
         "sandbox isolates and caps. An honest boundary against a model doing "
         "something dumb, not against a determined attacker."

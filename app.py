@@ -49,6 +49,7 @@ from sentinel.platform.certification import evaluate as evaluate_cert
 from sentinel.platform.patterns import AVOIDED, IN_USE, PLANNED
 from sentinel.platform.templates import AVAILABLE, LIVE
 from sentinel.rag import corpus_summary
+from sentinel.sandbox.warmup import start_background_warmup
 from sentinel.ui.govflow import (
     cls_label,
     control_popover,
@@ -58,6 +59,13 @@ from sentinel.ui.govflow import (
 from sentinel.ui.tables import table_head, table_row, td
 
 st.set_page_config(page_title="Sentinel — Governed Agentic Analysis", layout="wide")
+
+# Warm the sandbox's import caches off-thread, once per server process. A cold
+# `import shap` costs 15s or more against a 10s sandbox wall clock, so without
+# this the first generated analysis reaching for it is killed by CTL-TIME-01 for
+# a reason that has nothing to do with the code. Returns immediately; the
+# measurements are in sentinel/sandbox/warmup.py.
+start_background_warmup()
 
 ACCENT = "#1e50a0"
 

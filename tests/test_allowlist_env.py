@@ -10,6 +10,9 @@ the small half. The governance half is that a control approved something the
 environment refuses, which is not a control that held, it is a control that
 guessed.
 
+All five were installed rather than dropped, so the grant now describes the
+environment. This module is what keeps the two in step from here.
+
 `requirements.txt` is the target rather than the local virtualenv on purpose:
 it is the artifact the instance pip-installs, and a local env hides this defect
 precisely when it matters, by carrying packages transitively that prod does not.
@@ -42,6 +45,10 @@ DISTRIBUTION_FOR_ROOT: dict[str, str] = {
     "sklearn": "scikit-learn",
     "statsmodels": "statsmodels",
     "fairlearn": "fairlearn",
+    "lifelines": "lifelines",
+    "shap": "shap",
+    "dowhy": "dowhy",
+    "econml": "econml",
 }
 
 

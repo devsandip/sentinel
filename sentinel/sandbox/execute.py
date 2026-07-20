@@ -22,7 +22,18 @@ import pandas as pd
 
 CTL_TIME_01 = "CTL-TIME-01"
 
-DEFAULT_WALL_CLOCK_S = 10.0
+# 10.0 until 2026-07-20, when the L2 allowlist gained shap, dowhy and econml.
+# The sandbox is a fresh subprocess per run, so importing what the allowlist
+# grants is charged to every analysis before a line of it executes: measured
+# warm on a 2026 MacBook, 0.66s of bare subprocess overhead, 1.0s with pandas,
+# 4.2-4.6s with shap, and a t3.small is slower than that. A 10s budget was
+# therefore close to firing on the imports rather than on the analysis.
+#
+# This control exists to stop runaway generated code. An infinite loop dies at
+# 30s exactly as it dies at 10s; what changes is that the cap stops firing for
+# a reason that has nothing to do with the code it is judging. Widening the
+# allowlist widened this: an import grant is also a time budget.
+DEFAULT_WALL_CLOCK_S = 30.0
 DEFAULT_MEMORY_MB = 1024
 
 

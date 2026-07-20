@@ -244,15 +244,19 @@ cells to suppress by design).
   out as two columns: bought (the analytical libraries, what each does, at which
   stage) and built (the controls per stage). The showpiece is the Gate import
   allowlist rendered as the governed catalogue the model may reach for (numpy,
-  pandas, scikit-learn, statsmodels, fairlearn, scipy permitted; os, subprocess,
-  requests, socket, pickle, eval/exec denied). Honest footer for what is on the
-  dependency map but not yet wired (Presidio, Evidently, OPA, pandera, DoWhy,
-  lifelines, SHAP, EconML). Only claim libraries that actually run; the roadmap
+  pandas, scikit-learn, statsmodels, fairlearn, scipy, DoWhy, lifelines, SHAP,
+  EconML permitted; os, subprocess, requests, socket, pickle, eval/exec denied).
+  Honest footer for what is on the dependency map but not yet wired (Presidio,
+  Evidently, OPA, pandera). Only claim libraries that actually run; the roadmap
   ones are labelled as such. That rule was written here and broken in the same
   breath until 2026-07-20: DoWhy, lifelines and SHAP sat in the permitted list
-  above while being installed nowhere. The permitted column is now generated from
-  `ALLOWED_IMPORTS`, which `tests/test_allowlist_env.py` holds to what
-  `requirements.txt` installs, so the two cannot drift again. In the mockup this is **not a modal**: it is a tenth stop on the
+  above while being installed nowhere, along with statsmodels. All four are
+  installed now, so the claim is true rather than trimmed. The permitted column
+  is generated from `ALLOWED_IMPORTS`, which `tests/test_allowlist_env.py` holds
+  to what `requirements.txt` installs, so the two cannot drift again. Note that
+  no analysis in the build reaches for DoWhy, lifelines, SHAP or EconML yet: they
+  are there for generated code to use, and a dataset that exercises them is a
+  later slice. In the mockup this is **not a modal**: it is a tenth stop on the
   rail after Attest, rendered as a normal stage panel. The rail marks it apart from
   the nine governed stages with a distinct glyph node (not a number), a dashed
   connector, and an "overview" tag; the footer counter reads "Architecture" rather
