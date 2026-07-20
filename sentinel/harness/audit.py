@@ -3,6 +3,12 @@
 Every agent action, RBAC denial, PII redaction, and gate decision flows
 through here. Events are immutable: once recorded they are never mutated,
 only appended. Kept in memory for the UI and mirrored to a per-run JSONL file.
+
+An event carries the stage it came from where its route has stages. The
+emitting agent cannot stand in for that: the nine-stage flow records
+agent="govflow" from Ask, Plan and Access alike. `stage` is written by the
+call site, which is the only place that knows, and defaults to empty so
+events recorded before the field existed still parse.
 """
 
 from __future__ import annotations
@@ -38,6 +44,13 @@ class AuditEvent:
     cost: float
     actor: str = ""  # the acting identity (agent id, or a human role at the gate)
     policy_version: str = ""  # the governance policy version in effect
+    # The governance stage this event was emitted from (Ask, Plan, Access,
+    # Generate, Gate, Execute, Screen, Interpret, Attest), where the emitting
+    # route has stages. Empty means run-level or a route with no stage spine,
+    # and empty is the honest value: the alternative is inferring the stage
+    # from the action string downstream, which silently misfiles every action
+    # the inference table has not been taught.
+    stage: str = ""
     extra: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -78,6 +91,7 @@ class AuditLog:
         tokens: int = 0,
         cost: float = 0.0,
         actor: str = "",
+        stage: str = "",
         extra: dict[str, Any] | None = None,
     ) -> AuditEvent:
         event = AuditEvent(
@@ -94,6 +108,7 @@ class AuditLog:
             cost=round(float(cost), 6),
             actor=actor or agent,  # default the actor to the acting agent
             policy_version=self._policy_version,
+            stage=stage,
             extra=dict(extra or {}),
         )
         self._events.append(event)
