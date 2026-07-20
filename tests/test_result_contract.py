@@ -416,3 +416,66 @@ def test_an_ungranted_column_in_sql_is_refused():
     r = run_governed_analysis(Q, gateway=gw, intent="fair_lending_sql")
     assert _stage(r, "Gate").status == "blocked"
     assert "CTL-COL-01" in r.controls_fired
+
+
+# -- truncation at the output cap (found only by real API calls) -----------
+def test_the_code_token_cap_clears_the_flagship_analysis():
+    # Measured against the real API on 2026-07-20: the benign fair-lending
+    # question needs 1256-1642 output tokens, and truncated 3/3 at 1024.
+    from sentinel.gateway.model_gateway import MAX_CODE_TOKENS
+
+    assert MAX_CODE_TOKENS >= 2048
+
+
+class _TruncatingGateway(ModelGateway):
+    """A live gateway whose first response hits the output cap."""
+
+    def __init__(self, codes: list[str], truncate_first: int = 1) -> None:
+        super().__init__(provider=TEMPLATED)
+        self.codes = list(codes)
+        self.truncate_first = truncate_first
+        self.calls = 0
+
+    @property
+    def is_live(self) -> bool:
+        return True
+
+    def generate_code(self, system, user, fallback_code, *, call_kind="generate"):  # noqa: ANN001, ARG002
+        code = self.codes[min(self.calls, len(self.codes) - 1)]
+        truncated = self.calls < self.truncate_first
+        self.calls += 1
+        self.last_user = user
+        return CodeGen(
+            code=code, tokens=10, cost_usd=0.0, provider="anthropic",
+            live=True, truncated=truncated,
+        )
+
+
+# What a cut-off response actually looks like: valid up to the cut, then nothing.
+_TRUNCATED = 'df = ctx.table("german_credit")\nresult = df.groupby("age_ba'
+
+
+def test_a_truncated_response_is_named_as_truncation_not_bad_syntax():
+    # The gate says CTL-CODE-00 "does not parse", which is true of the fragment
+    # and false about the model. The attempt must record the real cause.
+    gw = _TruncatingGateway([_TRUNCATED, _GOOD])
+    r = run_governed_analysis(Q, gateway=gw, intent="fair_lending")
+    first = r.to_public_dict()["generation_attempts"][0]
+    assert not first["passed"]
+    assert "truncated" in first["rejected_by"]
+
+
+def test_a_truncated_response_asks_for_something_shorter_not_a_syntax_fix():
+    gw = _TruncatingGateway([_TRUNCATED, _GOOD])
+    run_governed_analysis(Q, gateway=gw, intent="fair_lending")
+    # The retry prompt must not tell the model its syntax was wrong.
+    assert "cut off" in gw.last_user
+    assert "shorter" in gw.last_user
+    assert "does not parse" not in gw.last_user
+
+
+def test_the_run_recovers_from_a_truncated_first_attempt():
+    gw = _TruncatingGateway([_TRUNCATED, _GOOD])
+    r = run_governed_analysis(Q, gateway=gw, intent="fair_lending")
+    assert r.status == STATUS_COMPLETED
+    assert gw.calls == 2
