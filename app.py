@@ -79,6 +79,7 @@ from sentinel.ui.govflow import (
     cls_label,
     control_popover,
     purpose_extra,
+    render_architecture,
     render_govflow,
 )
 from sentinel.ui.help import render_ask, render_faq
@@ -1082,6 +1083,11 @@ def header(persona) -> None:  # noqa: ANN001
             _persona_switcher(persona)
             with st.popover("Controls"):
                 _controls_plane(persona)
+            # Architecture sits beside Controls because both describe the
+            # platform rather than advance a run. It was the Run stepper's tenth
+            # stop, which made a nine-stage rail count to ten.
+            with st.popover("Architecture"):
+                render_architecture(persona)
 
 
 def _persona_switcher(persona) -> None:  # noqa: ANN001

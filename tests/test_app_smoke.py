@@ -569,13 +569,29 @@ def test_engine_bar_controls_are_clickable():
         assert cid in labels, cid
 
 
-def test_architecture_stop_wires_its_controls_and_import_rows():
-    """The Architecture stop lists every control by stage, and the import
+def test_architecture_is_a_topbar_popover_not_a_tenth_stage():
+    """Architecture describes the platform, not a run, so it sits beside
+    Controls in the topbar instead of ending the nine-stage rail.
+
+    It was the rail's tenth stop, which made the stepper count to ten under a
+    footer reading "Stage N / 9". Nothing fires there and the flow knows nothing
+    about it, so the rail is the wrong home for it.
+    """
+    at = _boot(timeout=120)
+    at.button(key="nav_run").click().run()
+    assert not at.exception
+    stops = at.radio(key="govflow_stage").options
+    assert "Architecture" not in stops, "Architecture is back on the stepper"
+    assert len(stops) == 9, f"the rail should carry nine stages, got {len(stops)}"
+    assert "Architecture" in _popover_labels(at), "no Architecture popover in the topbar"
+
+
+def test_architecture_wires_its_controls_and_import_rows():
+    """The Architecture overview lists every control by stage, and the import
     allowlist rows each carry the control that decides the row (a module name
     is not a control, so the module chips themselves stay inert)."""
     at = _boot(timeout=120)
     at.button(key="nav_run").click().run()
-    at.radio(key="govflow_stage").set_value("Architecture").run()
     assert not at.exception
     labels = _popover_labels(at)
     assert "CTL-SOD-01" in labels

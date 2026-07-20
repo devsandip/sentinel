@@ -21,7 +21,12 @@ from sentinel.codegen.generate import (
 )
 from sentinel.govflow import run_governed_analysis, run_l3_analysis
 from sentinel.govflow.access import FAIR_LENDING_GRANT, column_inventory
-from sentinel.govflow.controls_info import CATALOG_INFO, CONTROLS_INFO, control_info
+from sentinel.govflow.controls_info import (
+    CATALOG_INFO,
+    CONTROLS_INFO,
+    INTERNAL,
+    control_info,
+)
 from sentinel.harness.controls import CONTROL_IDS
 from sentinel.harness.identity import get_persona
 
@@ -256,6 +261,37 @@ def test_tier_control_is_implemented_because_it_actually_refuses_runs():
         for r in refused_at_ask
         for e in r.events
     )
+
+
+def test_every_control_names_the_regime_it_answers_to():
+    """A control that cites no regime is a control nobody decided the basis for.
+
+    Same shape as the guard that fails a gate check which lost its rule: the
+    catalogue is the single explanation surface, so a blank here goes silently
+    missing in the Gate panel, the Audit Log drill-down and the Registry headers
+    at once. Controls with no external driver say INTERNAL in as many words, so
+    silence never has to be read as either a gap or an oversight.
+    """
+    for cid, info in {**CONTROLS_INFO, **CATALOG_INFO}.items():
+        assert info.regulation.strip(), (
+            f"{cid} ships without a regulation line. Name the regime and the "
+            f"principle, or set it to {INTERNAL!r} if there is no external "
+            f"driver."
+        )
+        assert "complies" not in info.regulation.lower(), (
+            f"{cid} says 'complies'. A control answers to a principle; "
+            f"compliance is a determination a firm makes, not one this app can."
+        )
+
+
+def test_declared_controls_still_name_a_regime():
+    """The doc-only entries share one `why`, so the regime is the only thing
+    distinguishing what they would each be for. A blank would make the declared
+    half of the catalogue indistinguishable from filler."""
+    declared = [c for c in CONTROLS_INFO.values() if not c.implemented]
+    assert declared, "expected doc-only controls in the catalogue"
+    for info in declared:
+        assert info.regulation.strip()
 
 
 def test_unknown_control_gets_an_honest_placeholder():

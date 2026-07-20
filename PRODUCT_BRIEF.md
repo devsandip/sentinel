@@ -18,23 +18,30 @@ Treat governance as the product, not the paperwork. Build the agent pipeline and
 
 Sentinel demonstrates this with one dataset (UCI German Credit) and a four-agent pipeline (Profiler, EDA, Modeler, Validator) plus an orchestrator. The analysis is always real: metrics, fairness numbers, and the model card are computed live and change with the data and seed. The agent narration is scripted by default (zero cost, safe for a public link) and labeled honestly; a live-LLM toggle exists behind a cost cap. The point the demo makes is that the controls are real, visible, and load-bearing.
 
-## 3. Governance controls mapped to bank KRAs
+## 3. Governance controls and the regulation each answers to
 
-Each control is a small, named module. Every agent action flows through them.
+Each control is a named, testable rule that can refuse. They live in one catalogue (`sentinel/govflow/controls_info.py`), and every control chip in the app resolves through it, so a control reads identically in the Gate panel, the Audit Log drill-down, the Registry and the manual. Each entry names the regime it answers to and the principle within it. The manual's "Controls and regulation" chapter renders that catalogue live, which is why no count appears below: a table in a document goes stale the moment a control is added, and it goes stale silently.
 
-| Control | What it does | Bank KRA it serves |
+The wording throughout is **answers to**, never **complies with**. A control serves a principle. Compliance is a determination a firm's own second and third lines make against their own policy, on systems with authenticated users and a real model inventory. This build has none of those, and the Audit Log says so on screen.
+
+| Regime | Principle | Controls that answer to it |
 | --- | --- | --- |
-| Audit log | Append-only, immutable JSONL of every agent action, denial, and decision | Auditability; examiner and internal-audit evidence; SR 11-7 outcomes analysis |
-| RBAC | Per-agent column allow-list; out-of-policy reads blocked and logged | Least-privilege data access; data governance; segregation of duties |
-| PII redaction | Regex detection and redaction before any text reaches an LLM | Data privacy (GLBA); prevents PII leakage into third-party models |
-| Guardrails | Tool allow-list; no arbitrary code execution | Operational risk; controlled autonomy; third-party / tool risk |
-| Human-in-the-loop gate | Pipeline pauses after the model is proposed; a person approves or rejects | Accountability; four-eyes control; model approval authority |
-| Eval gate | Golden-set checks must pass before a model can be promoted | Change management; release control; conceptual soundness |
-| Model card | SR 11-7-style model-risk document generated from the real run, exported to PDF | Model risk management; model inventory; validation evidence |
-| Fairness review | Group metrics and a four-fifths disparity ratio; protected attribute excluded from features | Fair lending (ECOA/Reg B); responsible AI; reputational risk |
-| Cost and KPI tracker | Tokens, dollars, cycle time, eval pass-rate, human-override count | Unit economics; run-cost control; operational reporting |
+| SR 11-7 / PRA SS1/23 | Independence of validation from development; conceptual soundness; outcomes analysis | Segregation of duties on signing, narration faithfulness, the eval gate, the human promotion gate, target leakage (declared) |
+| ECOA / Regulation B (12 CFR 1002) | Disparate impact: the failure mode is using what correlates with a protected attribute, not the attribute itself | Proxy discovery, which flags and never refuses |
+| GDPR Article 5 / FCRA section 604 | Purpose limitation and permissible purpose; data minimisation | The purpose matrix, column scoping, PII controls in output text and in model context |
+| GLBA Safeguards Rule (16 CFR 314) | Access control and containment | Column grants, no network egress, no filesystem or process access, RBAC and row filters (declared) |
+| Statistical disclosure control | Minimum cell size before an aggregate may be published | The disclosure floor and small-cell suppression, applied upstream of the narration |
+| SOX change control / secure SDLC | Nothing runs that a reviewer has not read | The import allowlist, no dynamic code, no sandbox escapes, code must parse |
+| BCBS 239 | Risk data aggregation and lineage | The dataset fingerprint pin, OpenLineage events, lineage completeness (declared) |
+| Internal operational | No external driver, stated as a decision rather than left blank | Wall-clock and resource caps, query complexity ceiling, spend cap, tool allowlist, injection screen |
 
-The design principle: a control is only credible if it can be seen firing. Sentinel forces two of them to fire on every run. The Profiler is denied a proxy-for-sex column (RBAC "access denied", logged), and an applicant email is scrubbed before narration (PII "redacted", logged). The age-band fairness check flags a real disparity (ratio 0.57 against a 0.8 threshold), so the Validator raises a genuine review item rather than a staged one.
+Two design points are worth stating plainly.
+
+**Segregation of duties is enforced by identity, not by role.** SR 11-7 asks for independence between development and validation. Most implementations satisfy that with a role check. Comparing identities is the stricter reading: a Platform Admin who authored a run cannot approve it either.
+
+**Proxy discovery flags rather than refuses.** Whether a correlated feature carries a business necessity is a Legal and Compliance judgment, not a platform judgment. A platform that refused on correlation alone would be wrong on the law and switched off within a week. The job of the control is that nobody afterwards gets to say they did not know.
+
+Forward-looking frameworks are named in the manual rather than claimed here. The EU AI Act treats creditworthiness assessment of natural persons as Annex III high-risk, and its Article 11 technical documentation requirement, not the phrase "model card", is what the model documentation in this build is shaped like.
 
 ## 4. The metric tree
 

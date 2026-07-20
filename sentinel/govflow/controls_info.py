@@ -26,6 +26,12 @@ ACT_SUPPRESS = "suppresses"
 ACT_LOG = "logs"
 
 
+# Controls with no external regime behind them say so in as many words. A blank
+# would read as an oversight, and "none" would read as a gap; this reads as a
+# decision. `tests/test_showtell.py` refuses an entry that leaves it unset.
+INTERNAL = "internal operational control"
+
+
 @dataclass(frozen=True)
 class ControlInfo:
     id: str
@@ -35,6 +41,15 @@ class ControlInfo:
     what: str  # what the rule is, in plain language
     why: str  # why it exists / the regulatory hook
     fired_means: str  # how to read this control appearing on a run
+    # The regime this control answers to, and the principle within it: one line,
+    # named so a second-line reviewer recognises it. Required, not defaulted, so
+    # a new control cannot be added without someone deciding what it serves.
+    #
+    # "Answers to" and "serves", never "complies with". Compliance is a
+    # determination a firm's own second and third lines make against their own
+    # policy, on systems with authenticated users. This one has none of that,
+    # and the Audit Log's caption already says so.
+    regulation: str
     implemented: bool = True
 
 
@@ -57,6 +72,11 @@ _INFOS: list[ControlInfo] = [
             "permission -- because the reason is wrong. This gate asks not who, "
             "but why."
         ),
+        regulation=(
+            "GDPR Article 5(1)(b) purpose limitation and FCRA section 604 "
+            "permissible purpose: data gathered for one reason may not be "
+            "turned to another."
+        ),
         fired_means=(
             "The dataset-by-purpose matrix refused this request at Access. "
             "Nothing downstream ran: no code was generated, no data was touched."
@@ -76,6 +96,10 @@ _INFOS: list[ControlInfo] = [
             "A certification is a claim about an analysis on specific data. "
             "Let the data drift silently and the certification is theatre."
         ),
+        regulation=(
+            "BCBS 239 risk data aggregation: a certification is a claim about "
+            "specific data, so drift in the data retires the claim."
+        ),
         fired_means=(
             "The dataset no longer matches its certified fingerprint. On this "
             "build the CSVs are static, so this control passes pinned; the "
@@ -92,6 +116,10 @@ _INFOS: list[ControlInfo] = [
         why=(
             "The gate reads code before the machine runs it. Code it cannot "
             "read, it cannot vouch for."
+        ),
+        regulation=(
+            f"{INTERNAL}, the precondition for every other read: the gate "
+            "cannot vouch for code it cannot parse."
         ),
         fired_means="The generated code was not valid Python. It never ran.",
     ),
@@ -110,6 +138,10 @@ _INFOS: list[ControlInfo] = [
             "An allowlist inverts the burden of proof: a library is unusable "
             "until someone decided it is safe, not the other way round."
         ),
+        regulation=(
+            "SOX change control and secure-SDLC tool risk: a library is "
+            "unusable until someone decided it is safe, not the other way round."
+        ),
         fired_means=(
             "The code imported a module outside the tier's allowlist. It never ran."
         ),
@@ -126,6 +158,10 @@ _INFOS: list[ControlInfo] = [
         why=(
             "Generated code computes over the table it was granted. Writing "
             "files or spawning processes is exfiltration surface, not analysis."
+        ),
+        regulation=(
+            "GLBA Safeguards Rule (16 CFR 314) containment: the sandbox has "
+            "one channel out, and it is not the filesystem."
         ),
         fired_means=(
             "The code tried to touch the filesystem or a process. It never ran."
@@ -145,6 +181,10 @@ _INFOS: list[ControlInfo] = [
             "cannot read until it is already running. Deny it and the static "
             "read stays meaningful."
         ),
+        regulation=(
+            "SOX change control and secure-SDLC: no evaluation of code the "
+            "reviewer never read."
+        ),
         fired_means=(
             "The code tried to build or run code at runtime (or deserialize "
             "untrusted bytes). It never ran."
@@ -163,6 +203,10 @@ _INFOS: list[ControlInfo] = [
             "Python's introspection lets code reach almost anything from almost "
             "anywhere. These dunders are the known escape hatches."
         ),
+        regulation=(
+            f"{INTERNAL}, closing the known introspection escapes that would "
+            "otherwise make the static read meaningless."
+        ),
         fired_means="The code reached for an escape-hatch attribute. It never ran.",
     ),
     ControlInfo(
@@ -178,6 +222,10 @@ _INFOS: list[ControlInfo] = [
             "Data leaves a bank through the network. A hard, tier-independent "
             "deny is the only credible answer; there is no legitimate reason "
             "for a governed analysis to phone anywhere."
+        ),
+        regulation=(
+            "GLBA Safeguards Rule (16 CFR 314): exfiltration prevented by "
+            "reading the code, not by watching the network after the fact."
         ),
         fired_means=(
             "The code referenced a network module (the webhook case). The "
@@ -199,6 +247,11 @@ _INFOS: list[ControlInfo] = [
             "the code's own references, so an ungranted column is refused even "
             "as text."
         ),
+        regulation=(
+            "GLBA Safeguards Rule access controls and GDPR Article 5(1)(c) "
+            "data minimisation: least privilege enforced in the code's own "
+            "references, not only in the table it was handed."
+        ),
         fired_means=(
             "The code referenced a column outside the grant (or used SELECT *). "
             "It never ran."
@@ -217,6 +270,10 @@ _INFOS: list[ControlInfo] = [
             "Unconditioned joins are how a 1,000-row table becomes a million-row "
             "disclosure accident."
         ),
+        regulation=(
+            f"{INTERNAL}, bounding the query shape that turns a small table "
+            "into a large disclosure."
+        ),
         fired_means="The SQL was too complex or joined without a condition.",
     ),
     # -- Execute ----------------------------------------------------------
@@ -233,6 +290,10 @@ _INFOS: list[ControlInfo] = [
             "A runaway analysis is a denial-of-service on shared infrastructure. "
             "The cap turns it into a bounded failure."
         ),
+        regulation=(
+            f"{INTERNAL}, resource containment on shared infrastructure: a "
+            "runaway analysis becomes a bounded failure."
+        ),
         fired_means="Execution exceeded the wall clock and the process was killed.",
     ),
     # -- Screen -----------------------------------------------------------
@@ -248,6 +309,11 @@ _INFOS: list[ControlInfo] = [
         why=(
             "The audit trail should show that the floor was needed, not only "
             "that it exists."
+        ),
+        regulation=(
+            "Statistical disclosure control practice (ONS, Eurostat, the US "
+            "federal statistical agencies): the minimum cell size an aggregate "
+            "may be published at."
         ),
         fired_means=(
             "At least one group in the raw result was smaller than the floor. "
@@ -270,6 +336,10 @@ _INFOS: list[ControlInfo] = [
             "never shown: removal upstream of the model beats trusting the "
             "model to stay quiet."
         ),
+        regulation=(
+            "Statistical disclosure control: cell suppression, applied "
+            "upstream of the model so a small group cannot be described at all."
+        ),
         fired_means=(
             "A band fell below the floor and was removed. The narration was "
             "written from the screened table only, so it cannot assert anything "
@@ -286,6 +356,10 @@ _INFOS: list[ControlInfo] = [
             "location and kind."
         ),
         why="Results tables are not the only leak path; prose leaks too.",
+        regulation=(
+            "GDPR Article 5(1)(f) integrity and confidentiality: prose is a "
+            "leak path as much as a table is."
+        ),
         fired_means=(
             "PII patterns were found in an output text and recorded. On this "
             "build the governed flow routes no output text through the scan "
@@ -309,6 +383,11 @@ _INFOS: list[ControlInfo] = [
             "treatment. Whether a proxy is a business necessity is Legal's "
             "call, so the platform flags and records rather than deciding."
         ),
+        regulation=(
+            "ECOA / Regulation B (12 CFR 1002) and the disparate-impact "
+            "doctrine: the failure mode is not using a protected attribute, "
+            "it is using what correlates with one."
+        ),
         fired_means=(
             "A granted feature associates strongly with the protected "
             "attribute. The finding is recorded for review; the run proceeds."
@@ -328,6 +407,10 @@ _INFOS: list[ControlInfo] = [
             "A model that narrates numbers it never saw is the failure mode "
             "this whole flow exists to prevent. The check is on the output, "
             "not on trust."
+        ),
+        regulation=(
+            "SR 11-7 / PRA SS1/23 conceptual soundness: an output is checked "
+            "against the numbers it claims to describe."
         ),
         fired_means=(
             "The narration referenced a suppressed band outside the explicit "
@@ -350,6 +433,9 @@ _INFOS: list[ControlInfo] = [
             "the approver not being the author. This was a confirmed defect in "
             "an earlier build, which is exactly why it is enforced by identity "
             "comparison now, not by role."
+        ),
+        regulation=(
+            "SR 11-7 / PRA SS1/23, independence of validation from development."
         ),
         fired_means=(
             "A self-signoff was attempted and refused, or the pack is pending "
@@ -377,6 +463,11 @@ _INFOS: list[ControlInfo] = [
             "or the data alone. This gate, not the persona's can_run flag, is "
             "what enforces it: a caller that bypasses the UI still lands here."
         ),
+        regulation=(
+            "EU AI Act Article 14 human oversight, in shape: how much autonomy "
+            "is granted is bounded by data classification and earned "
+            "attestation, never chosen."
+        ),
         fired_means=(
             "The resolved tier was outside L1-L3 (an L0 read-only role, for "
             "example), so the run was refused at Ask and the remaining eight "
@@ -394,26 +485,45 @@ _DOC_ONLY: list[ControlInfo] = [
         action=action,
         what=what,
         why="Named in the PRD control catalogue; not implemented in this build.",
+        regulation=regulation,
         fired_means="Cannot fire: not implemented.",
         implemented=False,
     )
-    for cid, name, stage, action, what in [
+    # A declared control still names what it would answer to. The regime is why
+    # the control is in the catalogue at all, and it does not become unknown
+    # because the code is not written yet.
+    for cid, name, stage, action, what, regulation in [
         ("CTL-RBAC-01", "Column denied by role", "Access", ACT_REFUSE,
-         "A column the requester's role may not read is denied."),
+         "A column the requester's role may not read is denied.",
+         "GLBA Safeguards Rule (16 CFR 314) access controls: least privilege, "
+         "enforced per role."),
         ("CTL-RBAC-02", "Row filter applied", "Access", ACT_LOG,
-         "The identity's row filter is injected into every query."),
+         "The identity's row filter is injected into every query.",
+         "GLBA Safeguards Rule access controls: an identity sees its own rows, "
+         "by construction rather than by convention."),
         ("CTL-PURP-02", "Column outside purpose scope", "Access", ACT_REFUSE,
-         "A column outside the declared purpose's scope is denied."),
+         "A column outside the declared purpose's scope is denied.",
+         "GDPR Article 5(1)(b) purpose limitation, narrowed to the column: the "
+         "purpose scopes what may be read, not only what may be asked."),
         ("CTL-INJECT-01", "Injection screen", "Generate", ACT_FLAG,
-         "Instruction-shaped text in data-derived model context is screened."),
+         "Instruction-shaped text in data-derived model context is screened.",
+         f"{INTERNAL}; prompt injection has no settled regulatory hook yet, "
+         "which is a statement about the regulation, not about the risk."),
         ("CTL-COST-01", "Spend cap", "Execute", ACT_REFUSE,
-         "Cumulative model spend over the cap stops further live calls."),
+         "Cumulative model spend over the cap stops further live calls.",
+         f"{INTERNAL}, unit-economics containment on live model calls."),
         ("CTL-DISC-04", "Target leakage", "Screen", ACT_FLAG,
-         "A pre-decision feature set containing post-decision data is flagged."),
+         "A pre-decision feature set containing post-decision data is flagged.",
+         "SR 11-7 / PRA SS1/23 conceptual soundness: a model fitted on "
+         "post-decision data is not measuring what it claims to measure."),
         ("CTL-LIN-01", "Lineage completeness", "Attest", ACT_REFUSE,
-         "An incomplete lineage chain blocks attestation."),
+         "An incomplete lineage chain blocks attestation.",
+         "BCBS 239: a finding traces back to the dataset snapshot it came "
+         "from, or it does not ship."),
         ("CTL-PII-01", "PII redaction", "any", ACT_SUPPRESS,
-         "PII is redacted before text reaches model context."),
+         "PII is redacted before text reaches model context.",
+         "GDPR Article 5(1)(c) data minimisation and GLBA: personal data does "
+         "not reach a third-party model."),
     ]
 ]
 
@@ -436,6 +546,10 @@ CATALOG_INFO: dict[str, ControlInfo] = {
             "Least privilege per agent. The Profiler has no business reading "
             "the sex-proxy column."
         ),
+        regulation=(
+            "GLBA Safeguards Rule (16 CFR 314) access controls: least "
+            "privilege, drawn per agent rather than per person."
+        ),
         fired_means=(
             "A column read was denied and logged. One denial fires on every "
             "hero-pipeline run by design, so the control is visibly live."
@@ -451,6 +565,10 @@ CATALOG_INFO: dict[str, ControlInfo] = {
             "Names, emails and SSNs have no business in a prompt. Redaction "
             "upstream beats trusting the model."
         ),
+        regulation=(
+            "GDPR Article 5(1)(c) data minimisation and GLBA: personal data "
+            "does not reach a third-party model."
+        ),
         fired_means=(
             "PII was found and redacted before narration. One redaction fires "
             "on every hero-pipeline run by design."
@@ -463,6 +581,10 @@ CATALOG_INFO: dict[str, ControlInfo] = {
         action=ACT_REFUSE,
         what="Each agent may call only the tools on its allow-list.",
         why="An agent's blast radius is its tool list. Keep the list short.",
+        regulation=(
+            f"{INTERNAL}, secure-SDLC least privilege applied to tools rather "
+            "than to data."
+        ),
         fired_means="A tool call outside the allow-list was refused.",
     ),
     "eval_gate": ControlInfo(
@@ -474,6 +596,10 @@ CATALOG_INFO: dict[str, ControlInfo] = {
         why=(
             "Promotion on vibes is how bad models reach production. The gate "
             "makes the checks a precondition, not a dashboard."
+        ),
+        regulation=(
+            "SR 11-7 / PRA SS1/23 outcomes analysis: the evidence is a "
+            "precondition of promotion, not a report written after it."
         ),
         fired_means="A golden check failed and promotion was blocked.",
     ),
@@ -490,6 +616,10 @@ CATALOG_INFO: dict[str, ControlInfo] = {
             "SR 11-7 model risk management: a person with promotion authority "
             "owns the decision, and the platform records who."
         ),
+        regulation=(
+            "SR 11-7 / PRA SS1/23 and EU AI Act Article 14 human oversight: a "
+            "named person with authority owns the promotion decision."
+        ),
         fired_means="The run paused at the gate for an independent approval.",
     ),
     "audit": ControlInfo(
@@ -505,6 +635,10 @@ CATALOG_INFO: dict[str, ControlInfo] = {
         why=(
             "The examiner's first question is 'show me'. Append-only, "
             "identity-stamped events are the answer."
+        ),
+        regulation=(
+            "EU AI Act Article 12 automatic logging and SR 11-7 ongoing "
+            "monitoring: the record is append-only and identity-stamped."
         ),
         fired_means="Always on. Not toggleable: an unaudited run is not a run.",
     ),
@@ -523,6 +657,10 @@ def control_info(control_id: str) -> ControlInfo:
         action=ACT_LOG,
         what="No registered description for this control id.",
         why="",
+        # Blank on purpose: an unregistered id has no catalogue entry to read a
+        # regime out of, and inventing one would be the failure this field
+        # exists to prevent. The popover renders nothing rather than a guess.
+        regulation="",
         fired_means="",
         implemented=False,
     )

@@ -69,10 +69,14 @@ from .tables import table_head, table_row, td
 STAGES = [
     "Ask", "Plan", "Access", "Generate", "Gate", "Execute", "Screen", "Interpret", "Attest",
 ]
-# The rail has a 10th, visually distinct stop: the Architecture overview
-# (ui-spec 2.3). It is an appendix, not a stage; the flow knows nothing of it.
+# The Architecture overview (ui-spec 2.3) is an appendix, not a stage: the flow
+# knows nothing of it and nothing fires there. It used to be a 10th rail stop,
+# which made the stepper contradict its own "Stage N / 9" footer. It now lives
+# in the topbar next to Controls, which is where the things that describe the
+# platform rather than advance a run belong. The panel is unchanged; only its
+# entry point moved, so `render_architecture` is the public way in.
 ARCHITECTURE = "Architecture"
-NAV_STOPS = STAGES + [ARCHITECTURE]
+NAV_STOPS = list(STAGES)
 
 # The neutral badge next to "Stage N of 9" in each panel head (mockup phead).
 _STAGE_KICKER = {
@@ -696,6 +700,11 @@ def _control_popover(  # noqa: ANN001
         st.write(info.what)
         if info.why:
             st.markdown(f"*Why it exists.* {info.why}")
+        if info.regulation:
+            # "Answers to", never "complies with": the control serves a
+            # principle, and whether a firm complies is a determination its own
+            # second and third lines make against their own policy.
+            st.markdown(f"*Answers to.* {info.regulation}")
         if extra:
             st.caption(extra)
         if not info.implemented:
@@ -2417,8 +2426,20 @@ _PANELS = {
     "Screen": _panel_screen,
     "Interpret": _panel_interpret,
     "Attest": _panel_attest,
-    ARCHITECTURE: _panel_architecture,
 }
+# No ARCHITECTURE entry: the rail no longer routes to it. A stale
+# `govflow_stage` of "Architecture" from an older session falls back to Ask via
+# the NAV_STOPS guard in render_govflow rather than reaching a dead key here.
+
+
+def render_architecture(persona) -> None:  # noqa: ANN001
+    """The Architecture overview, rendered from the topbar rather than the rail.
+
+    Reads the current run out of session state so the control chips inside still
+    say what each control did on it; with no run they degrade to what-and-why,
+    which is the same behaviour they had as the rail's last stop.
+    """
+    _panel_architecture(st.session_state.get("govflow_result"), None, persona)
 
 
 def _locked_note() -> None:
@@ -2625,9 +2646,7 @@ def render_govflow(persona) -> None:  # noqa: ANN001
         _PANELS[stage](pub, cfg, persona)
 
     idx = NAV_STOPS.index(stage)
-    counter = (
-        "Architecture" if stage == ARCHITECTURE else f"Stage {idx + 1} / {len(STAGES)}"
-    )
+    counter = f"Stage {idx + 1} / {len(STAGES)}"
     nav1, cap, nav2 = st.columns([1, 6, 1], vertical_alignment="center")
     nav1.button(
         "← Back", disabled=idx == 0, on_click=_step, args=(-1,), key="gv_back"
