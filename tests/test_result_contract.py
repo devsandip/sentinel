@@ -479,3 +479,50 @@ def test_the_run_recovers_from_a_truncated_first_attempt():
     r = run_governed_analysis(Q, gateway=gw, intent="fair_lending")
     assert r.status == STATUS_COMPLETED
     assert gw.calls == 2
+
+
+# -- CTL-COL-01: writes are not reads (found by a real generation) ---------
+def _gate(src: str):
+    from sentinel.codegen.gate import gate_code
+    from sentinel.govflow.access import DATASET_ID, FAIR_LENDING_GRANT
+
+    return gate_code(
+        src, granted_columns=FAIR_LENDING_GRANT, allowed_tables=[DATASET_ID]
+    )
+
+
+_TBL = "df = ctx.table('german_credit')\n"
+
+
+def test_a_derived_column_may_be_created_and_read_back():
+    # One real generation in five did exactly this and was refused. The column
+    # is built from granted data; the identical code on df.copy() always passed.
+    assert _gate(_TBL + "df['decline'] = 1 - df['pred']\nctx.emit(df)").passed
+    assert _gate(
+        _TBL + "df['decline'] = 1 - df['pred']\nx = df['decline']\nctx.emit(df)"
+    ).passed
+
+
+def test_reading_an_ungranted_column_is_still_refused():
+    r = _gate(_TBL + "x = df['applicant_ssn']\nctx.emit(x)")
+    assert not r.passed and "CTL-COL-01" in r.controls_fired
+
+
+def test_a_read_is_not_excused_by_assigning_the_name_later():
+    # Otherwise generated code could silence the control with a line placed
+    # after the read. Harmless to the data, corrosive to the control.
+    r = _gate(_TBL + "x = df['applicant_ssn']\ndf['applicant_ssn'] = 1\nctx.emit(x)")
+    assert not r.passed and "CTL-COL-01" in r.controls_fired
+
+
+def test_multi_column_selection_is_judged_at_all():
+    # It was not: a list subscript is not a string constant, so CTL-COL-01
+    # refused df["applicant_email"] and cleared df[["age_band","applicant_email"]].
+    assert _gate(_TBL + "ctx.emit(df[['age_band','y','pred']])").passed
+    for src in (
+        "ctx.emit(df[['age_band','applicant_email']])",
+        "ctx.emit(df[('age_band','applicant_ssn')])",
+    ):
+        r = _gate(_TBL + src)
+        assert not r.passed, src
+        assert "CTL-COL-01" in r.controls_fired, src
