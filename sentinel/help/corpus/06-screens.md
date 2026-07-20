@@ -9,7 +9,7 @@ summary: Every screen in the sidebar and what it answers, the two drill-downs th
 
 The sidebar carries the screens in groups, with Help last. Nothing in the product routes through Help, so putting it above the Platform group would imply it is a step in a workflow rather than a reference.
 
-Two drill-downs are deliberately not nav items: a dataset's contract, and a single run's audit detail. You reach a drill-down by opening a row, and the sidebar Back button returns you to the screen you came from.
+Some drill-downs are deliberately not nav items: a dataset's contract, a single run's audit detail, and a template's editor. You reach a drill-down by opening a row, and the sidebar Back button returns you to the screen you came from.
 
 ## Overview
 
@@ -46,6 +46,22 @@ Analyses is the analysis catalogue and its parameter surface. Each entry carries
 Datasets lists every registered dataset under its classification, with a data contract behind each row. The list shows classification, rows, tables, licence, the commercial-use flag and the onboarding state.
 
 The classification cell on the Datasets list is clickable and explains the autonomy tier ceiling that classification sets. A contract opened from a row is metadata only and says so: schema, column dictionary with roles, relationships and coverage, with no cell values, no distributions and no samples. Metadata access and data access are two different grants.
+
+## Agent Templates
+
+Agent Templates is the one screen where you author policy rather than read it. A template is a governed blueprint: the tool allow-list, the column grant, the purposes it may run under, the autonomy ceiling it asks for and the eval floor, all declared in one document. Starting an agent from a template means it inherits the controls instead of re-deriving them.
+
+The spec is YAML, and it is the same format the scaffolding CLI writes, so the command line and the screen produce one artifact rather than two. Every field names a value that some other module owns: a purpose from the matrix, an import from the codegen allow-list, a tool from the agent config, a tier from the ladder. The legal values shown beside the editor are read from those modules, so the editor cannot offer something the enforcement would refuse.
+
+Editing a template does not change the shipped blueprint. Edits live in your session against a buffer, Revert restores the original, and Download gives you the file to commit.
+
+Two kinds of check run on every edit, and the screen keeps them apart. Policy checks are the fence: a refusal disables the deploy, because an illegal blueprint should not reach the registry at all. Certification gates are not the fence: they block a template from becoming certified, and they do not stop it being registered as a draft. That is why a shipped template can read clear on policy and still be a long way from certified.
+
+Every shipped template ships without an owner, and that is the design rather than an omission. A blueprint cannot own the instances made from it, so the owner is named when someone deploys one. The scaffolding CLI registers a new agent unowned for the same reason.
+
+The checks use the same four verdicts the Gate stage uses, and the distinction between them matters as much here. A check that was armed and found nothing to judge is not the same as a check whose rule was never supplied, and neither one is a pass. A template that declares no dataset leaves the purpose, tier and column checks with nothing to read, and the screen says so rather than painting them green.
+
+Deploy registers the spec as a draft analysis-agent, with the dataset's content SHA computed at that moment and pinned into the contract. A template may not pin a SHA itself, because a SHA is a fact about one snapshot of a file and a blueprint that pinned one would be claiming every instance runs against today's data. The draft appears on the Registry screen under Analysis-agents and the certification gates decide what it is allowed to become. Nothing is written to disk and no process is started: an enterprise deployment would push the spec to the agent runtime from that point, so the governance outcome is real and the rollout is not.
 
 ## Registry
 
