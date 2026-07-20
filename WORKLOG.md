@@ -627,3 +627,35 @@ Append-only session handoff log. Newest entries at the bottom.
 - **One bug, not seven, on the negative-margin sweep.** Six other over-pulled containers were left alone because nothing paints over them. Recorded rather than ticketed, so the next person who greps for the pattern knows it was checked deliberately.
 - **New hypothesis recorded in the journal INDEX:** a control that approves something the environment then refuses is not a control that held, it is a control that guessed. The allowlist is a third dependency list and nothing reconciles it with `requirements.txt`. The existing deploy guard cannot catch this, because `requirements.txt` and `uv.lock` agree perfectly; they are both just missing what the allowlist promises.
 - **New open question recorded:** should the demo's default path include a genuine refusal? Today it clears all nine checks every time, so the gate blocking generated code by name, the most compelling thing in the build, is never seen by someone following the obvious path. Constrained by the standing rule that a block must be real and never seeded, so the question is which genuine request to put on the default path.
+
+## 2026-07-20 — v11: a data contract view for each dataset, because an EDA view would have broken four controls
+
+**Did:**
+- Answered the question Sandip asked alongside his "Explore this dataset" proposal: yes, an EDA view violates the governance model, in four specific places. Purpose limitation (Access gates on why; an Explore button carries no purpose, and six of eight datasets are Restricted or Confidential). The autonomy ceiling (Confidential caps at L1, so free-form exploration of Berka is above the ceiling by construction, not by oversight). The column grant (Access builds a scoped table so a withheld column does not exist on the object the code receives; a full-column view re-materialises `applicant_email`, `applicant_ssn`, `sex`, raw `age_years`). The disclosure screen (a value-counts panel is a grouped count and cells under the k-anonymity floor get suppressed).
+- Built the catalogue layer instead: `sentinel/datasets/catalog.py` plus `render_dataset_contract()` in `app.py`. A Contract button on each registry row opens provenance, license, classification and the tier ceiling it sets, the permitted and refused purposes read off the same `PURPOSE_MATRIX` CTL-PURP-01 enforces, rows at source vs rows onboarded locally, tables with row counts, foreign keys with cardinality, and the column dictionary (name, logical type, role, description, `derived` tag) under a role legend.
+- Authored the dictionary: 8 datasets, all 8 table descriptions, ~330 column descriptions, the Berka foreign keys, and the roles the registry does not pin (PII, timestamps, outcomes, entity ids). ULB's V1-V28 are documented in a loop, since the publisher genuinely did not disclose what the components are and 28 invented sentences would be worse than one honest one repeated.
+- Wrote 12 tests, most of them negative: no published string may equal a real cell value (checked against the file's first rows), no profile statistic may appear on the dataclasses, registry roles and catalogue roles must agree, foreign keys must reference real tables and columns, single-table datasets must have no relationships. Plus 3 app smoke tests for the drill-down, the Berka relationship map, and the return path.
+- Verified in the browser: fixed the Contract button wrapping mid-word in a narrow cell, replaced a per-row role note that repeated five times on german_credit with a single legend, table-qualified the sensitive-column list so `berka` does not say a bare `account`, and compacted the rows metric so 2,260,000 stops truncating to "2,260,...".
+- Merged PR #19 (squash, `4e106ec`), fast-forwarded local main, deleted the remote branch. 406 passed, 2 skipped; ruff clean.
+
+**State now:**
+- `main` is at `4e106ec` locally and on origin. No open PRs.
+- **Not deployed. Prod is still v10 at `58e51dd`, and the Live LLM path there still fails 100% of the time with the allowlist `ModuleNotFoundError` the cold-visit audit found this morning.** None of the four audit findings are fixed.
+- The contract view is reachable at Governance > Datasets > Contract on any of the 8 datasets.
+- Documentation coverage as shipped: german_credit, berka, ulb_fraud, synthetic_its, hillstrom, uci_taiwan_credit, uci_bank_marketing at 100 percent; lendingclub at 40 of 152 columns (26 percent), reported on the page rather than smoothed over.
+
+**Next:**
+- Fix the allowlist drift. Still the top item, unchanged from this morning: either add `statsmodels`, `lifelines`, `shap`, `dowhy`, `econml` to `requirements.txt` or narrow the advertised allowlist to what is installed. The Live LLM toggle is in plain sight on the Plan screen.
+- Then the Adoption chart flex-shrink squash and the stale "switch persona in the sidebar" string at `sentinel/ui/govflow.py:1365`.
+- Then decide whether the demo's default path should include a genuine refusal.
+- Deploy when the allowlist fix lands, so v11 and the fix ship together rather than deploying twice.
+
+**Decisions:**
+- **The button is called "Contract", not "Explore".** The name has to promise what the page delivers, and "Explore" promises values. This is the whole reason the feature is defensible.
+- **A metadata view is the missing layer, not a downgrade.** Banks run catalogues precisely so metadata reaches a wider audience than data. Framing this as the consolation prize would have missed that the platform had no catalogue at all, and that "discover the table, then request it with a purpose" is the real workflow the demo was skipping.
+- **The line between catalogue and profile is "is it computed from values".** Missingness and cardinality fail that test, so they stay with the governed `data_profiling` analysis rather than appearing on the contract page. Recorded as a working hypothesis in the journal INDEX.
+- **Synthetic PII is published, marked `pii` and `derived`, not hidden.** They are columns an analysis actually meets, and a catalogue that omits the sensitive ones is not a catalogue. Hiding the redaction control's own target would be the dishonest option.
+- **Documentation coverage is reported, not faked.** Writing 112 plausible sentences would have made every dataset read 100 percent. An undocumented column says so instead, because coverage is a metric a governance office genuinely reports and LendingClub being worst-documented is the same fact that makes it the data-quality dataset.
+- **The dictionary is one HTML table, not Streamlit rows.** LendingClub is 152 columns wide and a widget per row would crawl; nothing in a column row needs a popover.
+- **Foreign keys render as an edge list, not an ERD.** The relationships are the fact; a hand-laid 8-node SVG would be decoration and fragile.
+- Wrote the journal entry and this handoff on a docs branch cut from `origin/main` inside the worktree, since `main` is checked out in the primary folder and git refuses the same branch twice.

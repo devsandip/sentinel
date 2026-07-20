@@ -1,10 +1,49 @@
 # Sentinel — Journal Index
 
-Last refreshed: 2026-07-20 11:21
+Last refreshed: 2026-07-20 13:38
 
-Latest entry: [2026-07-20-1121-chrome-recedes-and-an-audit-finds-the-landmine.md](entries/2026-07-20-1121-chrome-recedes-and-an-audit-finds-the-landmine.md)
+Latest entry: [2026-07-20-1338-the-catalogue-is-not-a-data-browser.md](entries/2026-07-20-1338-the-catalogue-is-not-a-data-browser.md)
 
 ## Where we are now
+
+**v11 is merged to main but NOT deployed. The Datasets surface gained a data
+contract view: a catalogue that publishes schema, roles, foreign keys and
+descriptions, and deliberately publishes no values. Prod is still v10, and the
+Live LLM path there still fails 100% of the time with a visible traceback.
+Nothing from the cold-visit audit is fixed.**
+
+v11 (PR #19, `4e106ec`) answers a question Sandip asked while proposing an
+"Explore this dataset" button: would an EDA view violate the governance we have
+built. It would, in four places. Purpose limitation gates Access on *why* and an
+Explore button carries no purpose (six of eight datasets are Restricted or
+Confidential). The autonomy ceiling caps Confidential data at L1, so free-form
+exploration of Berka is above the ceiling by construction. The column grant
+builds a scoped table so a withheld column does not exist on the object the code
+receives, and a view rendering every column puts back exactly what minimisation
+removed (`applicant_email`, `applicant_ssn`, `sex`, raw `age_years`). The
+disclosure screen suppresses grouped cells under the k-anonymity floor, and a
+value-counts panel is a grouped count.
+
+So the drill-down is the **catalogue layer** instead, which is the thing banks
+actually run and the thing this platform was missing. Metadata is published far
+more widely than data: you read the contract to decide what to request, then
+declare a purpose to get values. Each registry row ends in a Contract button
+opening provenance, license, classification and the tier ceiling it sets; the
+permitted and refused purposes read off the same `PURPOSE_MATRIX` CTL-PURP-01
+enforces; rows at source vs rows onboarded; tables with row counts; foreign keys
+with cardinality; and the column dictionary (name, logical type, role,
+description, `derived` tag) under a legend saying what each role costs at Access.
+No values, no samples, no distributions, no missingness, no cardinality.
+
+Missingness and cardinality look like metadata but are computed from values, so
+they stay with the governed `data_profiling` analysis. The catalogue knows the
+shape; the profile knows the contents; only the profile is data access. Type
+inference reads a bounded 200-row head, and a test checks every published string
+against the file's real first rows so that stays true. 406 tests, ruff clean.
+
+Everything below is still open: prod is v10 and the audit findings stand.
+
+---
 
 **v10 is merged and LIVE in prod: a small chrome pass. The bigger news is not
 in it. A cold-visit audit of the live site found that the Live LLM path fails
@@ -461,6 +500,7 @@ out).
 
 ## Recent entries
 
+- [2026-07-20-1338-the-catalogue-is-not-a-data-browser.md](entries/2026-07-20-1338-the-catalogue-is-not-a-data-browser.md) : Sandip proposed an "Explore this dataset" button on the Datasets surface and asked, in the same message, whether it would violate the governance we have built. It would, in four places: purpose limitation (Access gates on *why*, and Explore carries no purpose; six of eight datasets are Restricted or Confidential), the autonomy ceiling (Confidential caps at L1, so free-form exploration of Berka is above the ceiling by construction), the column grant (Access builds a scoped table so a withheld column does not exist; a full-column view puts back `applicant_email`, `applicant_ssn`, `sex`, raw `age_years`), and the disclosure screen (a value-counts panel is a grouped count, and cells under the floor get suppressed). Built the **catalogue layer** instead, which banks actually run and this platform lacked: a Contract button per row opening provenance, license, classification + tier ceiling, permitted/refused purposes off the real `PURPOSE_MATRIX`, rows at source vs onboarded, tables, foreign keys with cardinality, and the column dictionary (name, type, role, description, `derived` tag) under a role legend. **No values, no samples, no distributions, no missingness, no cardinality:** those are computed from values, so they stay with the governed `data_profiling` analysis. The catalogue knows the shape; the profile knows the contents; only the profile is data access. Types come from a bounded 200-row head and a test checks every published string against the file's real first rows. Synthetic PII is published, marked `pii` + `derived`, rather than hidden. Documentation coverage is reported not smoothed: german_credit 100%, lendingclub 40 of 152. PR #19, `4e106ec`, 406 tests. **Not deployed; prod is still v10 with the Live LLM path broken.**
 - [2026-07-20-1121-chrome-recedes-and-an-audit-finds-the-landmine.md](entries/2026-07-20-1121-chrome-recedes-and-an-audit-finds-the-landmine.md) : demo prep for the hiring manager, which turned into a chrome pass plus a cold-visit audit of the live site. The chrome (PR #14, `58e51dd`, v10): sidebar group headers were being painted over by the first nav row in each group, because Streamlit's `margin-bottom:-16px` on `stMarkdownContainer` exists to cancel a markdown `<p>`'s 16px and `.gl` is a bare div with 6px, so it over-pulled 10px; six other divs are over-pulled the same way and none are occluded, since a nav row is the only thing that paints over the element above it. Topbar Data/Purpose chips removed everywhere (duplication after v9 put both on the Ask row); the identity chip was removed too and **put back**, because switching persona is the only in-app way to show the ladder. Sidebar counts removed. Merged against a v9 that landed mid-session by resetting onto main and re-applying, rather than resolving markers. Deployed and verified live. 386 passed, 3 skipped. **The audit is the real output and nothing from it is fixed:** the codegen allowlist advertises statsmodels/lifelines/shap/dowhy/econml at L2 and none are in `requirements.txt`, so the Live LLM path fails 100% in prod with a visible `ModuleNotFoundError` while the Gate stamps the imports clear; the Adoption chart renders four flat bars from a flex-shrink squash; an L0 persona is pointed at a sidebar that has not held identity since v7; and on the default path the gate never refuses anything, so the headline claim is asserted rather than shown. prod is v10.
 - [2026-07-20-1055-the-row-becomes-the-control-v9.md](entries/2026-07-20-1055-the-row-becomes-the-control-v9.md) : the Ask stage stopped showing information beside a control that ignored it. Step 1's dataset table is now the control: a one-option radio per row labelled with the dataset id, exclusivity enforced in a callback (and tested, since Streamlit has no radio group spanning containers), the `.row-sel` tint and `.rowgood` bar built for the first time, and the mockup's `.pmatrix` showing all six purposes for the picked dataset off the real matrix. **Confirm Dataset gates steps 2 and 3** and changing the pick clears the drafted question, because a purpose and an analysis are declared against a dataset. Step 2 sentence-cased with a covers/excludes block from a new `PURPOSE_SCOPE` in the policy module; step 3 renamed "Select the Analysis" and stating method + libraries that genuinely run, with the refusing control named. Those ids are re-derived from the real gate by test rather than asserted. Rejected: `st.dataframe` single-row selection, which is a real row click but would have cost the classification popover 4.3 requires. Table helpers extracted to `sentinel/ui/tables.py`; `govflow_mode` deleted (the L3 route is now the synthetic_its row). PR #13, bundle `sentinel-20260720-104529.zip`, EB Green, verified live by run `e168559a3501`. 392 tests. Found: the deploy folder was 3 days stale, and the permission classifier now blocks `gh pr merge` outright. prod is v9.
 - [2026-07-19-1522-chips-that-explain-themselves-v8.md](entries/2026-07-19-1522-chips-that-explain-themselves-v8.md) : closed the control-chip gap and got a decision on OPA. The rule, now in ui-spec 4.3: a chip is clickable when it names a governance decision, inert when it names a fact. `_control_popover` was already the right mechanism and already proven at three sites while the engine bar built dead spans thirty lines below it. Wired: engine bar (all nine stages), Architecture stop, import allowlist (grouped by the control that denies each row, four popovers not thirty-six), topbar Data/Purpose chips (both onto CTL-PURP-01, whose two axes they name), certification gate rows, the Screen PII finding. Not wired, deliberately: the chips inside the Controls popover, since popovers should not nest. Datasets and both Registry tables rebuilt off `st.dataframe` into hand-laid tables so cells can carry chips; cost is lost sorting. Found on the way: the dataset registry had no classification column at all, and CTL-CODE-00 / CTL-DISC-03 were missing from their engine lists. PR #11, bundle `sentinel-20260719-151623.zip`, EB Green, verified live. 382 tests. **OPA externalisation ruled out by Sandip: not in scope for the foreseeable future.** prod is v8.
@@ -500,6 +540,17 @@ out).
 
 - Health 200 is necessary but not sufficient to call a deploy verified: Streamlit's health endpoint answers before app.py runs, so an import crash returns 200 while every page is broken (this happened 2026-07-18). Verify a deploy by loading a page and running a flow, not by probing health. And requirements.txt is a second dependency list that drifts from pyproject/uv.lock unless something regenerates it; the fix is to generate it at deploy time or diff it in CI.
 - **A control that approves something the environment then refuses is not a control that held, it is a control that guessed.** Found 2026-07-20: the codegen allowlist is a *third* dependency list, and nothing reconciles it with `requirements.txt`. The Gate stamps "imports on the tier's allowlist, clear" for `statsmodels`, and Execute throws `ModuleNotFoundError` because it was never installed. `requirements.txt` and `uv.lock` agree perfectly here, so the existing deploy guard cannot see it: they are both simply missing what the allowlist promises. Any list that grants permission must be checked against the thing that has to honour it, not just against the list next to it. Local environments hide this precisely when it matters, since `statsmodels` is installed here transitively and absent in prod.
+- **Metadata access and data access are two different grants, and a governance
+  demo has to act like it.** Recorded 2026-07-20 while turning down an "Explore
+  this dataset" button. A catalogue publishes schema, roles, relationships and
+  descriptions to a far wider audience than the data itself; that is how a real
+  bank works and it is why an analyst can discover a table they cannot read. The
+  practical test for whether something belongs on a catalogue page: is it
+  computed from values? Missingness and cardinality feel like metadata and fail
+  that test, which puts them with the governed profiling analysis rather than in
+  the catalogue. The corollary is that adding a surface to a governance product
+  means checking it against the product's own controls first, because the one
+  place that must never leak ungoverned data is the Governance section.
 - A naturally-flagging fairness result is more convincing than a staged one. Keep it real. This now extends to the gate: if the demo shows generated code being blocked, the block must be genuine, never seeded.
 - The evidence pack with its "what this does not say" block is now built (v3) and is the showpiece the model card PDF pointed toward. The negative statement is assembled from what the run did (the suppressed band, the flagged proxy), not from boilerplate, which is what makes it more than a dashboard. The model card PDF survives as prior art.
 - A control is only credible if it can be seen firing. Force RBAC and PII to fire every run.
