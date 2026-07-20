@@ -444,6 +444,34 @@ def test_audit_run_opens_as_its_own_screen_and_back_returns():
     assert at.session_state["section"] == "Audit Log"
 
 
+def test_every_audit_row_has_two_ways_into_the_run():
+    """The id is a link and there is an explicit Open button.
+
+    A tertiary button renders as plain body text, so the run id alone read as
+    an inert cell value and the drill-down was undiscoverable.
+    """
+    from sentinel.platform.audit_store import audit_runs
+
+    at = _boot()
+    at.button(key="nav_auditlog").click().run()
+    keys = {b.key for b in at.button}
+    for r in audit_runs()[:5]:
+        assert f"audopen_{r.run_id}" in keys, "run id is not a button"
+        assert f"audopen2_{r.run_id}" in keys, "row has no explicit Open action"
+
+
+def test_the_row_open_button_reaches_the_same_run_as_the_id():
+    from sentinel.platform.audit_store import audit_runs
+
+    target = audit_runs()[1]
+    at = _boot()
+    at.button(key="nav_auditlog").click().run()
+    at.button(key=f"audopen2_{target.run_id}").click().run()
+    assert not at.exception
+    assert at.session_state["section"] == "Audit Run"
+    assert at.session_state["aud_sel"] == target.run_id
+
+
 def test_audit_run_deep_link_resolves_a_run_by_url():
     """?run=<id> is a real address, so a run's evidence can be sent to someone.
 

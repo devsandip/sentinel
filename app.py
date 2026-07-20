@@ -254,6 +254,22 @@ st.markdown(
         span[data-testid="stIconMaterial"],
       div[class*="st-key-tblhead_"] button[data-testid="stPopoverButton"]
         span[data-testid="stIconMaterial"] { display:none; }
+      /* The run id in the Audit Log is the drill-down link. Streamlit renders
+         a tertiary button as plain body text, which made the id look like an
+         inert cell value, so it gets link affordances explicitly: accent
+         colour, mono, and an underline on hover. */
+      div[class*="st-key-tblrow_aud"] button[data-testid="stBaseButton-tertiary"] {
+        font-family:var(--mono); font-size:12px; font-weight:700;
+        color:var(--accent); padding:0; min-height:0; text-align:left; }
+      div[class*="st-key-tblrow_aud"] button[data-testid="stBaseButton-tertiary"]:hover {
+        color:var(--accent-strong); text-decoration:underline; }
+      div[class*="st-key-tblrow_aud"] button[data-testid="stBaseButton-tertiary"] p {
+        font-family:var(--mono); font-size:12px; font-weight:700; }
+      /* The trailing Open cell: small, quiet until hovered, never wider than
+         its column. */
+      div[class*="st-key-tblrow_aud"] button[data-testid="stBaseButton-secondary"] {
+        padding:2px 9px; min-height:1.6rem; font-size:11.5px; white-space:nowrap; }
+
       /* A column header that explains itself keeps the header's own type, but
          earns a dotted underline so it does not read as inert like its
          neighbours. */
@@ -2270,8 +2286,8 @@ _AUDIT_CTL_ALIAS = {
 _SECTION_AUDIT_RUN = "Audit Run"
 
 _AUD_HEAD = ("when", "run / analysis", "kind", "dataset", "ran by", "second signature",
-             "outcome", "caught")
-_AUD_COLS = (0.95, 1.45, 1.15, 1.4, 1.3, 1.5, 1.15, 2.15)
+             "outcome", "caught", "")
+_AUD_COLS = (0.9, 1.3, 1.05, 1.3, 1.25, 1.4, 1.1, 1.9, 0.85)
 
 # The store's kind constants are snake_case; a pill is easier to read, and
 # harder to wrap mid-word, with a space.
@@ -2771,6 +2787,10 @@ def render_audit_log() -> None:
         cols = table_row(_AUD_COLS, f"aud_{'sel_' if sel else ''}{i}")
         td(cols[0], r.when[:16].replace("T", " "), mono=True)
         with cols[1]:
+            # The id is the link. Styled as one (accent, mono, underline on
+            # hover) because a tertiary button renders as plain text, and a
+            # run id that looks like a value nobody clicks is a drill-down
+            # nobody finds.
             if st.button(r.run_id, key=f"audopen_{r.run_id}", type="tertiary"):
                 _audit_open(r.run_id)
             st.markdown(
@@ -2821,6 +2841,13 @@ def render_audit_log() -> None:
                         f"+{len(caught) - 2} more</span>",
                         unsafe_allow_html=True,
                     )
+        # An explicit affordance as well as the linked id. On a screen whose
+        # whole job is "open the evidence", one discoverable way in is thin.
+        # "Open" is the verb the dashboard tiles already use.
+        if cols[8].button(
+            "Open", key=f"audopen2_{r.run_id}", icon=":material/arrow_forward:"
+        ):
+            _audit_open(r.run_id)
 
     st.caption(
         "Newest first, fixed sort. Seeded rows carry the demo-timeline date; "

@@ -222,6 +222,7 @@ classification chips, `.badge` status pills and live control popovers
 | Outcome | normalized status badge; when refused, the badge itself is the popover for the control that stopped it |
 | Stopped at | the step or stage where it ended: Access, Gate, modeler. Blank when it ran clean |
 | Caught | the widest column and the point of the screen. Fired controls as clickable chips, refuse-first, three then `+N` |
+| (action) | an **Open** button. Two ways into a run, deliberately: the id is styled as a link (accent, mono, underline on hover) because a Streamlit tertiary button renders as plain body text, so the id alone read as an inert cell value and the drill-down was undiscoverable. On a screen whose whole job is "open the evidence", one entry point is thin. |
 
 Row states: any run with a `blocked`-level event takes the `.rowbad`
 `--danger-soft` tint, so the eye lands on refusals before reading a word. The
