@@ -192,6 +192,37 @@ def gate_sql(
     return SqlGateResult(passed=not unique, violations=unique)
 
 
+def sql_clause(table: str = "the granted table", join_ceiling: int = DEFAULT_JOIN_CEILING) -> str:
+    """The SQL rules in the words the prompt uses, interpolated into the codegen
+    system prompt so what the model is told and what `gate_sql` checks are the
+    same sentence.
+
+    `ctx.sql` went undocumented in the prompt until v11, which made it
+    unreachable in live mode: the model was never told the path existed, so it
+    wrote pandas for every question including the two that ask for SQL by name.
+    The sqlglot half of the gate could therefore not fire on a live run at all.
+    A control that cannot be reached is not a control that passed.
+    """
+    return (
+        "You may query the table with SQL instead of pandas, and should when the "
+        "question asks for SQL:\n"
+        "    df = ctx.sql(\"SELECT ...\")   # returns a pandas DataFrame\n"
+        "  The query is parsed and checked before it runs, so:\n"
+        "  * pass ONE static string literal. Not an f-string, not a variable, not "
+        "built with +. Adjacent quoted strings on separate lines are fine; the "
+        "gate must be able to read the exact query before it executes\n"
+        "  * one SELECT statement only\n"
+        "  * no SELECT * -- name every column you want\n"
+        "  * reference only the granted columns, and only "
+        f"{table}\n"
+        f"  * no join without an ON/USING condition, and at most {join_ceiling} joins\n"
+        "  * the platform injects an identity row filter into your query after "
+        "the gate reads it; do not write one, and do not try to remove it\n"
+        "  The result contract below applies to a SQL result exactly as it does "
+        "to a pandas one: alias your aggregates to the required column names."
+    )
+
+
 def rewrite_sql(
     query: str,
     granted_columns: set[str] | None = None,

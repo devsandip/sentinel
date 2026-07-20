@@ -346,3 +346,73 @@ def test_denied_categories_are_unaffected_by_the_submodule_rule():
         res = gate_code(src + "\nctx.emit(1)")
         assert not res.passed, src
         assert control in res.controls_fired, src
+
+
+# -- ctx.sql, which the prompt did not mention until v11 -------------------
+def test_the_system_prompt_documents_ctx_sql():
+    # Gated by sqlglot since v2 and unreachable in live mode until v11: a model
+    # never told the path exists writes pandas for a question that asks for SQL,
+    # and the sqlglot half of the gate never fires on a live run.
+    from sentinel.codegen.sql_gate import sql_clause
+
+    prompt = build_system_prompt()
+    assert "ctx.sql" in prompt
+    assert sql_clause() in prompt
+
+
+def test_the_sql_clause_states_the_rules_the_sql_gate_enforces():
+    from sentinel.codegen.sql_gate import DEFAULT_JOIN_CEILING, sql_clause
+
+    clause = sql_clause()
+    assert "SELECT *" in clause  # CTL-COL-01
+    assert "static string literal" in clause  # the gate must read it
+    assert str(DEFAULT_JOIN_CEILING) in clause  # CTL-COMPLEX-01, not hardcoded
+    assert "row filter" in clause  # injected, not the model's to write
+
+
+def test_the_user_prompt_names_the_table_for_sql_too():
+    user = build_user_prompt(
+        question="Using SQL, group the selection rate by age band.",
+        table="german_credit",
+        granted_columns=["age_band", "y", "pred"],
+        protected_attribute="age_band",
+        analysis="fair_lending_review",
+    )
+    assert "FROM german_credit" in user
+
+
+def test_a_gated_sql_analysis_runs_end_to_end():
+    # The SQL path satisfies the same result contract the pandas path does.
+    code = (
+        'df = ctx.sql("SELECT age_band AS band, AVG(pred) AS selection_rate, '
+        'COUNT(*) AS n FROM german_credit GROUP BY age_band")\n'
+        "ctx.emit(df)\n"
+    )
+    gw = _ScriptedLiveGateway([code])
+    r = run_governed_analysis(Q, gateway=gw, intent="fair_lending_sql")
+    assert r.status == STATUS_COMPLETED
+    assert gw.calls == 1
+    assert check_result(r.execution.emitted).passed
+
+
+def test_select_star_is_still_refused_by_the_sql_half_of_the_gate():
+    # The demo's whole point. It has to fire on live code, not just canned code.
+    gw = _ScriptedLiveGateway(
+        ['df = ctx.sql("SELECT * FROM german_credit")\nctx.emit(df)\n']
+    )
+    r = run_governed_analysis(Q, gateway=gw, intent="sql_star")
+    assert _stage(r, "Gate").status == "blocked"
+    assert "CTL-COL-01" in r.controls_fired
+    assert _stage(r, "Execute").status == "skipped"
+
+
+def test_an_ungranted_column_in_sql_is_refused():
+    gw = _ScriptedLiveGateway(
+        [
+            'df = ctx.sql("SELECT applicant_ssn, COUNT(*) AS n FROM german_credit '
+            'GROUP BY applicant_ssn")\nctx.emit(df)\n'
+        ]
+    )
+    r = run_governed_analysis(Q, gateway=gw, intent="fair_lending_sql")
+    assert _stage(r, "Gate").status == "blocked"
+    assert "CTL-COL-01" in r.controls_fired

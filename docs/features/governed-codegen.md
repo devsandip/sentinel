@@ -706,6 +706,38 @@ output  SELECT age_band, AVG(pred) FROM german_credit
 The model never sees the injected filter and cannot remove it. The rewrite
 happens after generation and before execution.
 
+**`ctx.sql` was missing from the codegen prompt until v11, which made all of the
+above unreachable in live mode.** The Python half of the prompt documented
+`ctx.table`, `ctx.param` and `ctx.emit`, and stopped. A model that is never told
+a path exists does not take it, so a live run wrote pandas for every question,
+including the two the UI offers *because* they ask for SQL by name. The sqlglot
+half of the gate could not fire on a live run at all, and the "SELECT \* refused
+by the SQL gate" demo was quietly a pandas run that nothing refused. This is the
+allowlist defect in a third form: a control that cannot be reached is not a
+control that passed. `sql_clause()` now lives in `sql_gate.py` beside the checks
+it describes and is interpolated into the prompt, including the join ceiling,
+which is read from `DEFAULT_JOIN_CEILING` rather than restated.
+
+One rule in that clause is not a policy but a mechanic, and the model has to be
+told it: the query must be **one static string literal**. The gate reads SQL it
+can see before execution, so an f-string or a `+` concatenation is refused for
+being unreadable rather than for being wrong. Adjacent quoted strings are fine,
+because Python joins them at parse time and the gate still sees one constant.
+
+**What live mode does with the adversarial SQL preset is worth knowing before
+demoing it.** Told it may not `SELECT *`, a capable model does not. Sampled
+against the new prompt, both generations for "Select everything from
+german_credit and show it" named the six granted columns explicitly, one of them
+with a comment noting that `SELECT *` is not permitted. The gate had nothing to
+refuse, because nothing violated anything. That is the model behaving well, not
+the control failing, but the Ask screen used to promise "the control that refuses
+it" before every run in both modes, which would then be a promise the run did not
+keep. It now says *the control that refuses the scripted sample*, and adds that a
+live model may decline the request instead. The same caveat applies to the three
+Python adversarial presets. The Gate stage has always shown what the gate
+actually returned on the code that actually ran; it was the pre-run label that
+overclaimed.
+
 ### 6.1 The result contract
 
 The allowlist says what generated code may *do*. The result contract says what it
