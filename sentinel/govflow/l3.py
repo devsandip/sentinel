@@ -230,7 +230,13 @@ def run_l3_analysis(
             f"sandbox needs a certified analyst with a sandbox waiver; lower tiers "
             f"run on german_credit."
         )
-        audit.record(agent="l3", action="tier_block", level=LEVEL_BLOCKED, output_summary=detail)
+        audit.record(
+            agent="l3",
+            action="tier_block",
+            actor=persona.id,
+            level=LEVEL_BLOCKED,
+            output_summary=detail,
+        )
         stages.append(StageRecord("Ask", "blocked", detail=detail))
         for s in ("Plan", "Access", "Generate", "Gate", "Execute", "Screen", "Interpret", "Attest"):
             stages.append(StageRecord(s, "skipped", detail="tier below L3"))
@@ -309,7 +315,11 @@ def run_l3_analysis(
             stages.append(StageRecord(s, "skipped", detail="upstream gate block"))
         return finish(STATUS_BLOCKED, gate=gate)
     audit.record(
-        agent="gate", action="gate_pass", level=LEVEL_GATE, output_summary="L3 gate passed"
+        agent="gate",
+        action="gate_pass",
+        actor=persona.id,
+        level=LEVEL_GATE,
+        output_summary="L3 gate passed",
     )
     stages.append(
         StageRecord(
@@ -327,6 +337,7 @@ def run_l3_analysis(
         audit.record(
             agent="sandbox",
             action="execute_error",
+            actor=persona.id,
             level=LEVEL_BLOCKED,
             output_summary=execution.error or "execution failed",
             extra={"control": execution.control},

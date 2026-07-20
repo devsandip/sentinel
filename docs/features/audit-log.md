@@ -1,8 +1,9 @@
 # Audit Log
 
-**Status:** planned, not built
+**Status:** data layer built (section 5 a-d complete); screen not built
 **Nav:** Platform group, immediately after Adoption
-**Owner surface:** `render_audit_log()` in `app.py`, data layer in `sentinel/platform/audit_store.py` (new)
+**Owner surface:** `render_audit_log()` in `app.py`, data layer in `sentinel/platform/audit_store.py`
+**Approval model:** Option A of section 7 — report what is true, add nothing
 
 ---
 
@@ -87,6 +88,18 @@ What exists is **author is not approver**, enforced by identity comparison:
 `Orchestrator.approve()` refuses when `actor.id == state.started_by`, recording
 `approval_denied` at `LEVEL_BLOCKED` naming `CTL-SOD-01`. A test drives the full
 path. That is real, and it is what the login card means by "four-eyes."
+
+**Correction found while building (2026-07-20).** There are *two* refusals at
+that gate, not one, and they are easy to conflate. `Orchestrator.approve()`
+tests promotion authority **before** it tests segregation of duties
+([orchestrator.py:489](sentinel/orchestrator.py:489) then
+[:503](sentinel/orchestrator.py:503)). So an Analyst self-approving is refused
+for *lacking authority* and never reaches `CTL-SOD-01` at all; only an author
+who already holds promotion authority exercises the four-eyes control itself.
+Both are now in the seeded corpus, and a test asserts they stay distinct, so
+the screen cannot credit `CTL-SOD-01` with a refusal it did not make. The
+authority refusal writes no `extra['control']`, which is how they are told
+apart.
 
 But there is no approver list, no quorum, no vote count, no pending-second-
 signature state, and no data structure anywhere that could hold two approvals.
@@ -261,41 +274,73 @@ Analyst, and every other surface is persona-independent.
 
 ## 5. Engineering, in dependency order
 
+Items (a) to (d) are **built**. The corpus is now 24 runs and 249 committed
+events: 9 runs carry a refusal (6 stopped the run, 3 completed with something
+withheld), four-eyes coverage reads 3 of 5, and 13 distinct controls have
+actually fired. `uv run --extra dev pytest` is green at 413 passed, 2 skipped,
+with 22 new tests in `tests/test_audit_store.py`.
+
 Nothing above renders without (a) and (b).
 
-**(a) Commit the seeded event stream.** Rework `scripts/seed_runs.py` to write
+**(a) Commit the seeded event stream. DONE.** `scripts/seed_runs.py` now writes
 the full per-event stream to a committed `sentinel/data/seed_audit.jsonl`, and
-add `actor` and `approver` to `SeedRun`. Both are derivable today for
-credit_risk (`started_by` at `orchestrator.py:433`, the `approval_decision`
-actor at `orchestrator.py:296`); analysis needs an `actor` field on
-`AnalysisRun`; govflow and L3 store the persona display name, not the id.
-Cost: roughly 5k event lines committed as source. That is the price of a
-deterministic, git-reviewable demo that survives a redeploy.
+`SeedRun` gained `actor`, `approver` and `steps`. `approver` is read off the
+decision event rather than the persona passed in, so a refused approval records
+no approver. All four run kinds already exposed their events in memory, so no
+new write path was needed. Cost was 249 lines, not the ~5k first estimated.
 
-**(b) Extend the seeder with refusal runs.** On today's corpus the Caught column
-is empty on 14 of 19 rows, because the analysis runs' `controls_fired` are
-literally `[]`. Four additions, all existing code paths, nothing fabricated:
+**(b) Extend the seeder with refusal runs. DONE.** Five additions, all existing
+code paths executed for real, nothing hand-written:
 
 1. an L3 run with `intent='exfiltrate'` → `CTL-EGRESS-01` blocks at Gate;
-2. a govflow run by `junior_analyst` on a Confidential dataset → the tier
-   refusal at Ask;
-3. a govflow run on a permitted-but-unwired purpose → the honest Access stop;
-4. a credit_risk run where the Analyst tries to approve their own run →
-   `CTL-SOD-01` `approval_denied`.
+2. a govflow run with `intent='exfiltrate'` → the L2 static gate blocks;
+3. a govflow run by the `auditor` persona → resolves L0, `tier_block` at Ask;
+4. a credit_risk run where the **Analyst** self-approves → refused for lacking
+   promotion authority;
+5. a credit_risk run where the **MRM Approver** authors and self-approves →
+   `CTL-SOD-01`, the four-eyes control proper.
+
+Two corrections to the original list. The proposed "junior_analyst on a
+Confidential dataset" is not reachable: govflow is bound to `german_credit` by
+a module constant, and `junior_analyst` resolves to L1 there, which is a
+different path, not a refusal. The `auditor` persona resolving to L0 is the
+real tier-block path. And the "permitted-but-unwired purpose" stop was dropped;
+items 4 and 5 cover more ground.
+
+Run 5 puts a record in the corpus of an approver authoring a run, which is
+itself the wrong thing for an approver to do. That is deliberate: nothing
+enforces `can_run` at the entrypoint, so the platform has to catch the
+consequence at the gate, and the ledger showing it caught it is the point.
 
 Say out loud in the caption that refusal density is a seeding choice. The
 alternative is a ledger that implies the platform refuses things at that rate
 naturally.
 
-**(c) `sentinel/platform/audit_store.py`.** The first reader across runs: union
-of the committed seed events and `runtime/audit/*.jsonl`, plus a ~15-line status
-normalization map over the four vocabularies. Note that `blocked_at_gate` is
-actively misleading when the block happened at Ask; normalize on the event, not
-the constant.
+**(c) `sentinel/platform/audit_store.py`. DONE.** The first reader across runs.
+`AuditRun` wraps a record plus its events and computes the refusal accounting
+the screen needs. Two properties earned their keep:
 
-**(d) Persist govflow and L3.** Flip `persist=False` at `flow.py:265` and
-`l3.py:169`. Backfill `actor=persona.id` on the nine govflow and eight L3
-emission sites that currently default to the agent string.
+- `refusal_controls` reads the event stream **before** `controls_fired`,
+  because govflow only accumulates CTL- ids raised at Gate and Screen. The
+  auditor tier-block run has an empty `controls_fired` while its events plainly
+  record a `tier_block` at blocked level, so without this the Caught column
+  would be blank on a run that was visibly refused. A test asserts no refused
+  run ever renders blank.
+- `has_refusal` falls back to `controls_fired` when no events exist, so "no
+  trail was persisted" can never be reported as "nothing was refused."
+
+`stopped_at` reads the run's own step records rather than the status constant,
+so a govflow run refused at Ask reports Ask, not `blocked_at_gate`.
+
+**(d) Backfill the missing actors. DONE.** 12 emission sites defaulted `actor`
+to the agent name: 9 in `flow.py` and **3** in `l3.py`, not the 8 first
+reported. All now pass `actor=persona.id`, and a test asserts every seeded
+run's actor resolves to a real persona rather than a module id.
+
+Flipping `persist=False` at `flow.py:265` and `l3.py:169` turned out to be
+**unnecessary**. `GovernedRunResult.audit` already carries the full event list
+in memory, so the seeder captures it directly. Leaving the flags alone keeps
+`runtime/` free of govflow noise and avoids a write on every UI run.
 
 **(e) Promote `control_id`.** Add it as a real `AuditEvent` field and populate
 it at the 49 sites that today bury it in prose. Without this the Control filter
@@ -353,10 +398,23 @@ and an audit trail showing both signatures. It is also the largest: new state on
 the run record, a new UI surface for the second approver, and a real policy
 config.
 
-**Recommendation: B now, C next.** B is nearly free and removes the worst
-honesty problem in the current design. C is the feature that makes the column
-the best thing on the screen, but it is its own piece of work and should not be
-smuggled into an audit-log build.
+**Recommendation was B now, C next. Decided 2026-07-20: Option A.**
 
-Whichever you pick, the Audit Log renders what is true. It does not print a
-column that implies a control the platform does not have.
+The Audit Log reports what is true and adds no approval machinery.
+`sign_evidence_pack()` stays dead, evidence packs stay `pending`, and the
+second-signature column reads `not required` where that is the fact and `not
+reached` where the run was refused before any approval point existed.
+
+Two things make A land better than it first looked. The corpus now contains
+both gate refusals, so the column carries a real story on the credit_risk rows
+rather than a single happy path. And the distinction the build surfaced -
+authority versus segregation of duties - is itself the more interesting finding
+for a bank audience, because it shows the order the guards run in.
+
+What A leaves on the table, stated so it is a choice and not an oversight: the
+govflow and L3 routes still have no human gate, so the platform's
+governance-heaviest path has its thinnest accountability. That is a product
+gap, not a reporting one, and the screen names it rather than papering over it.
+
+The Audit Log renders what is true. It does not print a column that implies a
+control the platform does not have.

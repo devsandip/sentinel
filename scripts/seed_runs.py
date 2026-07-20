@@ -31,8 +31,10 @@ from sentinel.platform.run_history import (  # noqa: E402
     KIND_CREDIT_RISK,
     KIND_GOVFLOW,
     KIND_L3,
+    SEED_AUDIT_PATH,
     SEED_RUNS_PATH,
     SeedRun,
+    write_seed_audit,
     write_seed_runs,
 )
 
@@ -71,6 +73,29 @@ PLAN: list[tuple[str, str, str, dict, str]] = [
      "2026-07-16T11:30:00+00:00"),
     (KIND_GOVFLOW, "fair_lending", "german_credit", {}, "2026-07-17T10:10:00+00:00"),
     (KIND_L3, "causal_impact", "synthetic_its", {}, "2026-07-17T15:45:00+00:00"),
+    # Refusal runs (docs/features/audit-log.md 5b). Every one is an existing
+    # code path executed for real: no sample is written by hand, and the events
+    # below are whatever the controls actually emitted. They are here because a
+    # ledger whose refusal column is empty on every row argues the opposite of
+    # what this platform claims. Refusal density is a seeding choice and the
+    # Audit Log screen says so on its face.
+    (KIND_GOVFLOW, "fair_lending", "german_credit", {"intent": "exfiltrate"},
+     "2026-07-18T09:50:00+00:00"),
+    (KIND_GOVFLOW, "fair_lending", "german_credit", {"persona": "auditor"},
+     "2026-07-18T15:35:00+00:00"),
+    # An Analyst tries to promote their own model: refused for lacking
+    # promotion authority, before segregation of duties is even reached.
+    (KIND_CREDIT_RISK, "build_model", "german_credit", {"approved": True, "self_approve": True},
+     "2026-07-19T11:05:00+00:00"),
+    # The four-eyes control itself. This run is authored by the MRM Approver,
+    # which is already the wrong thing for an approver to do; the record exists
+    # because CTL-SOD-01 is what catches the consequence. Nothing enforces
+    # can_run at the entrypoint, so the platform has to catch it at the gate.
+    (KIND_CREDIT_RISK, "build_model", "german_credit",
+     {"approved": True, "self_approve": True, "run_as": "mrm_approver"},
+     "2026-07-19T14:30:00+00:00"),
+    (KIND_L3, "causal_impact", "synthetic_its", {"intent": "exfiltrate"},
+     "2026-07-19T16:20:00+00:00"),
 ]
 
 _ORCH_STATUS = {"completed": "promoted", "blocked": "blocked", "rejected": "rejected"}
@@ -82,7 +107,49 @@ def _controls_from_audit(events: list[dict]) -> list[str]:
     return sorted(set(fired))
 
 
-def _run_analysis(ref_id: str, dataset_id: str, params: dict, actor) -> SeedRun:
+def _steps_from_analysis(run) -> list[dict]:  # noqa: ANN001
+    return [
+        {"name": s.title or s.id, "status": s.status, "agent": s.agent, "controls": []}
+        for s in run.steps
+    ]
+
+
+def _steps_from_orchestrator(pub: dict) -> list[dict]:
+    return [
+        {"name": s["title"], "status": s["status"], "agent": s["agent"], "controls": []}
+        for s in pub.get("steps", [])
+    ]
+
+
+def _steps_from_stages(result) -> list[dict]:  # noqa: ANN001
+    """govflow / L3 StageRecords already carry the controls that fired there."""
+    return [
+        {
+            "name": s.stage,
+            "status": s.status,
+            "agent": s.stage.lower(),
+            "controls": list(s.controls),
+        }
+        for s in result.stages
+    ]
+
+
+def _approver_from_audit(events: list[dict]) -> str:
+    """The actor that decided at a human gate, if the run reached one.
+
+    Reads the decision event rather than assuming the persona we passed in:
+    an approval can be refused (CTL-SOD-01) and never taken, and the record
+    should say what happened, not what was intended.
+    """
+    for e in events:
+        if e.get("action") in ("approval_decision", "approval_auto"):
+            return str(e.get("actor", ""))
+    return ""
+
+
+def _run_analysis(
+    ref_id: str, dataset_id: str, params: dict, actor
+) -> tuple[SeedRun, list[dict]]:
     run = AnalysisEngine().run(get_analysis(ref_id), dataset_id, params or None, actor=actor)
     metrics: dict = {"steps": len(run.steps)}
     quality = run.results.get("quality")
@@ -106,13 +173,26 @@ def _run_analysis(ref_id: str, dataset_id: str, params: dict, actor) -> SeedRun:
         metrics=metrics,
         controls_fired=_controls_from_audit(run.audit),
         cost=run.cost,
-    )
+        actor=actor.id if actor else "",
+        approver="",  # a linear analysis produces no model, so nothing to sign
+        steps=_steps_from_analysis(run),
+    ), run.audit
 
 
-def _run_credit_risk(orch: Orchestrator, question_id: str, params: dict) -> SeedRun:
-    analyst = get_persona("analyst")
-    approver = get_persona("mrm_approver")
-    state = orch.start_run(question_id, narration_mode="scripted", actor=analyst)
+def _run_credit_risk(
+    orch: Orchestrator, question_id: str, params: dict
+) -> tuple[SeedRun, list[dict]]:
+    author = get_persona(params.get("run_as", "analyst"))
+    # self_approve drives the run's own author at the gate. Which control
+    # refuses depends on who that author is, and the two are not the same
+    # finding: Orchestrator.approve tests promotion authority BEFORE it tests
+    # segregation of duties, so an Analyst self-approving is refused for
+    # lacking authority and never reaches CTL-SOD-01. Only an author who does
+    # hold promotion authority exercises the four-eyes control itself. Both are
+    # seeded, because a ledger that shows only one of them misstates which
+    # control is load-bearing.
+    approver = author if params.get("self_approve") else get_persona("mrm_approver")
+    state = orch.start_run(question_id, narration_mode="scripted", actor=author)
     state = orch.approve(state.run_id, approved=params["approved"], actor=approver)
     pub = state.to_public_dict()
     model = pub.get("model") or {}
@@ -125,21 +205,31 @@ def _run_credit_risk(orch: Orchestrator, question_id: str, params: dict) -> Seed
         "evals_passed": evals.get("passed"),
         "evals_failed": evals.get("failed"),
     }
+    events = pub.get("audit", [])
     return SeedRun(
         run_kind=KIND_CREDIT_RISK,
         run_id=state.run_id,
         ref_id=question_id,
         dataset_id="german_credit",
-        params={"narration_mode": "scripted", "approved": params["approved"]},
+        params={
+            "narration_mode": "scripted",
+            "approved": params["approved"],
+            **({"self_approve": True} if params.get("self_approve") else {}),
+        },
         status=_ORCH_STATUS.get(state.status, state.status),
         metrics=metrics,
-        controls_fired=_controls_from_audit(pub.get("audit", [])),
+        controls_fired=_controls_from_audit(events),
         cost=pub.get("cost"),
-    )
+        actor=state.started_by,
+        approver=_approver_from_audit(events),
+        steps=_steps_from_orchestrator(pub),
+    ), events
 
 
-def _run_govflow() -> SeedRun:
-    r = run_governed_analysis(GOVFLOW_Q, persona=get_persona("analyst"), intent="fair_lending")
+def _run_govflow(params: dict) -> tuple[SeedRun, list[dict]]:
+    persona = get_persona(params.get("persona", "analyst"))
+    intent = params.get("intent", "fair_lending")
+    r = run_governed_analysis(GOVFLOW_Q, persona=persona, intent=intent)
     metrics = {
         "tier": r.tier,
         "stages": len(r.stages),
@@ -151,16 +241,23 @@ def _run_govflow() -> SeedRun:
         run_id=r.run_id,
         ref_id="fair_lending",
         dataset_id=r.dataset,
-        params={"intent": "fair_lending"},
+        params={"intent": intent, "persona": persona.id},
         status=r.status,
         metrics=metrics,
         controls_fired=list(r.controls_fired),
         cost=None,
-    )
+        actor=persona.id,
+        # The nine-stage route has no human promotion gate. Left empty rather
+        # than filled with the author, which would read as a signature.
+        approver="",
+        steps=_steps_from_stages(r),
+    ), r.audit
 
 
-def _run_l3() -> SeedRun:
-    r = run_l3_analysis(L3_Q, persona=get_persona("admin"), intent="causal_impact")
+def _run_l3(params: dict) -> tuple[SeedRun, list[dict]]:
+    persona = get_persona("admin")
+    intent = params.get("intent", "causal_impact")
+    r = run_l3_analysis(L3_Q, persona=persona, intent=intent)
     emitted = r.execution.emitted if (r.execution and r.execution.has_emitted) else {}
     metrics = {
         "tier": r.tier,
@@ -174,28 +271,32 @@ def _run_l3() -> SeedRun:
         run_id=r.run_id,
         ref_id="causal_impact",
         dataset_id=r.dataset,
-        params={"intent": "causal_impact"},
+        params={"intent": intent},
         status=r.status,
         metrics=metrics,
         controls_fired=list(r.controls_fired),
         cost=None,
-    )
+        actor=persona.id,
+        approver="",
+        steps=_steps_from_stages(r),
+    ), r.audit
 
 
 def main() -> None:
     analyst = get_persona("analyst")
     orch = Orchestrator()
     records: list[SeedRun] = []
+    events_by_run: dict[str, list[dict]] = {}
     for kind, ref_id, dataset_id, params, demo_date in PLAN:
         print(f"executing {kind}:{ref_id} on {dataset_id} {params or ''} ...")
         if kind == KIND_ANALYSIS:
-            rec = _run_analysis(ref_id, dataset_id, params, analyst)
+            rec, events = _run_analysis(ref_id, dataset_id, params, analyst)
         elif kind == KIND_CREDIT_RISK:
-            rec = _run_credit_risk(orch, ref_id, params)
+            rec, events = _run_credit_risk(orch, ref_id, params)
         elif kind == KIND_GOVFLOW:
-            rec = _run_govflow()
+            rec, events = _run_govflow(params)
         else:
-            rec = _run_l3()
+            rec, events = _run_l3(params)
         rec = SeedRun(
             **{
                 **rec.to_dict(),
@@ -203,11 +304,18 @@ def main() -> None:
                 "demo_date": demo_date,
             }
         )
-        print(f"  -> {rec.status} {rec.metrics}")
+        print(f"  -> {rec.status} {len(events)} events {rec.metrics}")
         records.append(rec)
+        events_by_run[rec.run_id] = events
 
     path = write_seed_runs(records, SEED_RUNS_PATH)
     print(f"\nwrote {len(records)} records -> {path}")
+    n_events = sum(len(v) for v in events_by_run.values())
+    apath = write_seed_audit(events_by_run, SEED_AUDIT_PATH)
+    print(f"wrote {n_events} events -> {apath}")
+    empty = [rid for rid, evs in events_by_run.items() if not evs]
+    if empty:
+        print(f"WARNING: {len(empty)} run(s) emitted no events: {', '.join(empty)}")
 
 
 if __name__ == "__main__":

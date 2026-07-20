@@ -539,6 +539,7 @@ def run_governed_analysis(
             audit.record(
                 agent="l1",
                 action="analysis_error",
+                actor=persona.id,
                 level=LEVEL_BLOCKED,
                 output_summary=execution.error or "L1 analysis failed",
             )
@@ -559,6 +560,7 @@ def run_governed_analysis(
         audit.record(
             agent="l1",
             action="analysis_ok",
+            actor=persona.id,
             output_summary=f"certified analysis produced {len(emitted)} group(s)",
         )
     else:
@@ -632,6 +634,7 @@ def run_governed_analysis(
         audit.record(
             agent="gate",
             action="gate_pass",
+            actor=persona.id,
             level=LEVEL_GATE,
             output_summary=f"gate passed on attempt {outcome.attempt_count}",
         )
@@ -652,6 +655,7 @@ def run_governed_analysis(
             audit.record(
                 agent="sandbox",
                 action="execute_error",
+                actor=persona.id,
                 level=LEVEL_BLOCKED,
                 output_summary=execution.error or "execution failed",
                 extra={"control": execution.control},
@@ -670,6 +674,7 @@ def run_governed_analysis(
             audit.record(
                 agent="sandbox",
                 action="execute_ok_bad_shape",
+                actor=persona.id,
                 level=LEVEL_BLOCKED,
                 output_summary="emitted result is not a grouped table with an 'n' column",
             )
@@ -691,6 +696,7 @@ def run_governed_analysis(
         audit.record(
             agent="sandbox",
             action="execute_ok",
+            actor=persona.id,
             output_summary=f"ran in {execution.wall_clock_s:.2f}s (no network, wall-clock capped)",
         )
 
@@ -711,6 +717,7 @@ def run_governed_analysis(
         audit.record(
             agent="screen",
             action="cell_suppressed",
+            actor=persona.id,
             level=LEVEL_BLOCKED,
             output_summary=f"suppressed cell {cell.label()} (n={cell.n} < {cell_floor})",
             extra={"control": "CTL-DISC-02"},
@@ -719,6 +726,7 @@ def run_governed_analysis(
         audit.record(
             agent="screen",
             action="proxy_flagged",
+            actor=persona.id,
             level=LEVEL_BLOCKED,
             output_summary=flag.message(),
             extra={"control": "CTL-PROXY-01"},
@@ -743,6 +751,7 @@ def run_governed_analysis(
     audit.record(
         agent="interpret",
         action="narration",
+        actor=persona.id,
         output_summary=("faithful: " if faithful else "UNFAITHFUL: ") + why,
         extra={"control": CTL_EVAL_01, "passed": faithful},
     )
