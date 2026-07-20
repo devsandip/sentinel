@@ -7,6 +7,7 @@ every top-level section.
 
 from __future__ import annotations
 
+import ast
 import itertools
 import os
 import re
@@ -23,6 +24,29 @@ from sentinel.sandbox.execute import DEFAULT_WALL_CLOCK_S  # noqa: E402
 os.environ.setdefault("ARROW_DEFAULT_MEMORY_POOL", "system")
 
 APP = os.path.join(os.path.dirname(os.path.dirname(__file__)), "app.py")
+
+
+def _assert_run_completed(at) -> None:  # noqa: ANN001
+    """Assert a governed run finished, and say which stage did not if it didn't.
+
+    A bare `assert status == "completed"` reports 'error' != 'completed' and
+    nothing else, which is useless for the intermittent failures these run-a-
+    real-analysis tests produce under a loaded full-suite run: the interesting
+    part is always which stage failed and on what control.
+    """
+    # Streamlit's session-state proxy has no .get(); it reads "get" as a key.
+    result = at.session_state["govflow_result"] if "govflow_result" in at.session_state else {}
+    if result.get("status") == "completed":
+        return
+    bad = [
+        f"{s.get('stage')}={s.get('status')}: {str(s.get('detail'))[:200]}"
+        for s in result.get("stages", [])
+        if s.get("status") not in ("ok", "skipped")
+    ]
+    raise AssertionError(
+        f"governed run status={result.get('status')!r}, expected 'completed'. "
+        f"Failing stages: {bad or 'none recorded'}"
+    )
 
 
 def _boot(persona_id: str = "analyst", timeout: int = 60) -> AppTest:
@@ -161,6 +185,54 @@ def test_model_status_chips_explain_the_eval_gate():
     for m in model_versions():
         assert m.version in body, m.version
         assert f"Here: {m.version}" in captions, m.version
+
+
+def test_no_copy_sends_a_visitor_to_the_sidebar_for_identity():
+    """Identity moved from the sidebar to the topbar chip in v7, and the L0
+    "you cannot run analyses" caption went on telling people to switch persona
+    in the sidebar until 2026-07-20, three versions later.
+
+    Checked against the source rather than one rendered screen, because the
+    failure is a class (copy naming a control that has moved) rather than one
+    string, and the caption only renders for personas that cannot run.
+    """
+    ui_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "sentinel", "ui")
+    files = [APP] + [
+        os.path.join(ui_dir, n) for n in os.listdir(ui_dir) if n.endswith(".py")
+    ]
+    for path in files:
+        for text in _display_strings(path):
+            for line in text.splitlines():
+                if "stSidebar" in line:  # a CSS selector, not prose
+                    continue
+                assert not re.search(r"(persona|identity|acting as)[^.]*sidebar", line, re.I), (
+                    f"{os.path.basename(path)} points a visitor at the sidebar for "
+                    f"identity, which has lived in the topbar since v7: {line.strip()}"
+                )
+
+
+def _display_strings(path: str) -> list[str]:
+    """Every string literal in a module except docstrings.
+
+    Docstrings are excluded deliberately: several of them describe the v7 move
+    of identity out of the sidebar and are correct to say so. What must not say
+    it is copy a visitor reads.
+    """
+    with open(path) as f:
+        tree = ast.parse(f.read())
+    docstrings = set()
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+            body = getattr(node, "body", [])
+            if body and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant):
+                docstrings.add(id(body[0].value))
+    return [
+        n.value
+        for n in ast.walk(tree)
+        if isinstance(n, ast.Constant)
+        and isinstance(n.value, str)
+        and id(n) not in docstrings
+    ]
 
 
 def test_landing_adoption_bars_are_proportional_and_do_not_shrink():
@@ -359,7 +431,7 @@ def test_reclicking_active_nav_item_is_a_noop():
     at.button(key="gv_ds_confirm").click().run()
     at.radio(key="govflow_stage").set_value("Plan").run()
     at.button(key="gv_run").click().run()
-    assert at.session_state["govflow_result"]["status"] == "completed"
+    _assert_run_completed(at)
     assert at.radio(key="govflow_stage").value == "Access"
     # Re-click the active "Run" nav item: the stepper must hold its position.
     at.button(key="nav_run").click().run()

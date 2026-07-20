@@ -108,6 +108,18 @@ Beanstalk `t3.small` running over HTTP. Two idempotent scripts under
 - `AWS_PROFILE=admin ./deploy/aws/enable-https.sh` — the HTTPS front (CFN
   `deploy/aws/sentinel-https.yaml`: ACM cert, CloudFront, Route 53 alias).
 
+The distribution has two cache behaviors, and the split matters. The default one
+carries the app: caching disabled, all viewer headers forwarded, because the
+WebSocket at `/_stcore/stream` needs the upgrade headers passed straight
+through. `/static/*` is separate: compressed and cached at the edge. Streamlit's
+front end is 61 files and 2.5MB, content-hashed and immutable, and under the
+default behavior every visitor pulled all of it uncompressed from the t3.small.
+That was the six seconds of blank white on a cold load, not an EB cold start
+(TTFB was under a second). The main chunk is 908KB and gzips 3.4x. Compression
+needs both halves of that behavior: `Compress: true` alone does nothing under
+the CachingDisabled policy, since CloudFront compresses what it caches and that
+policy drops `Accept-Encoding` from the cache key.
+
 **Render (alternative):** point a new Web Service at the repo; it reads
 `render.yaml` (build `pip install -r requirements.txt && pip install -e .`,
 start `streamlit run app.py --server.port $PORT --server.address 0.0.0.0`), then

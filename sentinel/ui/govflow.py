@@ -1361,14 +1361,21 @@ def _panel_plan(pub: dict | None, cfg: dict | None, persona) -> None:  # noqa: A
                 draft["l1_params"] = _l1_param_editor()
 
     can_run = persona.can_run and (not is_l3 or tier == "L3")
+    # Both of these tell a stuck visitor how to get unstuck, so they have to
+    # name a control that exists. The first said "in the sidebar" until
+    # 2026-07-20; identity moved out of the sidebar into the topbar chip in v7,
+    # so for three versions the only in-app instruction an L0 persona got was to
+    # look somewhere the control had left.
     if not persona.can_run:
         st.caption(
-            f"Your role ({persona.name}) cannot run analyses. Switch persona in the sidebar."
+            f"Your role ({persona.name}) cannot run analyses. Switch persona from the "
+            f"{persona.name} chip in the top bar."
         )
     elif is_l3 and tier != "L3":
         st.caption(
             f"{persona.name} does not resolve to L3 on Public data. Switch to "
-            "Platform Admin (certified analyst + sandbox waiver) to run the L3 sandbox."
+            "Platform Admin (certified analyst + sandbox waiver) from the chip in the "
+            "top bar to run the L3 sandbox."
         )
     # Stage the frozen config for the queued run.
     draft["cfg_staged"] = {
