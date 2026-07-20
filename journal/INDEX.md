@@ -1,16 +1,17 @@
 # Sentinel — Journal Index
 
-Last refreshed: 2026-07-20 17:58
+Last refreshed: 2026-07-20 18:13
 
-Latest entry: [2026-07-20-1758-the-caption-was-the-bug.md](entries/2026-07-20-1758-the-caption-was-the-bug.md)
+Latest entry: [2026-07-20-1813-prod-carries-the-scope.md](entries/2026-07-20-1813-prod-carries-the-scope.md)
 
 ## Where we are now
 
-**Prod is current as of the PR #23 deploy but does NOT carry PR #25. The
-deploy carried the five audit fixes (PR #17), the data-contract catalogue
-(v11), the registry rewrite (v12) and the Audit Log (PR #23) together. EB
-Green, WebSocket 101, live-LLM key present. No PRs open. Merged since:
-PR #25, per-stage attribution and Audit Log role scoping, undeployed.**
+**Prod is in sync with `main` at `174df5e`. PR #25 deployed as bundle
+`sentinel-20260720-180457.zip`, EB Health Green, health 200, root 200 in
+0.66s, WebSocket 101, live-LLM key present. No PRs open.** Verified by the
+behaviour that only exists in this build, not by health: the Data Scientist
+sees 20 runs with the scope banner and a disabled "Ran by", and a completed
+govflow run files its events under all eight stages that emitted one.
 
 **Audit events now carry the stage that emitted them, and the Audit Log obeys
 the access control it is about.** The screen used to print a caption on every
@@ -635,6 +636,7 @@ out).
 
 ## Recent entries
 
+- [2026-07-20-1813-prod-carries-the-scope.md](entries/2026-07-20-1813-prod-carries-the-scope.md) — deployed PR #25, bundle `sentinel-20260720-180457.zip`, EB Green, prod in sync with `main` at `174df5e`. Two things worth keeping. **The deploy is not incremental**, so batching merges into one deploy is free in effort and costs bisection: the previous deploy carried four changes after three stale sessions, this one carried a single tested change. That is the argument for deploying on merge, and it holds only while merges stay small, which is the same reason the `app.py` split matters. And **verification used the behaviour that only exists in the new build**, because health 200 passes on the old bundle: Streamlit answers that endpoint before `app.py` runs, which is how the first prod deploy returned 200 with every page broken. Checked the scope banner, the disabled "Ran by", and events filed under all eight stages. A deploy is verified when the change is visible, not when the instance is up.
 - [2026-07-20-1758-the-caption-was-the-bug.md](entries/2026-07-20-1758-the-caption-was-the-bug.md) — the two Audit Log follow-ups, merged as PR #25. **An honest caption is still a gap:** the screen admitted it could not file govflow/L3 events under a stage, and that admission made the gap tolerable enough that I stopped looking at it. Inferring the stage from the action string was rejected because it needs a second table kept in step with 30 call sites and misfiles silently, which on an audit surface beats an admitted absence. So `AuditEvent` carries a `stage` written by the call site: 22 edits in `flow.py`, 8 in `l3.py`, empty on routes with no stage spine and a test asserting they leave it empty. Considered a context manager on the log (9 edits not 30) and rejected it: flow.py's stages are sequential top-level code with early returns, and explicit-per-site reads better in a governance file. Second: **the screen about access control had none**, so `can_view_all_runs` now lives in `personas.yaml` defaulting to deny, one `visible_runs()` predicate scopes the rows, the filter options and the drill-down, and the drill-down is the one that matters because `?run=` would otherwise be the bypass. The scope is announced rather than silently applied, and a withheld run says it exists. Re-seeding preserved all 24 run ids by plan slot, five lines that saved every bookmarked link. 494 tests. Also checked the other ten worktrees expecting to sequence around parallel work: there is none, nine are idle and two branches are dead. **Long-lived worktrees over a 3,400 line `app.py` do not produce parallel work, they produce abandoned branches.**
 - [2026-07-20-1655-what-counts-as-a-refusal.md](entries/2026-07-20-1655-what-counts-as-a-refusal.md) — the Audit Log ships; what counts as a refusal, and no dual control anywhere.
 - [2026-07-20-1410-a-list-that-granted-what-nothing-installed.md](entries/2026-07-20-1410-a-list-that-granted-what-nothing-installed.md) : all five audit findings closed in one session, four fixed and one dissolved. **The allowlist granted five packages nothing installed** (statsmodels, lifelines, shap, dowhy, econml), and since the list goes verbatim into the codegen prompt, the model took the instruction, the gate stamped the imports clear and the sandbox died with `ModuleNotFoundError`: a control that approved what the environment refuses. Reproduced at the seam before touching it. I fixed it by dropping the four unused ones; Sandip reversed it to install them, correctly, since the defect was never which side moved. That cost a major version of the numerical stack (econml/numba cap pandas at 2.3.3, sklearn 1.6.1, numpy 2.4.6, scipy 1.15.3) and it cost time: shap is 4.2-4.6s warm and 15.5s cold against a 10s wall clock, hence `sentinel/sandbox/warmup.py` and a 30s cap. **An import grant is also a time budget.** The adoption bars: correct inline heights thrown away by a flex-shrink squash, fixed by following ui-spec 4.10, which had specified the fix all along. **An element whose size encodes data must be out of the flex-shrink pool.** The six-second blank was 2.5MB of Streamlit bundle served uncompressed and uncached by a CloudFront behavior built for the WebSocket; `/static/*` split out, and `Compress:true` alone would have done nothing under CachingDisabled. **The fifth finding dissolved under Sandip's question**: the gate is right to clear a benign request, the adversarial requests are already wired and genuine, and the whole thing reduced to which option is selected by default. He drives two demos instead. The thread through all five: claims stated in prose that nothing holds to them, including a caption claiming a 15s wall clock while the code enforced 10. 423 tests. PR #17, not yet deployed.

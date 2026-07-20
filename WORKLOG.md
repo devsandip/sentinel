@@ -760,3 +760,19 @@ Append-only session handoff log. Newest entries at the bottom.
 - The scope is announced on the screen, not silently applied: a filtered ledger that does not say it is filtered turns the four KPI tiles above it into quiet understatements.
 - A withheld run says it exists and names who ran it. Hiding existence is the stronger control and correct externally; here the reader is a colleague holding a link, and "no such run" sends them chasing a bug.
 - Audited all ten worktrees before merging and found no live parallel work: nine idle, two dead branches. Reframes the `app.py` split from tidiness to the thing blocking parallelism. Sandip declined to prune the worktrees.
+
+## 2026-07-20 (evening, cont.) — deployed PR #25
+
+**Did:**
+- Deployed `main` at `174df5e`. Bundle `sentinel-20260720-180457.zip`, stack `sentinel-eb` updated, EB Health Green. `requirements.txt` passed the `uv.lock` guard before anything touched AWS.
+- Verified on the live instance by the behaviour that only exists in this build, not by health: the Data Scientist sees 20 of 24 runs with the "Scoped to your runs" banner, KPI tiles scoped with it, "Ran by" disabled while Kind and Control stay live; the completed govflow run files events under all eight stages that emitted one, with no apology caption.
+- Transport: health 200, root 200 in 0.66s, WebSocket `/_stcore/stream` 101, live-LLM key present.
+
+**State now:**
+- Prod is in sync with `main`. No PRs open. 494 passed, 2 skipped.
+
+**Next:**
+- Split `app.py` (3,435 lines) into `sentinel/ui/screens/*.py`. Leave `st.navigation` as a separate later change.
+
+**Decisions:**
+- Deploy on merge rather than batching against the worktrees. The deploy is not incremental (the script zips the repo root and ships a fresh bundle), so batching is free in effort and costs bisection. The previous deploy carried four changes after three stale sessions; this one carried one tested change. The argument holds only while merges stay small, which is another reason to split `app.py`.
