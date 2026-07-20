@@ -1,16 +1,48 @@
 # Sentinel — Journal Index
 
-Last refreshed: 2026-07-20 14:10
+Last refreshed: 2026-07-20 16:55
 
-Latest entry: [2026-07-20-1410-a-list-that-granted-what-nothing-installed.md](entries/2026-07-20-1410-a-list-that-granted-what-nothing-installed.md)
+Latest entry: [2026-07-20-1655-what-counts-as-a-refusal.md](entries/2026-07-20-1655-what-counts-as-a-refusal.md)
 
 ## Where we are now
 
-**Three sessions' work now sits on main undeployed: the five audit findings
-(PR #17), the data-contract catalogue (v11), and the registry rewrite (v12).
-Prod is still v10, so the Live LLM path in production still fails 100% of the
-time. The next deploy carries all three and needs both scripts, because one of
-the audit fixes is a CloudFront change.**
+**Prod is current for the first time in three sessions. The deploy carried the
+five audit fixes (PR #17), the data-contract catalogue (v11), the registry
+rewrite (v12) and the Audit Log (PR #23) together. EB Green, WebSocket 101,
+live-LLM key present. No PRs open.**
+
+**The Audit Log is the tenth screen: one cross-run ledger under Platform.** 24
+runs and 249 committed events, every run readable as the nine governance stages
+the Run screen teaches. It exists because every other audit surface in the app
+is scoped to one run and dies with the session, and because a control that
+fires once in a scripted demo is a demo, while one that fires across 24 runs
+with the refusals countable is a control.
+
+Three things it forced into the open. **There is no dual control anywhere in
+Sentinel**: four-eyes means author-is-not-approver, single signature, no quorum
+and no data structure that could hold two approvals. Sandip chose to report
+that rather than build around it. **Two different refusals sit at the promotion
+gate** and I had conflated them, because `approve()` tests authority before
+segregation of duties, so an Analyst self-approving never reaches CTL-SOD-01.
+**And CTL-TIER-01 was catalogued doc-only while `flow.py` enforced it**, so a
+chip on a run it had just refused would have read "cannot fire".
+
+The screen also had to be taught what a refusal is. Accounting first read the
+seeder's `controls_fired`, which mixes in gate level, so a passing eval gate
+and an APPROVED decision counted as refusals. A gate event means the control
+was consulted, not that it said no. That distinction is now the shape of the
+whole feature: the tiles split stopped from withheld, the filter splits the
+same way, and each stage separates the controls it armed from those that fired.
+
+**The record now survives a deploy.** `runtime/` is gitignored and excluded
+from the EB bundle, and the seeder used to collapse each run to a set of action
+strings, so this screen would have shipped empty while health returned 200.
+`sentinel/data/seed_audit.jsonl` is committed, and prod rendering all 24 runs
+on a fresh instance is the proof.
+
+Everything below is the prior state.
+
+---
 
 **All five audit findings are closed: four fixed, one closed by a decision.**
 
@@ -589,6 +621,7 @@ out).
 
 ## Recent entries
 
+- [2026-07-20-1655-what-counts-as-a-refusal.md](entries/2026-07-20-1655-what-counts-as-a-refusal.md) — the Audit Log ships; what counts as a refusal, and no dual control anywhere.
 - [2026-07-20-1410-a-list-that-granted-what-nothing-installed.md](entries/2026-07-20-1410-a-list-that-granted-what-nothing-installed.md) : all five audit findings closed in one session, four fixed and one dissolved. **The allowlist granted five packages nothing installed** (statsmodels, lifelines, shap, dowhy, econml), and since the list goes verbatim into the codegen prompt, the model took the instruction, the gate stamped the imports clear and the sandbox died with `ModuleNotFoundError`: a control that approved what the environment refuses. Reproduced at the seam before touching it. I fixed it by dropping the four unused ones; Sandip reversed it to install them, correctly, since the defect was never which side moved. That cost a major version of the numerical stack (econml/numba cap pandas at 2.3.3, sklearn 1.6.1, numpy 2.4.6, scipy 1.15.3) and it cost time: shap is 4.2-4.6s warm and 15.5s cold against a 10s wall clock, hence `sentinel/sandbox/warmup.py` and a 30s cap. **An import grant is also a time budget.** The adoption bars: correct inline heights thrown away by a flex-shrink squash, fixed by following ui-spec 4.10, which had specified the fix all along. **An element whose size encodes data must be out of the flex-shrink pool.** The six-second blank was 2.5MB of Streamlit bundle served uncompressed and uncached by a CloudFront behavior built for the WebSocket; `/static/*` split out, and `Compress:true` alone would have done nothing under CachingDisabled. **The fifth finding dissolved under Sandip's question**: the gate is right to clear a benign request, the adversarial requests are already wired and genuine, and the whole thing reduced to which option is selected by default. He drives two demos instead. The thread through all five: claims stated in prose that nothing holds to them, including a caption claiming a 15s wall clock while the code enforced 10. 423 tests. PR #17, not yet deployed.
 - [2026-07-20-1345-three-registries-under-one-heading.md](entries/2026-07-20-1345-three-registries-under-one-heading.md) : Sandip asked what the agents on the Registry screen do, and what the difference is between Models, Agents, and Analysis-agents. **The second question is the finding:** the person who commissioned the build could not tell three registries apart on one page, because one subtitle covered all three and described two. Rewritten around what each thing is in a run: a model is what a run produces, an agent is a worker inside a run, an analysis-agent is what a run is *allowed to be* (the certified unit Plan binds, which the four agents execute). The analysis-agent section now opens by saying it is not the four agents above. Each agent's description lives on the agent class as `does` and the registry reads it off the class, because a dict of descriptions in `registry.py` is a copy of a fact and copies drift; same rule the model-status popover already follows. Left alone: eda's tools column shows the template allow-list including a tool eda never calls, and `AGENT_LINEAGE` duplicates each class's `template` (deduping closes an import cycle through `agents/runtime.py`). Two verification traps: `--server.fileWatcherType none` means Streamlit never recompiles the script, so a browser reload re-runs the *old* source and a real edit looks inert until the server restarts; and the full suite run alongside the live app failed 6 tests in 651s that all passed in 116s once the server stopped, so read the runtime before reading the failures. PR #18, `a924ffe`, 391 tests. **Not deployed; prod is still v10.**
 - [2026-07-20-1338-the-catalogue-is-not-a-data-browser.md](entries/2026-07-20-1338-the-catalogue-is-not-a-data-browser.md) : Sandip proposed an "Explore this dataset" button on the Datasets surface and asked, in the same message, whether it would violate the governance we have built. It would, in four places: purpose limitation (Access gates on *why*, and Explore carries no purpose; six of eight datasets are Restricted or Confidential), the autonomy ceiling (Confidential caps at L1, so free-form exploration of Berka is above the ceiling by construction), the column grant (Access builds a scoped table so a withheld column does not exist; a full-column view puts back `applicant_email`, `applicant_ssn`, `sex`, raw `age_years`), and the disclosure screen (a value-counts panel is a grouped count, and cells under the floor get suppressed). Built the **catalogue layer** instead, which banks actually run and this platform lacked: a Contract button per row opening provenance, license, classification + tier ceiling, permitted/refused purposes off the real `PURPOSE_MATRIX`, rows at source vs onboarded, tables, foreign keys with cardinality, and the column dictionary (name, type, role, description, `derived` tag) under a role legend. **No values, no samples, no distributions, no missingness, no cardinality:** those are computed from values, so they stay with the governed `data_profiling` analysis. The catalogue knows the shape; the profile knows the contents; only the profile is data access. Types come from a bounded 200-row head and a test checks every published string against the file's real first rows. Synthetic PII is published, marked `pii` + `derived`, rather than hidden. Documentation coverage is reported not smoothed: german_credit 100%, lendingclub 40 of 152. PR #19, `4e106ec`, 406 tests. **Not deployed; prod is still v10 with the Live LLM path broken.**

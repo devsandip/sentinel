@@ -708,3 +708,30 @@ Append-only session handoff log. Newest entries at the bottom.
 - **Wall clock 10s -> 30s.** The control exists to stop runaway generated code; an infinite loop dies at 30s as it dies at 10s. What changed is that it stopped firing on the imports the allowlist itself grants. An import grant is also a time budget.
 - **#5 needs no code.** The gate is right to clear a benign request (blocking it is a false positive, which this build treats as costing as much as a missed block), and the adversarial requests are already wired and genuine. The finding reduced to which option is selected by default. Sandip drives two demos, happy path then adversarial. Recorded in `_cfg_question`'s docstring so it is not reopened as a bug.
 - **Corrected two of my own claims mid-session rather than leaving them.** I attributed shap's 48s cold import to numba bytecode compilation; purging `__pycache__` only took it to 6.4s, so the real cost is cold disk. And three tests that flaked during a full run were my own dev server and browser competing for CPU, not a regression: a clean run is 102s versus 416-495s while competing.
+
+## 2026-07-20 — Audit Log built end to end, merged, and prod brought current
+
+**Did:**
+- Planned the Audit Log against a full map of what the code actually emits, then built it: `sentinel/platform/audit_store.py` (the first cross-run reader), `audit_stages.py` (the nine-stage normalization), and the screen plus its run drill-down in `app.py`.
+- Reworked `scripts/seed_runs.py` to commit the per-event stream to `sentinel/data/seed_audit.jsonl` (24 runs, 249 events) and added `actor`, `approver`, `steps` to `SeedRun`. Without it the screen ships empty in prod, because `runtime/` is gitignored and excluded from the EB bundle.
+- Seeded five refusal runs, every one a real execution of an existing path: two egress blocks at the Gate (govflow L2 and L3), a tier block at Ask, and both approval refusals.
+- Merged origin/main into the branch (13 commits: v11, v12, the audit fixes), merged PR #23, and deployed. EB Green, WebSocket 101, live-LLM key present.
+
+**State now:**
+- **Prod is current for the first time in three sessions** and carries PR #17, v11, v12 and the Audit Log together. `sentinel-20260720-155822.zip`.
+- 484 passed, 2 skipped, ruff clean, verified in `~/Developer/sentinel` (the folder that actually ships) before deploying.
+- No PRs open, no open issues.
+- Verified in prod: ledger renders 24 runs on a fresh instance, `?run=<id>` deep link resolves cold, nine-stage view intact.
+
+**Next:**
+- The mockup `docs/mockups/sentinel-audit-log.html` is well behind the built screen: it predates the nine-stage shape, the Open buttons and the filter split. Regenerate it or mark it superseded.
+- `app.py` is ~3,300 lines with a hand-rolled router and ten screens. The router is the obvious next cleanup.
+- Per-stage event attribution for govflow/L3 needs a `stage` on the event (~30 call sites in `flow.py`/`l3.py`). Until then those events stay in the run-level stream, which the screen says out loud.
+- Demo package shape for the hiring manager is still undecided and still unbuilt.
+
+**Decisions:**
+- **Option A on approvals: report what is true, add nothing.** Sentinel has no dual control anywhere: no quorum, no second-signature state, nothing that could hold two approvals. Four-eyes means author-is-not-approver, single signature. `sign_evidence_pack()` stays dead and packs stay pending. The screen names the gap instead of implying a control the platform does not have.
+- **Every run reads as the nine governance stages**, reversing my own design. I had argued against normalizing because mapping profiler/eda/modeler onto Ask..Attest is an interpretation. Sandip was right that the nine stages are the spine the Run screen teaches and an auditor should learn one vocabulary, not four. Kept honest by three rules: a stage a route lacks is "not in this route" (never ok, never skipped), native step names stay visible, and a stage folding several steps takes the worst outcome.
+- **A gate event means the control was consulted, not that it said no.** Refusal accounting first read `controls_fired`, which mixes blocked, redaction and gate levels, so a passing eval gate and an APPROVED decision counted as refusals. That distinction became the shape of the whole feature: tiles, filter and per-stage chips all split armed from fired, and stopped from withheld.
+- **CTL-TIER-01 moved out of the doc-only catalogue.** It was listed unimplemented while `flow.py` has been enforcing it, so its chip on a refused run would have read "cannot fire". The catalogue was stale, not the code.
+- **`git merge-tree <base> HEAD main` is not a merge dry run** on git 2.35. It reported zero conflicts; the real merge conflicted immediately. Use a throwaway branch instead.
