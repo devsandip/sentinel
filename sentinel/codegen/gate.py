@@ -26,6 +26,7 @@ from dataclasses import dataclass, field
 from .allowlist import (
     ALLOWED_IMPORTS,
     CTL_CODE_00,
+    CTL_CODE_01,
     CTL_CODE_02,
     CTL_CODE_03,
     CTL_CODE_04,
@@ -130,6 +131,22 @@ class _GateVisitor(ast.NodeVisitor):
         # treats an empty module as an allowlist miss.
         module = "" if node.level and not node.module else (node.module or "")
         verdict = import_verdict(module, self.allowed_imports)
+        if verdict == CTL_CODE_01 and not node.level and node.names:
+            # `from scipy import stats` binds exactly `scipy.stats`, which the
+            # grant names, though bare `scipy` is not granted. Resolve what is
+            # actually bound before refusing: the per-submodule rule exists to
+            # stop `import scipy` handing over every submodule, not to refuse
+            # the one submodule that was granted. A model writing idiomatic
+            # Python hit this on the live path and was blocked for an import the
+            # allowlist permits.
+            #
+            # Only an allowlist miss is reconsidered. A denied category is
+            # decided by import_verdict before this runs, so `from os import
+            # path` stays CTL-CODE-02 no matter what it binds, and `import *`
+            # resolves to `module.*`, which no grant matches.
+            bound = [f"{module}.{a.name}" for a in node.names]
+            if all(import_verdict(m, self.allowed_imports) is None for m in bound):
+                verdict = None
         if verdict is not None:
             shown = ("." * (node.level or 0)) + (node.module or "")
             self._add(verdict, node.lineno, f"from {shown} import ...")

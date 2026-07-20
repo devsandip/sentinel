@@ -1527,8 +1527,17 @@ def _panel_generate(pub: dict | None, cfg: dict | None, persona) -> None:  # noq
     if len(attempts) > 1:
         with st.expander(f"Attempt history ({len(attempts)})"):
             for a in attempts:
-                verdict = "passed" if a["passed"] else f"refused ({', '.join(a['controls'])})"
-                st.markdown(f"**Attempt {a['attempt']}** — gate {verdict}")
+                verdict = (
+                    "gate passed" if a["passed"]
+                    else f"gate refused ({', '.join(a['controls'])})"
+                )
+                # An attempt can clear the gate and still be discarded, when what
+                # it emitted failed the result contract or crashed the sandbox.
+                # Saying only "gate passed" against such an attempt would read as
+                # if it were the run's answer.
+                if a.get("rejected_by"):
+                    verdict += f", then discarded: {a['rejected_by']}"
+                st.markdown(f"**Attempt {a['attempt']}** — {verdict}")
                 st.code(a["code"], language="python")
     with st.expander("What the model is told (the prompt)"):
         if not live:

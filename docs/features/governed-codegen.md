@@ -706,6 +706,91 @@ output  SELECT age_band, AVG(pred) FROM german_credit
 The model never sees the injected filter and cannot remove it. The rewrite
 happens after generation and before execution.
 
+### 6.1 The result contract
+
+The allowlist says what generated code may *do*. The result contract says what it
+must *return*. Both are fences, and until v11 only one of them was written down.
+
+`sentinel/codegen/result_contract.py` states it once:
+
+```
+a pandas DataFrame                      not a dict, not a Series, not a scalar
+plain string column names               no MultiIndex from .agg({...})
+one row per band, band in a column      reset_index() after the groupby
+an integer column named exactly 'n'     what CTL-DISC-02 suppresses on
+a float column named exactly            what Interpret narrates and the
+  'selection_rate'                        evidence pack states a finding about
+extra columns are fine
+```
+
+`contract_clause()` is interpolated into the codegen prompt and `check_result()`
+enforces the same sentence after the sandbox returns, for the same reason
+`ALLOWED_IMPORTS` is interpolated rather than restated: a prompt that teaches one
+fence and a platform that checks another will drift, and the drift is invisible
+until a live model finds it.
+
+**That drift is what broke the Live LLM path.** The prompt asked for "a count
+column named 'n'". The flow required a DataFrame with `n` on it. Interpret
+required a `selection_rate` column on top of that, and said so nowhere. Three
+contracts, no reconciliation, and no feedback path between them. Scripted mode
+never noticed, because the canned sample was written against the checks rather
+than against the prompt: the demo tested the checks with an answer that already
+knew them.
+
+Live mode failed on both halves at once, in two ways that look different and are
+the same bug:
+
+- **The dead run.** A model that emitted a dict wrapping the frame, a MultiIndex
+  from `.agg({"pred": ["mean", "count"]})`, the raw scoped table, or a count
+  column called `count` died at Execute with "emitted result must be a DataFrame
+  with an 'n' count column", with no retry.
+- **The mute run.** A model that got `n` right but named the rate `decline_rate`
+  or `approval_rate` completed the whole flow, assembled an evidence pack, and
+  narrated "The analysis produced a result with no comparable groups after
+  screening" -- a false statement, since there were groups and the platform
+  simply could not find the column. Of nine live generations sampled against the
+  old prompt, nine named `n` correctly and none produced `selection_rate`: the
+  benign preset question ("Does the model decline older applicants more often,
+  holding income constant?") never contains the words *selection rate*, and asks
+  for a controlled comparison, which pulls a capable model toward a regression
+  whose natural output is a coefficient table.
+
+A mute run is the worse of the two. A dead run is visibly dead; a mute run is a
+signed-off-able artifact that asserts nothing while reporting success.
+
+**Nothing is normalised on the model's behalf.** Renaming `count` to `n` in the
+platform would be a silent transform inside a product whose entire argument is
+that transforms are visible. A miss is fed back to the model and regenerated, or
+reported as a failure. The platform does not quietly fix the result; it asks
+again, in public, and the audit log carries both the miss and the retry.
+
+### 6.2 The regenerate loop, past the gate
+
+Three things can go wrong after the model writes code, and until v11 only the
+first of them got a second attempt:
+
+| failure | before v11 | now |
+| --- | --- | --- |
+| the gate refuses it | regenerate with the refusal fed back | unchanged |
+| it crashes in the sandbox | run ends at Execute | regenerate with the traceback fed back |
+| it returns an unreadable shape | run ends at Execute | regenerate with the contract fed back |
+
+`max_attempts` (default 3) is the budget for model generations across the whole
+loop, not per round, so widening what can be retried does not widen what it
+costs. When the budget runs out the run fails in the same place it used to fail,
+only after it has tried, and the Execute stage names which clause of the contract
+was missed rather than restating the contract at the reader.
+
+Two things the loop deliberately does not do. It does not retry a **gate block**:
+`generate_and_gate` has already spent the budget arguing about it, and a run that
+ends blocked at the gate is the control working, not the run failing -- it must
+stay visible as a block rather than be ground down into an error. It does not
+retry a **`CTL-TIME-01` wall-clock kill**: that is a control firing, and
+regenerating would spend the budget on code that is allowed to be slow.
+
+Scripted mode never loops. Canned code is deterministic, so a second round would
+re-derive the same result and spend the budget doing it.
+
 ---
 
 ## 7. Personas and permissions
