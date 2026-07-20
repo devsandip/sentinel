@@ -220,6 +220,7 @@ def render_ask(nav_to) -> None:  # noqa: ANN001
     mode = st.radio(
         "Mode",
         ["scripted", "live"],
+        index=1,
         format_func=lambda m: "Scripted (free)" if m == "scripted" else "Live LLM",
         horizontal=True,
         key="ask_mode",
