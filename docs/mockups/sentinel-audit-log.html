@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Sentinel — Audit Log</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 2 4 5v6c0 5 3.4 8.5 8 11 4.6-2.5 8-6 8-11V5z' fill='%231e50a0'/%3E%3Cpath d='M8 12l3 3 5-6' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" />
+<style>
+  /* ---------- tokens: ui-spec 1.1-1.7, verbatim ---------- */
+  :root {
+    --canvas:#e9edf4; --surface:#ffffff; --surface-2:#f4f7fb;
+    --border:#dde4ee; --border-strong:#c4d0e2;
+    --ink:#0f1b2d; --muted:#57647a; --faint:#66717f;
+    --accent:#1e50a0; --accent-strong:#17417f; --accent-ink:#ffffff;
+    --accent-soft:#e8eef9; --accent-soft-border:#cddbf1;
+    --ok:#1b7f3b; --ok-soft:#e6f5ec; --ok-border:#bfe3cc; --ok-ink:#12692f;
+    --warn:#b26a00; --warn-soft:#fbf0dc; --warn-border:#f0d9ad; --warn-ink:#8a5200;
+    --danger:#b3261e; --danger-soft:#fdeceb; --danger-border:#f3ccc9; --danger-ink:#8f1d17;
+    --chrome-bg:#ffffff; --chrome-bg-2:#eef2f8; --chrome-ink:#0f1b2d; --chrome-muted:#5b6a82;
+    --chrome-border:#d6deea; --chrome-hover:#e3e9f3; --chrome-abg:#e8eef9; --chrome-aink:#1e50a0; --chrome-aborder:#cddbf1;
+    --code-bg:#f4f7fc; --code-ink:#2a3852; --code-ln:#aab4c6;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    --mono:"SF Mono","JetBrains Mono","Fira Code","Cascadia Code",ui-monospace,Menlo,Consolas,monospace;
+    --shadow-sm:0 1px 2px rgba(15,27,45,.06);
+    --shadow-md:0 8px 26px -12px rgba(15,27,45,.22);
+    --r-sm:7px; --r-md:11px; --r-lg:16px;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --canvas:#0a1220; --surface:#0f1a2c; --surface-2:#14223a;
+    --border:#22334f; --border-strong:#30456a;
+    --ink:#e7edf8; --muted:#9aa8c0; --faint:#8291ab;
+    --accent:#5b8def; --accent-strong:#7aa6f5; --accent-ink:#08121f;
+    --accent-soft:#152743; --accent-soft-border:#2a4576;
+    --ok:#4ec27a; --ok-soft:#122a1c; --ok-border:#1f4a30; --ok-ink:#8fe0a9;
+    --warn:#e2a03a; --warn-soft:#2a2110; --warn-border:#4d3a17; --warn-ink:#f0c274;
+    --danger:#e5675e; --danger-soft:#2a1513; --danger-border:#552420; --danger-ink:#f2a39c;
+    --chrome-bg:#070e1a; --chrome-bg-2:#0c1728; --chrome-ink:#eef3fc; --chrome-muted:#8194b4;
+    --chrome-border:#1b2b47; --chrome-hover:rgba(255,255,255,.06); --chrome-abg:rgba(91,141,239,.16);
+    --chrome-aink:#cfe0fb; --chrome-aborder:#2f4d7e;
+    --code-bg:#0c1626; --code-ink:#c7d3e6; --code-ln:#4d5f7d;
+    --shadow-sm:0 1px 2px rgba(0,0,0,.4); --shadow-md:0 8px 26px -12px rgba(0,0,0,.6);
+  } }
+  :root[data-theme="dark"] {
+    --canvas:#0a1220; --surface:#0f1a2c; --surface-2:#14223a;
+    --border:#22334f; --border-strong:#30456a;
+    --ink:#e7edf8; --muted:#9aa8c0; --faint:#8291ab;
+    --accent:#5b8def; --accent-strong:#7aa6f5; --accent-ink:#08121f;
+    --accent-soft:#152743; --accent-soft-border:#2a4576;
+    --ok:#4ec27a; --ok-soft:#122a1c; --ok-border:#1f4a30; --ok-ink:#8fe0a9;
+    --warn:#e2a03a; --warn-soft:#2a2110; --warn-border:#4d3a17; --warn-ink:#f0c274;
+    --danger:#e5675e; --danger-soft:#2a1513; --danger-border:#552420; --danger-ink:#f2a39c;
+    --chrome-bg:#070e1a; --chrome-bg-2:#0c1728; --chrome-ink:#eef3fc; --chrome-muted:#8194b4;
+    --chrome-border:#1b2b47; --chrome-hover:rgba(255,255,255,.06); --chrome-abg:rgba(91,141,239,.16);
+    --chrome-aink:#cfe0fb; --chrome-aborder:#2f4d7e;
+    --code-bg:#0c1626; --code-ink:#c7d3e6; --code-ln:#4d5f7d;
+    --shadow-sm:0 1px 2px rgba(0,0,0,.4); --shadow-md:0 8px 26px -12px rgba(0,0,0,.6);
+  }
+
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--canvas); color:var(--ink); font-family:var(--sans); font-size:15px; line-height:1.5; -webkit-font-smoothing:antialiased; }
+  h1,h2,h3,h4 { margin:0; font-weight:650; letter-spacing:-.011em; text-wrap:balance; }
+  p { margin:0; }
+  button { font-family:inherit; cursor:pointer; }
+  :focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+  .sr-only { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
+  .mono { font-family:var(--mono); font-variant-numeric:tabular-nums; }
+  .eyebrow { font-size:11px; font-weight:700; letter-spacing:.13em; text-transform:uppercase; color:var(--faint); }
+
+  /* ---------- shell ---------- */
+  .shell { display:grid; grid-template-columns:238px minmax(0,1fr); grid-template-rows:auto 1fr; min-height:100vh; }
+  .topbar { grid-column:1 / -1; position:sticky; top:0; z-index:40; background:var(--chrome-bg); color:var(--chrome-ink);
+    display:flex; align-items:center; gap:18px; padding:12px 22px; border-bottom:1px solid var(--chrome-border); }
+  .brand { display:flex; align-items:center; gap:11px; }
+  .brand svg { width:29px; height:29px; display:block; }
+  .brand .wm { font-weight:700; letter-spacing:.22em; font-size:15px; }
+  .brand .sub { color:var(--chrome-muted); font-size:11px; letter-spacing:.05em; border-left:1px solid var(--chrome-border); padding-left:11px; }
+  .spacer { flex:1; }
+  .ctx-chip { display:inline-flex; align-items:center; gap:7px; background:var(--chrome-bg-2); border:1px solid var(--chrome-border);
+    color:var(--chrome-ink); padding:5px 10px; border-radius:999px; font-size:12px; white-space:nowrap; }
+  .ctx-chip .k { color:var(--chrome-muted); }
+  .ctx-chip .dot { width:6px; height:6px; border-radius:50%; }
+  .iconbtn { display:inline-flex; align-items:center; gap:7px; background:transparent; color:var(--chrome-ink);
+    border:1px solid var(--chrome-border); border-radius:8px; padding:6px 11px; font-size:12.5px; }
+  .iconbtn:hover { background:var(--chrome-hover); }
+  .sidenav { grid-column:1; grid-row:2; position:sticky; top:54px; align-self:start; max-height:calc(100vh - 54px); overflow-y:auto;
+    background:var(--chrome-bg-2); border-right:1px solid var(--chrome-border); color:var(--chrome-ink); padding:16px 10px 30px; }
+  .content { grid-column:2; grid-row:2; min-width:0; }
+  .navgroup { margin-bottom:14px; }
+  .navgroup .gl { font-size:9.5px; font-weight:700; letter-spacing:.11em; text-transform:uppercase; color:var(--chrome-muted); padding:0 10px; margin-bottom:6px; }
+  .navitem { display:flex; align-items:center; gap:10px; width:100%; text-align:left; background:transparent; border:1px solid transparent;
+    border-radius:9px; padding:9px 11px; color:var(--chrome-muted); font-size:13.5px; font-weight:600; white-space:nowrap; }
+  .navitem:hover { background:var(--chrome-hover); color:var(--chrome-ink); }
+  .navitem.active { background:var(--chrome-abg); color:var(--chrome-aink); border-color:var(--chrome-aborder); }
+  .navitem .ic { width:17px; height:17px; flex:none; opacity:.9; }
+  .navitem .ic svg { width:17px; height:17px; display:block; }
+
+  .surfwrap { max-width:1220px; margin:0 auto; padding:24px 24px 70px; }
+  .surfhead { margin-bottom:14px; }
+  .h2 { font-size:22px; margin-bottom:5px; }
+  .lede { color:var(--muted); font-size:14px; max-width:78ch; }
+  .cap { font-size:12px; color:var(--faint); margin-top:8px; max-width:96ch; }
+  .subsec { margin-top:22px; }
+
+  /* ---------- components ---------- */
+  .card { background:var(--surface); border:1px solid var(--border); border-radius:var(--r-lg); box-shadow:var(--shadow-sm); }
+  .card-h { display:flex; align-items:center; gap:10px; padding:13px 16px; border-bottom:1px solid var(--border); }
+  .card-h h3 { font-size:14px; }
+  .card-b { padding:16px 18px; }
+
+  .badge { display:inline-flex; align-items:center; gap:6px; font-size:11px; font-weight:700; padding:2px 9px; border-radius:999px; white-space:nowrap; }
+  .badge.ok { background:var(--ok-soft); color:var(--ok-ink); border:1px solid var(--ok-border); }
+  .badge.warn { background:var(--warn-soft); color:var(--warn-ink); border:1px solid var(--warn-border); }
+  .badge.danger { background:var(--danger-soft); color:var(--danger-ink); border:1px solid var(--danger-border); }
+  .badge.info { background:var(--accent-soft); color:var(--accent); border:1px solid var(--accent-soft-border); }
+  .badge.neutral { background:var(--surface-2); color:var(--muted); border:1px solid var(--border); }
+
+  .cls { font-size:10px; font-weight:800; padding:2px 7px; border-radius:5px; letter-spacing:.03em; text-transform:uppercase; white-space:nowrap; }
+  .cls.public { background:var(--ok-soft); color:var(--ok-ink); border:1px solid var(--ok-border); }
+  .cls.internal { background:var(--accent-soft); color:var(--accent); border:1px solid var(--accent-soft-border); }
+  .cls.confidential { background:var(--warn-soft); color:var(--warn-ink); border:1px solid var(--warn-border); }
+  .cls.restricted { background:var(--danger-soft); color:var(--danger-ink); border:1px solid var(--danger-border); }
+
+  .ctl { display:inline-flex; align-items:center; gap:6px; font-family:var(--mono); font-size:11.5px; font-weight:700;
+    padding:2px 8px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--muted); white-space:nowrap; }
+  .ctl .st { width:7px; height:7px; border-radius:50%; background:var(--faint); flex:none; }
+  .ctl.pass { background:var(--ok-soft); border-color:var(--ok-border); color:var(--ok-ink); }
+  .ctl.pass .st { background:var(--ok); }
+  .ctl.fired { background:var(--warn-soft); border-color:var(--warn-border); color:var(--warn-ink); }
+  .ctl.fired .st { background:var(--warn); }
+  .ctl.block { background:var(--danger-soft); border-color:var(--danger-border); color:var(--danger-ink); }
+  .ctl.block .st { background:var(--danger); }
+  button.ctl { cursor:pointer; }
+  button.ctl:hover { border-color:var(--accent); }
+
+  .metrics { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; }
+  .metric { background:var(--surface); border:1px solid var(--border); border-radius:var(--r-md); padding:14px 15px; }
+  .metric .mv { font-size:26px; font-weight:700; font-variant-numeric:tabular-nums; line-height:1.05; font-family:var(--mono); }
+  .metric .mv .of { font-size:15px; color:var(--muted); font-weight:600; }
+  .metric .ml { font-size:11.5px; font-weight:700; color:var(--muted); margin-top:6px; text-transform:uppercase; letter-spacing:.04em; }
+  .metric .md { font-size:11px; color:var(--faint); margin-top:5px; line-height:1.45; }
+  .metric .md b { color:var(--muted); font-weight:700; }
+
+  /* filter bar */
+  .filters { background:var(--surface); border:1px solid var(--border); border-radius:var(--r-md); padding:13px 14px; margin-top:16px; }
+  .seg { display:flex; gap:0; border:1px solid var(--border-strong); border-radius:var(--r-sm); overflow:hidden; width:100%; }
+  .seg button { flex:1; background:var(--surface); border:0; border-right:1px solid var(--border); padding:8px 10px;
+    font-size:13px; font-weight:600; color:var(--muted); }
+  .seg button:last-child { border-right:0; }
+  .seg button:hover { background:var(--surface-2); color:var(--ink); }
+  .seg button.on { background:var(--accent-soft); color:var(--accent); }
+  .frow { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-top:10px; }
+  .fld label { display:block; font-size:10.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--faint); margin-bottom:4px; }
+  .fld select { width:100%; font-family:inherit; font-size:13px; color:var(--ink); background:var(--surface);
+    border:1px solid var(--border-strong); border-radius:var(--r-sm); padding:7px 8px; }
+  .fbar-foot { display:flex; align-items:center; gap:10px; margin-top:10px; }
+  .fbar-foot .n { font-size:12px; color:var(--faint); margin-left:auto; }
+  .btn { background:var(--surface); border:1px solid var(--border-strong); border-radius:var(--r-sm); padding:6px 12px; font-size:12.5px; color:var(--ink); }
+  .btn:hover { border-color:var(--accent); }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:var(--accent-ink); }
+
+  /* table */
+  .tbl-wrap { margin-top:14px; border:1px solid var(--border); border-radius:var(--r-md); overflow:hidden; background:var(--surface); }
+  .tbl-scroll { overflow-x:auto; }
+  table.gv { border-collapse:collapse; font-size:13px; width:100%; min-width:1060px; }
+  .sub2 { display:block; font-size:10.5px; color:var(--faint); margin-top:2px; font-weight:400; }
+  table.gv th { text-align:left; font-size:10.5px; letter-spacing:.05em; text-transform:uppercase; color:var(--muted);
+    background:var(--surface-2); padding:9px 9px; border-bottom:1px solid var(--border); font-weight:700; white-space:nowrap; }
+  table.gv td { padding:9px 8px; border-bottom:1px solid var(--border); vertical-align:middle; }
+  table.gv tbody tr:last-child td { border-bottom:0; }
+  table.gv tbody tr { cursor:pointer; }
+  table.gv tbody tr:hover td { background:var(--surface-2); }
+  table.gv tbody tr.rowbad td { background:var(--danger-soft); }
+  table.gv tbody tr.rowbad:hover td { filter:brightness(.98); }
+  table.gv tbody tr.sel td { background:var(--accent-soft); }
+  table.gv tbody tr.sel td:first-child { box-shadow:inset 3px 0 0 var(--accent); }
+  .rid { font-family:var(--mono); font-size:12px; color:var(--accent); font-weight:700; }
+  .when { font-family:var(--mono); font-size:12px; white-space:nowrap; }
+  .when .org { display:block; font-size:10px; color:var(--faint); font-weight:400; letter-spacing:.02em; }
+  .who { font-size:12.5px; white-space:nowrap; }
+  .who .rl { display:block; font-size:10.5px; color:var(--faint); }
+  .refln { font-family:var(--mono); font-size:12px; color:var(--muted); }
+  .dsc { display:flex; align-items:center; gap:6px; white-space:nowrap; }
+  .dsc .dn { font-family:var(--mono); font-size:12px; }
+  .caught { display:flex; gap:5px; flex-wrap:wrap; align-items:center; }
+  .caught .more { font-size:11px; color:var(--faint); }
+  .clean { font-size:12px; color:var(--faint); }
+  .struck { text-decoration:line-through; color:var(--danger-ink); }
+  .stop { font-family:var(--mono); font-size:12px; }
+
+  /* detail */
+  .detail { margin-top:16px; border:1px solid var(--border-strong); border-radius:var(--r-lg); background:var(--surface); box-shadow:var(--shadow-md); overflow:hidden; }
+  .dhead { display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:14px 18px; background:var(--surface-2); border-bottom:1px solid var(--border); }
+  .dhead .x { margin-left:auto; }
+  .dblock { padding:16px 18px; border-bottom:1px solid var(--border); }
+  .dblock:last-child { border-bottom:0; }
+  .dblock > .eyebrow { display:block; margin-bottom:10px; }
+  .idline { display:flex; gap:8px; flex-wrap:wrap; align-items:center; font-size:12.5px; }
+  .idline .kv { color:var(--faint); }
+  .idline .kv b { color:var(--ink); font-family:var(--mono); font-weight:700; }
+
+  .scope { border-left:3px solid var(--accent); background:var(--surface-2); border-radius:0 var(--r-sm) var(--r-sm) 0; padding:11px 14px; }
+  .scope + .scope { margin-top:9px; }
+  .scope.bad { border-left-color:var(--danger); }
+  .scope.good { border-left-color:var(--ok); }
+  .scope .lbl { font-size:10.5px; font-weight:800; letter-spacing:.1em; text-transform:uppercase; color:var(--faint); margin-bottom:4px; }
+  .scope .bd { font-size:13px; }
+  .scope .sub { font-size:11.5px; color:var(--faint); margin-top:5px; font-style:italic; }
+
+  .tl { display:flex; flex-direction:column; }
+  .tl-row { display:grid; grid-template-columns:26px 1.6fr 1fr 60px minmax(0,1.5fr); gap:10px; align-items:center;
+    padding:8px 10px; border-radius:var(--r-sm); font-size:13px; }
+  .tl-row + .tl-row { margin-top:2px; }
+  .tl-row.blocked { background:var(--danger-soft); }
+  .tl-row.skipped { color:var(--faint); }
+  .tl-row.skipped .nm { text-decoration:line-through; }
+  .tl-row .g { width:19px; height:19px; border-radius:50%; display:grid; place-items:center; font-size:11px; font-weight:800; }
+  .g.ok { background:var(--ok-soft); color:var(--ok-ink); border:1px solid var(--ok-border); }
+  .g.blocked { background:var(--danger-soft); color:var(--danger-ink); border:1px solid var(--danger-border); }
+  .g.skipped { background:var(--surface-2); color:var(--faint); border:1px solid var(--border); }
+  .g.gate { background:var(--accent-soft); color:var(--accent); border:1px solid var(--accent-soft-border); }
+  .tl-row .ag { font-family:var(--mono); font-size:11.5px; color:var(--muted); }
+  .tl-row .ec { font-family:var(--mono); font-size:11.5px; color:var(--faint); text-align:right; }
+
+  table.ev { border-collapse:collapse; font-size:12px; width:100%; min-width:900px; font-family:var(--mono); }
+  table.ev th { text-align:left; font-size:10px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted);
+    background:var(--surface-2); padding:7px 10px; border-bottom:1px solid var(--border); font-weight:700; font-family:var(--sans); white-space:nowrap; }
+  table.ev td { padding:6px 10px; border-bottom:1px solid var(--border); vertical-align:top; }
+  table.ev tbody tr.lv-blocked td { background:var(--danger-soft); }
+  table.ev tbody tr.lv-redaction td { background:var(--warn-soft); }
+  table.ev tbody tr.lv-gate td { background:var(--accent-soft); }
+  table.ev .sm { color:var(--muted); font-family:var(--sans); font-size:12px; }
+  table.ev .dt { color:var(--faint); font-size:11px; }
+  .lvl { font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:.04em; }
+  .lvl.blocked { color:var(--danger-ink); } .lvl.redaction { color:var(--warn-ink); }
+  .lvl.gate { color:var(--accent); } .lvl.info { color:var(--faint); }
+  .seqcap { font-size:11.5px; color:var(--faint); margin-bottom:8px; display:flex; align-items:center; gap:8px; }
+  .seqcap .ok { color:var(--ok-ink); font-weight:700; }
+
+  .note { display:flex; gap:10px; align-items:flex-start; border-radius:var(--r-sm); padding:10px 13px; font-size:12.5px; border:1px solid; }
+  .note .m { flex:none; font-weight:800; }
+  .note.info { background:var(--accent-soft); border-color:var(--accent-soft-border); color:var(--accent); }
+  .note.warn { background:var(--warn-soft); border-color:var(--warn-border); color:var(--warn-ink); }
+  .note.danger { background:var(--danger-soft); border-color:var(--danger-border); color:var(--danger-ink); }
+  .exports { display:flex; gap:9px; flex-wrap:wrap; align-items:center; }
+
+  /* popover */
+  .pop { position:fixed; z-index:80; max-width:400px; background:var(--surface); border:1px solid var(--border-strong);
+    border-radius:var(--r-md); box-shadow:var(--shadow-md); padding:13px 15px; font-size:12.5px; display:none; }
+  .pop.show { display:block; }
+  .pop h4 { font-family:var(--mono); font-size:12px; margin-bottom:6px; color:var(--accent); }
+  .pop .r { margin-top:7px; }
+  .pop .r .k { font-size:10px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); }
+
+  .mocknote { max-width:1180px; margin:0 auto; padding:0 30px 40px; }
+  .mocknote .card-b { font-size:12.5px; color:var(--muted); }
+  .mocknote ul { margin:8px 0 0; padding-left:18px; }
+  .mocknote li { margin-bottom:5px; }
+  @media (max-width:1080px){ .metrics { grid-template-columns:repeat(2,1fr); } .frow { grid-template-columns:repeat(2,1fr); } }
+</style>
+</head>
+<body>
+<div class="shell">
+  <div class="topbar">
+    <div class="brand">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 4 5v6c0 5 3.4 8.5 8 11 4.6-2.5 8-6 8-11V5z" fill="#2f6fd0"/><path d="M8 12l3 3 5-6" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span class="wm">SENTINEL</span>
+      <span class="sub">Governed Agentic Analysis</span>
+    </div>
+    <div class="spacer"></div>
+    <span class="ctx-chip"><span class="dot" style="background:#5fdc8a"></span><span class="k">Internal Auditor</span> read-only</span>
+    <button class="iconbtn" onclick="toggleTheme()" aria-label="Toggle theme" id="themebtn">&#9681;</button>
+  </div>
+
+  <nav class="sidenav" aria-label="Sections">
+    <div class="navgroup">
+      <button class="navitem"><span class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 10v10h14V10"/></svg></span>Overview</button>
+    </div>
+    <div class="navgroup">
+      <div class="gl">Workspace</div>
+      <button class="navitem"><span class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4l14 8-14 8z"/></svg></span>Run</button>
+      <button class="navitem"><span class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="2.2"/><circle cx="6" cy="19" r="2.2"/><circle cx="18" cy="19" r="2.2"/><path d="M12 7.2v4.3M12 11.5H6.5v5.3M12 11.5h5.5v5.3"/></svg></span>Pipeline</button>
+      <button class="navitem"><span class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg></span>Analyses</button>
+    </div>
+    <div class="navgroup">
+      <div class="gl">Governance</div>
+      <button class="navitem"><span class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="6" rx="7.5" ry="3"/><path d="M4.5 6v12c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3V6"/><path d="M4.5 12c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3"/></svg></span>Datasets</button>
+      <button class="navitem"><span class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7.5 3v6c0 4.5-3 8-7.5 9.5C7.5 20 4.5 16.5 4.5 12V6z"/><path d="M9 12l2.2 2.2L15.5 10"/></svg></span>Registry</button>
+    </div>
+    <div class="navgroup">
+      <div class="gl">Platform</div>
+      <button class="navitem"><span class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></svg></span>Platform</button>
+      <button class="navitem"><span class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V11M10 20V5M16 20v-6M22 20H2"/></svg></span>Adoption</button>
+      <button class="navitem active" aria-current="page"><span class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l5-2.5 5 2.5"/><path d="M3 8.5 1.5 13a3.2 3.2 0 0 0 6.2 0z"/><path d="M13 8.5 11.5 13a3.2 3.2 0 0 0 6.2 0z" transform="translate(3.5)"/><path d="M8 6v14"/><path d="M4.5 20h7"/></svg></span>Audit Log</button>
+    </div>
+  </nav>
+
+  <div class="content">
+  <h1 class="sr-only">Sentinel — Audit Log</h1>
+  <div class="surfwrap">
+
+    <div class="surfhead">
+      <h2 class="h2">Audit log</h2>
+      <p class="lede">Every run the platform has executed, every step inside it, everything a control refused, and who signed off. Append-only; nothing here is editable from the app.</p>
+      <p class="cap">24 runs on file: 19 seeded demo runs plus 5 seeded refusal runs, all executed for real by <span class="mono">scripts/seed_runs.py</span> and committed to <span class="mono">sentinel/data/seed_runs.jsonl</span> and <span class="mono">seed_audit.jsonl</span>, plus runs from this session labelled <b>live</b>. Refusal density is a seeding choice, stated so the ledger is not read as a natural rate. Live runs are written to <span class="mono">runtime/</span>, which is gitignored and excluded from the deploy bundle, so they do not survive a restart; seeded runs ship with the build.</p>
+    </div>
+
+    <div class="metrics">
+      <div class="metric">
+        <div class="mv">24</div>
+        <div class="ml">Runs logged</div>
+        <div class="md">24 seeded, 0 this session. 249 committed events across 4 run kinds.</div>
+      </div>
+      <div class="metric">
+        <div class="mv">9 <span class="of">of 24</span></div>
+        <div class="ml">Runs with a refusal</div>
+        <div class="md"><b>6 stopped outright</b> (the run ended at a control). <b>3 completed with something withheld</b> (a column denied, a cell suppressed, a value redacted).</div>
+      </div>
+      <div class="metric">
+        <div class="mv">3 <span class="of">of 5</span></div>
+        <div class="ml">Four-eyes coverage</div>
+        <div class="md">Of runs that reached a human gate, 3 were signed by someone other than the author. Two were self-approvals, refused and counted as refusals rather than coverage: one for lacking authority, one by CTL-SOD-01.</div>
+      </div>
+      <div class="metric">
+        <div class="mv">13 <span class="of">of 32</span></div>
+        <div class="ml">Distinct controls fired</div>
+        <div class="md">Against the catalogue's resolvable id space. 15 of the 32 are documented but not yet implemented, so this ratio is not a coverage failure.</div>
+      </div>
+    </div>
+
+    <div class="filters">
+      <div class="seg" role="group" aria-label="Posture filter">
+        <button class="on" data-posture="all" onclick="setPosture(this)">All runs</button>
+        <button data-posture="refusals" onclick="setPosture(this)">Refusals only</button>
+        <button data-posture="approvals" onclick="setPosture(this)">Approval decisions</button>
+      </div>
+      <div class="frow">
+        <div class="fld"><label for="f-kind">Kind</label><select id="f-kind" onchange="applyFilters()"><option value="">All kinds</option><option>analysis</option><option>credit risk</option><option>govflow</option><option>L3</option></select></div>
+        <div class="fld"><label for="f-who">Ran by</label><select id="f-who" onchange="applyFilters()">
+          <option value="">Anyone</option>
+          <optgroup label="People (personas)"><option>Data Scientist / Analyst</option><option>Platform Admin</option><option>MRM Approver</option><option>Internal Auditor</option></optgroup>
+          <optgroup label="System components, not people"><option disabled>orchestrator</option><option disabled>analysis_engine</option></optgroup>
+        </select></div>
+        <div class="fld"><label for="f-ds">Dataset</label><select id="f-ds" onchange="applyFilters()"><option value="">All datasets</option><option>german_credit</option><option>uci_taiwan_credit</option><option>berka</option><option>ulb_fraud</option><option>hillstrom</option><option>lendingclub</option><option>uci_bank_marketing</option><option>synthetic_its</option></select></div>
+        <div class="fld"><label for="f-ctl">Control</label><select id="f-ctl" onchange="applyFilters()"><option value="">Any control</option><option>CTL-SOD-01 (1 run)</option><option>CTL-EGRESS-01 (2 runs)</option><option>CTL-DISC-01 (1 run)</option><option>CTL-DISC-02 (1 run)</option><option>CTL-PROXY-01 (1 run)</option><option>CTL-TIME-01 (1 run)</option><option>tier_block (1 run)</option><option>approval_denied (2 runs)</option><option>approval_decision (3 runs)</option><option>rbac_access_denied (5 runs)</option><option>pii_redacted (5 runs)</option><option>eval_gate (2 runs)</option></select></div>
+      </div>
+      <div class="fbar-foot">
+        <button class="btn" onclick="clearFilters()">Clear filters</button>
+        <span class="n" id="showing">showing 23 of 23 runs</span>
+      </div>
+    </div>
+
+    <div class="tbl-wrap">
+      <div class="tbl-scroll">
+        <table class="gv">
+          <thead><tr>
+            <th>When</th><th>Run / analysis</th><th>Kind</th><th>Dataset</th>
+            <th>Ran by</th><th>Second signature</th><th>Outcome</th><th>Caught</th>
+          </tr></thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+    </div>
+    <p class="cap" id="tblcap">Newest first, fixed sort. Seeded rows carry the demo timeline date; live rows carry real execution time. Capped at 50 rows.</p>
+
+    <div id="detail"></div>
+  </div>
+
+  <div class="mocknote">
+    <div class="card"><div class="card-h"><h3>About this mockup</h3><span class="eyebrow" style="margin-left:auto">not built</span></div>
+    <div class="card-b">
+      Static mockup for <span class="mono">docs/features/audit-log.md</span>. Every run, step and event below is generated from the committed corpus (<span class="mono">sentinel/data/seed_runs.jsonl</span> + <span class="mono">seed_audit.jsonl</span>) via <span class="mono">sentinel/platform/audit_store.py</span>. Nothing is hand-written. The five refusal runs are real executions of existing code paths.
+      <ul>
+        <li>Click any row to open its detail block. Click a control chip to see what it is.</li>
+        <li>The posture segmented control and the four selectors filter the table live.</li>
+        <li>Theme toggle top right; the screen is specified for light and dark.</li>
+        <li>What the screen deliberately does not have: date range, free-text search, pagination, a hash-chain integrity claim, or a tokens/cost column. Reasons are in the feature doc.</li>
+      </ul>
+    </div></div>
+  </div>
+  </div>
+</div>
+
+<div class="pop" id="pop" role="dialog" aria-label="Control explanation"></div>
+
+<script>
+/* ---------------- data ----------------
+   24 runs, verbatim from the committed corpus. 19 are the original demo
+   timeline; 5 are refusal runs added to the seeder plan, each a real
+   execution of an existing code path. */
+const CLS = { german_credit:'restricted', uci_taiwan_credit:'restricted', berka:'confidential',
+  ulb_fraud:'confidential', hillstrom:'internal', lendingclub:'internal',
+  uci_bank_marketing:'internal', synthetic_its:'public' };
+
+const P = {
+  analyst:   { name:'Data Scientist / Analyst', role:'First line, certified',    short:'Analyst',        srole:'certified' },
+  junior:    { name:'Junior Analyst',           role:'First line, uncertified',  short:'Junior Analyst', srole:'uncertified' },
+  admin:     { name:'Platform Admin',           role:'Platform, sandbox waiver', short:'Platform Admin', srole:'sandbox waiver' },
+  mrm:       { name:'MRM Approver',             role:'Second line (MRM), promotion authority', short:'MRM Approver', srole:'second line' },
+  auditor:   { name:'Internal Auditor',         role:'Third line, read-only',    short:'Internal Auditor', srole:'third line' },
+  validator: { name:'Model Validator',          role:'Second line (MRM)',        short:'Model Validator',  srole:'second line' },
+};
+
+const CTLINFO = {
+  'CTL-SOD-01':      { t:'Segregation of duties (four-eyes)', w:'The approver may not be the author of the run being approved.', h:'Enforced by identity comparison in Orchestrator.approve(): actor.id was equal to RunState.started_by, and the actor does hold promotion authority, so the role check passed and this caught it.', d:'Approval refused. The run was left awaiting an independent approver. This is a single-signature control: Sentinel has no quorum or second-signature state anywhere.' },
+  'approval_denied': { t:'Promotion authority (role check)', w:'Only a persona holding promotion authority may approve a model at the human gate.', h:"The run's author does not hold can_approve, so approval was refused on the role check.", d:'Approval refused and the run left awaiting. Note this is NOT CTL-SOD-01: approve() tests authority first, so the four-eyes check was never reached. Only the SoD refusal stamps a control id.' },
+  'CTL-EGRESS-01':   { t:'Egress control', w:'Generated code may not write outside the sandbox or transmit data off-platform.', h:'The static AST gate found a network call in the generated code before anything ran.', d:'Code refused at the Gate. Execute, Screen, Interpret and Attest recorded skipped.' },
+  'tier_block':      { t:'Autonomy tier resolution', w:'tier = min(ceiling(data classification), ceiling(role, attestations)). Only a certified data scientist rises above L1.', h:'The Internal Auditor is read-only and resolves to L0 on this dataset, which is explain-only and may not run an analysis.', d:'Run refused at Ask. Every downstream stage recorded skipped, not silently omitted. No control id is stamped on this event, so the ledger shows the action string, which is genuinely all the record holds.' },
+  'approval_requested': { t:'Human promotion gate', w:'The pipeline pauses after a model is proposed and waits for a person.', h:'The Modeler proposed a model; the graph interrupted.', d:'Run held at awaiting_approval until someone with authority decides.' },
+  'CTL-DISC-01':     { t:'Small-cell suppression', w:'Group results below the minimum cell count are suppressed, not published.', h:'Two age bands fell below the floor of 20.', d:'Rows suppressed and shown struck through, never deleted from the output.' },
+  'CTL-DISC-02':     { t:'Complementary suppression', w:'Additional cells are suppressed where a suppressed value could be recovered by subtraction.', h:'One further band was recoverable from the row total.', d:'One extra cell suppressed.' },
+  'CTL-PROXY-01':    { t:'Proxy-variable screen', w:'Features correlated with a protected attribute above threshold are flagged.', h:'One feature exceeded the proxy correlation threshold against age band.', d:'Flagged for the validator. The run continued.' },
+  'CTL-TIME-01':     { t:'Pre-period integrity', w:'A causal design may not use post-treatment data in the pre-period window.', h:'The requested window overlapped the intervention date.', d:'Window truncated to the valid pre-period. The run continued on the corrected window.' },
+  'rbac_access_denied': { t:'RBAC column allow-list', w:'An agent may only read columns on its allow-list.', h:"The Profiler requested personal_status_sex, a proxy for sex, which is not on its allow-list.", d:'Column denied. The run continued without it, and the denial is on the record.' },
+  'pii_redacted':    { t:'PII redaction', w:'Detected PII is redacted before any text reaches a model.', h:'One email address was found in a sample note.', d:'Value redacted before narration. The run continued.' },
+  'eval_gate':       { t:'Eval gate', w:'Golden-set checks must pass before a model may be promoted.', h:'6 of 6 checks passed.', d:'Promotion allowed.' },
+  'approval_decision': { t:'Human promotion gate', w:'The pipeline pauses after a model is proposed; a person with promotion authority approves or rejects.', h:'MRM Approver decided at the gate.', d:'Decision recorded with actor, timestamp and policy version.' },
+};
+
+const R = [];
+function run(o){ R.push(o); }
+
+/* Generated from the committed corpus (sentinel/data/seed_runs.jsonl +
+   seed_audit.jsonl) by the audit_store reader. 24 runs, 249 events.
+   Every field is a real execution's output. Regenerate, do not hand-edit. */
+run({"when": "Jul 19 16:20", "id": "e2694026ad0c", "kind": "L3", "ref": "causal_impact", "ds": "synthetic_its", "by": "admin", "eyes": "na", "outcome": "refused", "raw": "blocked_at_gate", "approver": "", "stopped": "Gate", "caught": ["CTL-EGRESS-01"], "origin": "seeded", "nev": 4, "steps": [["Ask", "ok", "ask", 0, ""], ["Plan", "ok", "plan", 0, ""], ["Access", "ok", "access", 0, ""], ["Generate", "ok", "generate", 0, ""], ["Gate", "blocked", "gate", 2, "CTL-EGRESS-01"], ["Execute", "skipped", "execute", 0, ""], ["Screen", "skipped", "screen", 0, ""], ["Interpret", "skipped", "interpret", 0, ""], ["Attest", "skipped", "attest", 0, ""]], "tier": "L3", "events": [[0, "07:36:51", "l3", "admin", "ask", "info", "", "tier resolved L3: Public data allows up to L3; data_scientist with ['certified_analyst', 'sandbox_waiver'] allows up to L3. The request lands at L3 (bound by both, equally)."], [1, "07:36:51", "l3", "admin", "access", "info", "date, intervention, control, metric", "Public dataset; 4 columns granted"], [2, "07:36:51", "gate", "admin", "gate_block", "blocked", "", "CTL-EGRESS-01 (line 1): network egress is not permitted; no network module may be referenced -- import requests"], [3, "07:36:51", "gate", "admin", "gate_block", "blocked", "", "CTL-EGRESS-01 (line 3): network egress is not permitted; no network module may be referenced -- requests"]]});
+run({"when": "Jul 19 14:30", "id": "fcae33bc0807", "kind": "credit risk", "ref": "build_model", "ds": "german_credit", "by": "mrm", "eyes": "sod", "outcome": "awaiting", "raw": "awaiting_approval", "approver": "", "stopped": "Modeler", "caught": ["rbac_access_denied", "pii_redacted", "CTL-SOD-01"], "origin": "seeded", "nev": 14, "steps": [["Data Profiler", "done", "profiler", 4, ""], ["EDA / Feature", "done", "eda", 4, ""], ["Modeler", "awaiting_approval", "modeler", 4, ""]], "tier": "", "events": [[0, "07:36:51", "orchestrator", "orchestrator", "run_started", "info", "", "all controls active"], [1, "07:36:51", "profiler", "profiler", "agent_started", "info", "", "runtime instantiated Data Profiler; template=data_analysis; tools=[read_columns, profile_dataset]; rbac=structural columns; PII and proxies withheld"], [2, "07:36:51", "profiler", "profiler", "rbac_access_denied", "blocked", "personal_status_sex", "Denied access to 1 column(s): personal_status_sex"], [3, "07:36:51", "profiler", "profiler", "profiled", "info", "checking_status, duration_months, credit_history, purpose, c", "1000 rows, default rate 0.300 (class imbalance present)"], [4, "07:36:51", "profiler", "profiler", "agent_finished", "info", "", "Data Profiler lifecycle complete"], [5, "07:36:51", "eda", "eda", "agent_started", "info", "", "runtime instantiated EDA / Feature; template=data_analysis; tools=[read_columns, profile_dataset]; rbac=structural columns; PII and proxies withheld"], [6, "07:36:51", "eda", "eda", "pii_redacted", "redaction", "email", "Redacted 1 PII item(s): emailx1"], [7, "07:36:51", "eda", "eda", "eda_reviewed", "info", "", "Protected attribute 'age_band' marked for exclusion. Sample note scrubbed: Example applicant [REDACTED_EMAIL] (age band 60+) illustrates the join key."], [8, "07:36:51", "eda", "eda", "agent_finished", "info", "", "EDA / Feature lifecycle complete"], [9, "07:36:51", "modeler", "modeler", "agent_started", "info", "", "runtime instantiated Modeler; template=modeling; tools=[read_columns, train_model]; rbac=features only; cannot validate its own model"], [10, "07:36:51", "modeler", "modeler", "model_trained", "info", "", "AUC 0.8018, accuracy 0.756"], [11, "07:36:51", "modeler", "modeler", "approval_requested", "gate", "", "Model proposed; awaiting human approval before promotion."], [12, "07:36:51", "modeler", "modeler", "agent_finished", "info", "", "Modeler lifecycle complete"], [13, "07:36:51", "human_reviewer", "mrm_approver", "approval_denied", "blocked", "", "CTL-SOD-01: segregation of duties. Approver 'MRM Approver' is the author of this run (started_by='mrm_approver'); self-approval refused. Requires an independent approver."]]});
+run({"when": "Jul 19 11:05", "id": "2cb39bf6c399", "kind": "credit risk", "ref": "build_model", "ds": "german_credit", "by": "analyst", "eyes": "authority", "outcome": "awaiting", "raw": "awaiting_approval", "approver": "", "stopped": "Modeler", "caught": ["rbac_access_denied", "pii_redacted", "approval_denied"], "origin": "seeded", "nev": 14, "steps": [["Data Profiler", "done", "profiler", 4, ""], ["EDA / Feature", "done", "eda", 4, ""], ["Modeler", "awaiting_approval", "modeler", 4, ""]], "tier": "", "events": [[0, "07:36:51", "orchestrator", "orchestrator", "run_started", "info", "", "all controls active"], [1, "07:36:51", "profiler", "profiler", "agent_started", "info", "", "runtime instantiated Data Profiler; template=data_analysis; tools=[read_columns, profile_dataset]; rbac=structural columns; PII and proxies withheld"], [2, "07:36:51", "profiler", "profiler", "rbac_access_denied", "blocked", "personal_status_sex", "Denied access to 1 column(s): personal_status_sex"], [3, "07:36:51", "profiler", "profiler", "profiled", "info", "checking_status, duration_months, credit_history, purpose, c", "1000 rows, default rate 0.300 (class imbalance present)"], [4, "07:36:51", "profiler", "profiler", "agent_finished", "info", "", "Data Profiler lifecycle complete"], [5, "07:36:51", "eda", "eda", "agent_started", "info", "", "runtime instantiated EDA / Feature; template=data_analysis; tools=[read_columns, profile_dataset]; rbac=structural columns; PII and proxies withheld"], [6, "07:36:51", "eda", "eda", "pii_redacted", "redaction", "email", "Redacted 1 PII item(s): emailx1"], [7, "07:36:51", "eda", "eda", "eda_reviewed", "info", "", "Protected attribute 'age_band' marked for exclusion. Sample note scrubbed: Example applicant [REDACTED_EMAIL] (age band 60+) illustrates the join key."], [8, "07:36:51", "eda", "eda", "agent_finished", "info", "", "EDA / Feature lifecycle complete"], [9, "07:36:51", "modeler", "modeler", "agent_started", "info", "", "runtime instantiated Modeler; template=modeling; tools=[read_columns, train_model]; rbac=features only; cannot validate its own model"], [10, "07:36:51", "modeler", "modeler", "model_trained", "info", "", "AUC 0.8018, accuracy 0.756"], [11, "07:36:51", "modeler", "modeler", "approval_requested", "gate", "", "Model proposed; awaiting human approval before promotion."], [12, "07:36:51", "modeler", "modeler", "agent_finished", "info", "", "Modeler lifecycle complete"], [13, "07:36:51", "human_reviewer", "analyst", "approval_denied", "blocked", "", "Role 'Data Scientist / Analyst' lacks promotion authority; approval refused. Requires the MRM Approver."]]});
+run({"when": "Jul 18 15:35", "id": "2718c71a835f", "kind": "govflow", "ref": "fair_lending", "ds": "german_credit", "by": "auditor", "eyes": "na", "outcome": "refused", "raw": "blocked_at_gate", "approver": "", "stopped": "Ask", "caught": ["tier_block"], "origin": "seeded", "nev": 2, "steps": [["Ask", "blocked", "ask", 0, ""], ["Plan", "skipped", "plan", 0, ""], ["Access", "skipped", "access", 0, ""], ["Generate", "skipped", "generate", 0, ""], ["Gate", "skipped", "gate", 0, ""], ["Execute", "skipped", "execute", 0, ""], ["Screen", "skipped", "screen", 0, ""], ["Interpret", "skipped", "interpret", 0, ""], ["Attest", "skipped", "attest", 0, ""]], "tier": "L0", "events": [[0, "07:36:51", "govflow", "auditor", "ask", "info", "", "tier resolved L0: Restricted data allows up to L2; compliance_officer with no attestations allows up to L0. The request lands at L0 (bound by person)."], [1, "07:36:51", "govflow", "auditor", "tier_block", "blocked", "", "tier L0 is explain-only (L0); Internal Auditor may not run an analysis"]]});
+run({"when": "Jul 18 09:50", "id": "f8c65656f23b", "kind": "govflow", "ref": "fair_lending", "ds": "german_credit", "by": "analyst", "eyes": "na", "outcome": "refused", "raw": "blocked_at_gate", "approver": "", "stopped": "Gate", "caught": ["CTL-EGRESS-01"], "origin": "seeded", "nev": 4, "steps": [["Ask", "ok", "ask", 0, ""], ["Plan", "ok", "plan", 0, ""], ["Access", "ok", "access", 0, ""], ["Generate", "ok", "generate", 0, ""], ["Gate", "blocked", "gate", 1, "CTL-EGRESS-01"], ["Execute", "skipped", "execute", 0, ""], ["Screen", "skipped", "screen", 0, ""], ["Interpret", "skipped", "interpret", 0, ""], ["Attest", "skipped", "attest", 0, ""]], "tier": "L2", "events": [[0, "07:36:51", "govflow", "analyst", "ask", "info", "", "tier resolved L2: Restricted data allows up to L2; data_scientist with ['certified_analyst'] allows up to L2. The request lands at L2 (bound by both, equally)."], [1, "07:36:51", "govflow", "analyst", "plan", "info", "", "bound fair-lending v1.4 (certified); contract contract SHA 188808 matches current data"], [2, "07:36:51", "govflow", "analyst", "access", "info", "age_band, y, pred, credit_amount, duration_months, digital_e", "purpose fair_lending permitted; scoped view built: 6 granted columns"], [3, "07:36:51", "gate", "analyst", "gate_block", "blocked", "", "CTL-EGRESS-01 (line 10): network egress is not permitted; no network module may be referenced -- requests"]]});
+run({"when": "Jul 17 15:45", "id": "90edab270e4c", "kind": "L3", "ref": "causal_impact", "ds": "synthetic_its", "by": "admin", "eyes": "na", "outcome": "completed", "raw": "completed", "approver": "", "stopped": "", "caught": ["CTL-TIME-01"], "origin": "seeded", "nev": 4, "steps": [["Ask", "ok", "ask", 0, ""], ["Plan", "ok", "plan", 0, ""], ["Access", "ok", "access", 0, ""], ["Generate", "ok", "generate", 0, ""], ["Gate", "ok", "gate", 1, ""], ["Execute", "ok", "execute", 0, ""], ["Screen", "ok", "screen", 0, ""], ["Interpret", "ok", "interpret", 0, ""], ["Attest", "ok", "attest", 1, ""]], "tier": "L3", "events": [[0, "07:36:51", "l3", "admin", "ask", "info", "", "tier resolved L3: Public data allows up to L3; data_scientist with ['certified_analyst', 'sandbox_waiver'] allows up to L3. The request lands at L3 (bound by both, equally)."], [1, "07:36:51", "l3", "admin", "access", "info", "date, intervention, control, metric", "Public dataset; 4 columns granted"], [2, "07:36:51", "gate", "admin", "gate_pass", "gate", "", "L3 gate passed"], [3, "07:36:51", "attest", "admin", "evidence_pack", "info", "", "L3 evidence pack assembled (pending); 2 lineage event(s)"]]});
+run({"when": "Jul 17 10:10", "id": "efa6a503944a", "kind": "govflow", "ref": "fair_lending", "ds": "german_credit", "by": "analyst", "eyes": "na", "outcome": "completed", "raw": "completed", "approver": "", "stopped": "", "caught": ["CTL-DISC-02", "CTL-PROXY-01", "CTL-DISC-01"], "origin": "seeded", "nev": 9, "steps": [["Ask", "ok", "ask", 0, ""], ["Plan", "ok", "plan", 0, ""], ["Access", "ok", "access", 0, ""], ["Generate", "ok", "generate", 0, ""], ["Gate", "ok", "gate", 1, ""], ["Execute", "ok", "execute", 0, ""], ["Screen", "ok", "screen", 2, "CTL-DISC-01"], ["Interpret", "ok", "interpret", 1, ""], ["Attest", "ok", "attest", 1, ""]], "tier": "L2", "events": [[0, "07:36:48", "govflow", "analyst", "ask", "info", "", "tier resolved L2: Restricted data allows up to L2; data_scientist with ['certified_analyst'] allows up to L2. The request lands at L2 (bound by both, equally)."], [1, "07:36:48", "govflow", "analyst", "plan", "info", "", "bound fair-lending v1.4 (certified); contract contract SHA 188808 matches current data"], [2, "07:36:48", "govflow", "analyst", "access", "info", "age_band, y, pred, credit_amount, duration_months, digital_e", "purpose fair_lending permitted; scoped view built: 6 granted columns"], [3, "07:36:48", "gate", "analyst", "gate_pass", "gate", "", "gate passed on attempt 1"], [4, "07:36:51", "sandbox", "analyst", "execute_ok", "info", "", "ran in 2.25s (no network, wall-clock capped)"], [5, "07:36:51", "screen", "analyst", "cell_suppressed", "blocked", "", "suppressed cell band=71-75 (n=6 < 10)"], [6, "07:36:51", "screen", "analyst", "proxy_flagged", "blocked", "", "CTL-PROXY-01: 'digital_engagement_score' is a candidate proxy for 'age_band' (correlation_ratio=0.92). Flagged, not refused: business necessity is Legal's call."], [7, "07:36:51", "interpret", "analyst", "narration", "info", "", "faithful: narration grounded in screened result only"], [8, "07:36:51", "attest", "analyst", "evidence_pack", "info", "", "evidence pack assembled (pending signoff); 4 negative-statement clause(s); 2 OpenLineage event(s) emitted"]]});
+run({"when": "Jul 16 11:30", "id": "1f08bb5281ed", "kind": "analysis", "ref": "data_profiling", "ds": "uci_bank_marketing", "by": "analyst", "eyes": "na", "outcome": "completed", "raw": "completed", "approver": "", "stopped": "", "caught": [], "origin": "seeded", "nev": 10, "steps": [["Governed data access", "ok", "data_connector", 3, ""], ["Profile columns", "ok", "data_profiler", 2, ""], ["Quality expectation suite", "ok", "quality_checker", 2, ""]], "tier": "", "events": [[0, "07:36:48", "analysis_engine", "analyst", "run_started", "info", "", "params={'sample_rows': 10000, 'max_cardinality': 50, 'missing_threshold': 0.2, 'outlier_z': 4.0}"], [1, "07:36:48", "analysis_engine", "analysis_engine", "contract_check", "info", "", "contract satisfied"], [2, "07:36:48", "data_connector", "data_connector", "agent_started", "info", "", "Governed data access"], [3, "07:36:48", "data_connector", "data_connector", "data_access", "info", "uci_bank_marketing", "loaded 'uci_bank_marketing': 20,000 rows x 21 cols"], [4, "07:36:48", "data_connector", "data_connector", "agent_finished", "info", "", "loaded 'uci_bank_marketing': 20,000 rows x 21 cols"], [5, "07:36:48", "data_profiler", "data_profiler", "agent_started", "info", "", "Profile columns"], [6, "07:36:48", "data_profiler", "data_profiler", "agent_finished", "info", "", "10,000 rows x 21 cols; 2 duplicate rows; target minority 11.3%"], [7, "07:36:48", "quality_checker", "quality_checker", "agent_started", "info", "", "Quality expectation suite"], [8, "07:36:48", "quality_checker", "quality_checker", "agent_finished", "info", "", "5/7 passed, 2 warnings, 0 failures"], [9, "07:36:48", "analysis_engine", "analysis_engine", "run_ended", "info", "", "status=completed; steps=3"]]});
+run({"when": "Jul 15 13:00", "id": "56b20da0929a", "kind": "analysis", "ref": "data_profiling", "ds": "hillstrom", "by": "analyst", "eyes": "na", "outcome": "completed", "raw": "completed", "approver": "", "stopped": "", "caught": [], "origin": "seeded", "nev": 10, "steps": [["Governed data access", "ok", "data_connector", 3, ""], ["Profile columns", "ok", "data_profiler", 2, ""], ["Quality expectation suite", "ok", "quality_checker", 2, ""]], "tier": "", "events": [[0, "07:36:48", "analysis_engine", "analyst", "run_started", "info", "", "params={'sample_rows': 0, 'max_cardinality': 20, 'missing_threshold': 0.2, 'outlier_z': 4.0}"], [1, "07:36:48", "analysis_engine", "analysis_engine", "contract_check", "info", "", "contract satisfied"], [2, "07:36:48", "data_connector", "data_connector", "agent_started", "info", "", "Governed data access"], [3, "07:36:48", "data_connector", "data_connector", "data_access", "info", "hillstrom", "loaded 'hillstrom': 20,000 rows x 12 cols; commercial-use FLAGGED by license"], [4, "07:36:48", "data_connector", "data_connector", "agent_finished", "info", "", "loaded 'hillstrom': 20,000 rows x 12 cols; commercial-use FLAGGED by license"], [5, "07:36:48", "data_profiler", "data_profiler", "agent_started", "info", "", "Profile columns"], [6, "07:36:48", "data_profiler", "data_profiler", "agent_finished", "info", "", "20,000 rows x 12 cols; 1506 duplicate rows"], [7, "07:36:48", "quality_checker", "quality_checker", "agent_started", "info", "", "Quality expectation suite"], [8, "07:36:48", "quality_checker", "quality_checker", "agent_finished", "info", "", "3/5 passed, 2 warnings, 0 failures"], [9, "07:36:48", "analysis_engine", "analysis_engine", "run_ended", "info", "", "status=completed; steps=3"]]});
+run({"when": "Jul 14 10:40", "id": "5c539ce1c739", "kind": "analysis", "ref": "feature_engineering", "ds": "berka", "by": "analyst", "eyes": "na", "outcome": "completed", "raw": "completed", "approver": "", "stopped": "", "caught": [], "origin": "seeded", "nev": 10, "steps": [["Governed data access", "ok", "data_connector", 3, ""], ["Build entity features", "ok", "feature_engineer", 4, ""], ["Leakage scan", "ok", "feature_engineer", 4, ""]], "tier": "", "events": [[0, "07:36:48", "analysis_engine", "analyst", "run_started", "info", "", "params={'window_days': 180, 'include_rfm': True, 'top_k': 0, 'corr_threshold': 0.98}"], [1, "07:36:48", "analysis_engine", "analysis_engine", "contract_check", "info", "", "contract satisfied"], [2, "07:36:48", "data_connector", "data_connector", "agent_started", "info", "", "Governed data access"], [3, "07:36:48", "data_connector", "data_connector", "data_access", "info", "berka", "loaded 8 tables, 88,672 rows from 'berka'; commercial-use FLAGGED by license"], [4, "07:36:48", "data_connector", "data_connector", "agent_finished", "info", "", "loaded 8 tables, 88,672 rows from 'berka'; commercial-use FLAGGED by license"], [5, "07:36:48", "feature_engineer", "feature_engineer", "agent_started", "info", "", "Build entity features"], [6, "07:36:48", "feature_engineer", "feature_engineer", "agent_finished", "info", "", "300 accounts x 20 features (pre-loan window 180d); target 'default'"], [7, "07:36:48", "feature_engineer", "feature_engineer", "agent_started", "info", "", "Leakage scan"], [8, "07:36:48", "feature_engineer", "feature_engineer", "agent_finished", "info", "", "leakage scan: clean (structural ok)"], [9, "07:36:48", "analysis_engine", "analysis_engine", "run_ended", "info", "", "status=completed; steps=3"]]});
+run({"when": "Jul 10 14:15", "id": "fa5260144b71", "kind": "analysis", "ref": "data_profiling", "ds": "ulb_fraud", "by": "analyst", "eyes": "na", "outcome": "completed", "raw": "completed", "approver": "", "stopped": "", "caught": [], "origin": "seeded", "nev": 10, "steps": [["Governed data access", "ok", "data_connector", 3, ""], ["Profile columns", "ok", "data_profiler", 2, ""], ["Quality expectation suite", "ok", "quality_checker", 2, ""]], "tier": "", "events": [[0, "07:36:48", "analysis_engine", "analyst", "run_started", "info", "", "params={'sample_rows': 0, 'max_cardinality': 50, 'missing_threshold': 0.2, 'outlier_z': 6.0}"], [1, "07:36:48", "analysis_engine", "analysis_engine", "contract_check", "info", "", "contract satisfied"], [2, "07:36:48", "data_connector", "data_connector", "agent_started", "info", "", "Governed data access"], [3, "07:36:48", "data_connector", "data_connector", "data_access", "info", "ulb_fraud", "loaded 'ulb_fraud': 20,000 rows x 30 cols"], [4, "07:36:48", "data_connector", "data_connector", "agent_finished", "info", "", "loaded 'ulb_fraud': 20,000 rows x 30 cols"], [5, "07:36:48", "data_profiler", "data_profiler", "agent_started", "info", "", "Profile columns"], [6, "07:36:48", "data_profiler", "data_profiler", "agent_finished", "info", "", "20,000 rows x 30 cols; 123 duplicate rows; target minority 2.5%"], [7, "07:36:48", "quality_checker", "quality_checker", "agent_started", "info", "", "Quality expectation suite"], [8, "07:36:48", "quality_checker", "quality_checker", "agent_finished", "info", "", "5/7 passed, 2 warnings, 0 failures"], [9, "07:36:48", "analysis_engine", "analysis_engine", "run_ended", "info", "", "status=completed; steps=3"]]});
+run({"when": "Jul 10 09:05", "id": "e0c8c8107e29", "kind": "analysis", "ref": "data_profiling", "ds": "synthetic_its", "by": "analyst", "eyes": "na", "outcome": "completed", "raw": "completed", "approver": "", "stopped": "", "caught": [], "origin": "seeded", "nev": 10, "steps": [["Governed data access", "ok", "data_connector", 3, ""], ["Profile columns", "ok", "data_profiler", 2, ""], ["Quality expectation suite", "ok", "quality_checker", 2, ""]], "tier": "", "events": [[0, "07:36:48", "analysis_engine", "analyst", "run_started", "info", "", "params={'sample_rows': 0, 'max_cardinality': 50, 'missing_threshold': 0.2, 'outlier_z': 4.0}"], [1, "07:36:48", "analysis_engine", "analysis_engine", "contract_check", "info", "", "contract satisfied"], [2, "07:36:48", "data_connector", "data_connector", "agent_started", "info", "", "Governed data access"], [3, "07:36:48", "data_connector", "data_connector", "data_access", "info", "synthetic_its", "loaded 'synthetic_its': 365 rows x 4 cols"], [4, "07:36:48", "data_connector", "data_connector", "agent_finished", "info", "", "loaded 'synthetic_its': 365 rows x 4 cols"], [5, "07:36:48", "data_profiler", "data_profiler", "agent_started", "info", "", "Profile columns"], [6, "07:36:48", "data_profiler", "data_profiler", "agent_finished", "info", "", "365 rows x 4 cols; 1 high-cardinality"], [7, "07:36:48", "quality_checker", "quality_checker", "agent_started", "info", "", "Quality expectation suite"], [8, "07:36:48", "quality_checker", "quality_checker", "agent_finished", "info", "", "4/5 passed, 1 warnings, 0 failures"], [9, "07:36:48", "analysis_engine", "analysis_engine", "run_ended", "info", "", "status=completed; steps=3"]]});
+run({"when": "Jul 09 16:20", "id": "1888bb7763aa", "kind": "analysis", "ref": "data_profiling", "ds": "uci_bank_marketing", "by": "analyst", "eyes": "na", "outcome": "completed", "raw": "completed", "approver": "", "stopped": "", "caught": [], "origin": "seeded", "nev": 10, "steps": [["Governed data access", "ok", "data_connector", 3, ""], ["Profile columns", "ok", "data_profiler", 2, ""], ["Quality expectation suite", "ok", "quality_checker", 2, ""]], "tier": "", "events": [[0, "07:36:47", "analysis_engine", "analyst", "run_started", "info", "", "params={'sample_rows': 0, 'max_cardinality': 50, 'missing_threshold': 0.2, 'outlier_z': 4.0}"], [1, "07:36:47", "analysis_engine", "analysis_engine", "contract_check", "info", "", "contract satisfied"], [2, "07:36:47", "data_connector", "data_connector", "agent_started", "info", "", "Governed data access"], [3, "07:36:47", "data_connector", "data_connector", "data_access", "info", "uci_bank_marketing", "loaded 'uci_bank_marketing': 20,000 rows x 21 cols"], [4, "07:36:47", "data_connector", "data_connector", "agent_finished", "info", "", "loaded 'uci_bank_marketing': 20,000 rows x 21 cols"], [5, "07:36:47", "data_profiler", "data_profiler", "agent_started", "info", "", "Profile columns"], [6, "07:36:48", "data_profiler", "data_profiler", "agent_finished", "info", "", "20,000 rows x 21 cols; 3 duplicate rows; target minority 11.1%"], [7, "07:36:48", "quality_checker", "quality_checker", "agent_started", "info", "", "Quality expectation suite"], [8, "07:36:48", "quality_checker", "quality_checker", "agent_finished", "info", "", "5/7 passed, 2 warnings, 0 failures"], [9, "07:36:48", "analysis_engine", "analysis_engine", "run_ended", "info", "", "status=completed; steps=3"]]});
+run({"when": "Jul 09 11:35", "id": "7bed92f9278c", "kind": "analysis", "ref": "data_profiling", "ds": "lendingclub", "by": "analyst", "eyes": "na", "outcome": "completed", "raw": "completed", "approver": "", "stopped": "", "caught": [], "origin": "seeded", "nev": 10, "steps": [["Governed data access", "ok", "data_connector", 3, ""], ["Profile columns", "ok", "data_profiler", 2, ""], ["Quality expectation suite", "ok", "quality_checker", 2, ""]], "tier": "", "events": [[0, "07:36:47", "analysis_engine", "analyst", "run_started", "info", "", "params={'sample_rows': 0, 'max_cardinality': 50, 'missing_threshold': 0.4, 'outlier_z': 4.0}"], [1, "07:36:47", "analysis_engine", "analysis_engine", "contract_check", "info", "", "contract satisfied"], [2, "07:36:47", "data_connector", "data_connector", "agent_started", "info", "", "Governed data access"], [3, "07:36:47", "data_connector", "data_connector", "data_access", "info", "lendingclub", "loaded 'lendingclub': 13,820 rows x 152 cols; commercial-use FLAGGED by license"], [4, "07:36:47", "data_connector", "data_connector", "agent_finished", "info", "", "loaded 'lendingclub': 13,820 rows x 152 cols; commercial-use FLAGGED by license"], [5, "07:36:47", "data_profiler", "data_profiler", "agent_started", "info", "", "Profile columns"], [6, "07:36:47", "data_profiler", "data_profiler", "agent_finished", "info", "", "13,820 rows x 152 cols; 15 fully-null; 4 high-cardinality"], [7, "07:36:47", "quality_checker", "quality_checker", "agent_started", "info", "", "Quality expectation suite"], [8, "07:36:47", "quality_checker", "quality_checker", "agent_finished", "info", "", "1/5 passed, 3 warnings, 1 failures"], [9, "07:36:47", "analysis_engine", "analysis_engine", "run_ended", "info", "", "status=completed; steps=3"]]});
+run({"when": "Jul 08 10:25", "id": "1b5e45353366", "kind": "analysis", "ref": "data_profiling", "ds": "uci_taiwan_credit", "by": "analyst", "eyes": "na", "outcome": "completed", "raw": "completed", "approver": "", "stopped": "", "caught": [], "origin": "seeded", "nev": 10, "steps": [["Governed data access", "ok", "data_connector", 3, ""], ["Profile columns", "ok", "data_profiler", 2, ""], ["Quality expectation suite", "ok", "quality_checker", 2, ""]], "tier": "", "events": [[0, "07:36:47", "analysis_engine", "analyst", "run_started", "info", "", "params={'sample_rows': 5000, 'max_cardinality': 50, 'missing_threshold': 0.2, 'outlier_z': 4.0}"], [1, "07:36:47", "analysis_engine", "analysis_engine", "contract_check", "info", "", "contract satisfied"], [2, "07:36:47", "data_connector", "data_connector", "agent_started", "info", "", "Governed data access"], [3, "07:36:47", "data_connector", "data_connector", "data_access", "info", "uci_taiwan_credit", "loaded 'uci_taiwan_credit': 10,000 rows x 24 cols"], [4, "07:36:47", "data_connector", "data_connector", "agent_finished", "info", "", "loaded 'uci_taiwan_credit': 10,000 rows x 24 cols"], [5, "07:36:47", "data_profiler", "data_profiler", "agent_started", "info", "", "Profile columns"], [6, "07:36:47", "data_profiler", "data_profiler", "agent_finished", "info", "", "5,000 rows x 24 cols; target minority 22.7%"], [7, "07:36:47", "quality_checker", "quality_checker", "agent_started", "info", "", "Quality expectation suite"], [8, "07:36:47", "quality_checker", "quality_checker", "agent_finished", "info", "", "5/7 passed, 2 warnings, 0 failures"], [9, "07:36:47", "analysis_engine", "analysis_engine", "run_ended", "info", "", "status=completed; steps=3"]]});
+run({"when": "Jul 07 09:50", "id": "9d90d194bb92", "kind": "credit risk", "ref": "profile_risks", "ds": "german_credit", "by": "analyst", "eyes": "mrm", "outcome": "refused", "raw": "rejected", "approver": "mrm_approver", "stopped": "Modeler", "caught": ["rbac_access_denied", "pii_redacted"], "origin": "seeded", "nev": 16, "steps": [["Data Profiler", "done", "profiler", 4, ""], ["EDA / Feature", "done", "eda", 4, ""], ["Modeler", "rejected", "modeler", 4, ""]], "tier": "", "events": [[0, "07:36:46", "orchestrator", "orchestrator", "run_started", "info", "", "all controls active"], [1, "07:36:46", "profiler", "profiler", "agent_started", "info", "", "runtime instantiated Data Profiler; template=data_analysis; tools=[read_columns, profile_dataset]; rbac=structural columns; PII and proxies withheld"], [2, "07:36:46", "profiler", "profiler", "rbac_access_denied", "blocked", "personal_status_sex", "Denied access to 1 column(s): personal_status_sex"], [3, "07:36:46", "profiler", "profiler", "profiled", "info", "checking_status, duration_months, credit_history, purpose, c", "1000 rows, default rate 0.300 (class imbalance present)"], [4, "07:36:46", "profiler", "profiler", "agent_finished", "info", "", "Data Profiler lifecycle complete"], [5, "07:36:46", "eda", "eda", "agent_started", "info", "", "runtime instantiated EDA / Feature; template=data_analysis; tools=[read_columns, profile_dataset]; rbac=structural columns; PII and proxies withheld"], [6, "07:36:46", "eda", "eda", "pii_redacted", "redaction", "email", "Redacted 1 PII item(s): emailx1"], [7, "07:36:46", "eda", "eda", "eda_reviewed", "info", "", "Protected attribute 'age_band' marked for exclusion. Sample note scrubbed: Example applicant [REDACTED_EMAIL] (age band 60+) illustrates the join key."], [8, "07:36:46", "eda", "eda", "agent_finished", "info", "", "EDA / Feature lifecycle complete"], [9, "07:36:46", "modeler", "modeler", "agent_started", "info", "", "runtime instantiated Modeler; template=modeling; tools=[read_columns, train_model]; rbac=features only; cannot validate its own model"], [10, "07:36:47", "modeler", "modeler", "model_trained", "info", "", "AUC 0.8018, accuracy 0.756"], [11, "07:36:47", "modeler", "modeler", "approval_requested", "gate", "", "Model proposed; awaiting human approval before promotion."], [12, "07:36:47", "modeler", "modeler", "agent_finished", "info", "", "Modeler lifecycle complete"], [13, "07:36:47", "human_reviewer", "mrm_approver", "approval_decision", "gate", "", "REJECTED at model gate"], [14, "07:36:47", "orchestrator", "orchestrator", "run_ended", "info", "", "Run stopped by human rejection; no promotion."], [15, "07:36:47", "orchestrator", "orchestrator", "model_registered", "info", "", "Registered model credit-lr-9d90d1 to the inventory (status=rejected)."]]});
+run({"when": "Jul 03 15:55", "id": "e943772ce6fa", "kind": "analysis", "ref": "data_profiling", "ds": "lendingclub", "by": "analyst", "eyes": "na", "outcome": "completed", "raw": "completed", "approver": "", "stopped": "", "caught": [], "origin": "seeded", "nev": 10, "steps": [["Governed data access", "ok", "data_connector", 3, ""], ["Profile columns", "ok", "data_profiler", 2, ""], ["Quality expectation suite", "ok", "quality_checker", 2, ""]], "tier": "", "events": [[0, "07:36:46", "analysis_engine", "analyst", "run_started", "info", "", "params={'sample_rows': 0, 'max_cardinality': 50, 'missing_threshold': 0.2, 'outlier_z': 4.0}"], [1, "07:36:46", "analysis_engine", "analysis_engine", "contract_check", "info", "", "contract satisfied"], [2, "07:36:46", "data_connector", "data_connector", "agent_started", "info", "", "Governed data access"], [3, "07:36:46", "data_connector", "data_connector", "data_access", "info", "lendingclub", "loaded 'lendingclub': 13,820 rows x 152 cols; commercial-use FLAGGED by license"], [4, "07:36:46", "data_connector", "data_connector", "agent_finished", "info", "", "loaded 'lendingclub': 13,820 rows x 152 cols; commercial-use FLAGGED by license"], [5, "07:36:46", "data_profiler", "data_profiler", "agent_started", "info", "", "Profile columns"], [6, "07:36:46", "data_profiler", "data_profiler", "agent_finished", "info", "", "13,820 rows x 152 cols; 15 fully-null; 4 high-cardinality"], [7, "07:36:46", "quality_checker", "quality_checker", "agent_started", "info", "", "Quality expectation suite"], [8, "07:36:46", "quality_checker", "quality_checker", "agent_finished", "info", "", "1/5 passed, 3 warnings, 1 failures"], [9, "07:36:46", "analysis_engine", "analysis_engine", "run_ended", "info", "", "status=completed; steps=3"]]});
+run({"when": "Jul 02 13:30", "id": "eb3c23196c63", "kind": "analysis", "ref": "data_profiling", "ds": "hillstrom", "by": "analyst", "eyes": "na", "outcome": "completed", "raw": "completed", "approver": "", "stopped": "", "caught": [], "origin": "seeded", "nev": 10, "steps": [["Governed data access", "ok", "data_connector", 3, ""], ["Profile columns", "ok", "data_profiler", 2, ""], ["Quality expectation suite", "ok", "quality_checker", 2, ""]], "tier": "", "events": [[0, "07:36:46", "analysis_engine", "analyst", "run_started", "info", "", "params={'sample_rows': 0, 'max_cardinality': 50, 'missing_threshold': 0.2, 'outlier_z': 4.0}"], [1, "07:36:46", "analysis_engine", "analysis_engine", "contract_check", "info", "", "contract satisfied"], [2, "07:36:46", "data_connector", "data_connector", "agent_started", "info", "", "Governed data access"], [3, "07:36:46", "data_connector", "data_connector", "data_access", "info", "hillstrom", "loaded 'hillstrom': 20,000 rows x 12 cols; commercial-use FLAGGED by license"], [4, "07:36:46", "data_connector", "data_connector", "agent_finished", "info", "", "loaded 'hillstrom': 20,000 rows x 12 cols; commercial-use FLAGGED by license"], [5, "07:36:46", "data_profiler", "data_profiler", "agent_started", "info", "", "Profile columns"], [6, "07:36:46", "data_profiler", "data_profiler", "agent_finished", "info", "", "20,000 rows x 12 cols; 1506 duplicate rows"], [7, "07:36:46", "quality_checker", "quality_checker", "agent_started", "info", "", "Quality expectation suite"], [8, "07:36:46", "quality_checker", "quality_checker", "agent_finished", "info", "", "3/5 passed, 2 warnings, 0 failures"], [9, "07:36:46", "analysis_engine", "analysis_engine", "run_ended", "info", "", "status=completed; steps=3"]]});
+run({"when": "Jul 01 10:45", "id": "21b5ae0920da", "kind": "analysis", "ref": "feature_engineering", "ds": "berka", "by": "analyst", "eyes": "na", "outcome": "completed", "raw": "completed", "approver": "", "stopped": "", "caught": [], "origin": "seeded", "nev": 10, "steps": [["Governed data access", "ok", "data_connector", 3, ""], ["Build entity features", "ok", "feature_engineer", 4, ""], ["Leakage scan", "ok", "feature_engineer", 4, ""]], "tier": "", "events": [[0, "07:36:46", "analysis_engine", "analyst", "run_started", "info", "", "params={'window_days': 365, 'include_rfm': True, 'top_k': 0, 'corr_threshold': 0.98}"], [1, "07:36:46", "analysis_engine", "analysis_engine", "contract_check", "info", "", "contract satisfied"], [2, "07:36:46", "data_connector", "data_connector", "agent_started", "info", "", "Governed data access"], [3, "07:36:46", "data_connector", "data_connector", "data_access", "info", "berka", "loaded 8 tables, 88,672 rows from 'berka'; commercial-use FLAGGED by license"], [4, "07:36:46", "data_connector", "data_connector", "agent_finished", "info", "", "loaded 8 tables, 88,672 rows from 'berka'; commercial-use FLAGGED by license"], [5, "07:36:46", "feature_engineer", "feature_engineer", "agent_started", "info", "", "Build entity features"], [6, "07:36:46", "feature_engineer", "feature_engineer", "agent_finished", "info", "", "300 accounts x 20 features (pre-loan window 365d); target 'default'"], [7, "07:36:46", "feature_engineer", "feature_engineer", "agent_started", "info", "", "Leakage scan"], [8, "07:36:46", "feature_engineer", "feature_engineer", "agent_finished", "info", "", "leakage scan: clean (structural ok)"], [9, "07:36:46", "analysis_engine", "analysis_engine", "run_ended", "info", "", "status=completed; steps=3"]]});
+run({"when": "Jun 30 11:10", "id": "44b44a4c7aaa", "kind": "credit risk", "ref": "fairness_age", "ds": "german_credit", "by": "analyst", "eyes": "mrm", "outcome": "completed", "raw": "promoted", "approver": "mrm_approver", "stopped": "", "caught": ["rbac_access_denied", "pii_redacted"], "origin": "seeded", "nev": 21, "steps": [["Data Profiler", "done", "profiler", 4, ""], ["EDA / Feature", "done", "eda", 4, ""], ["Modeler", "approved", "modeler", 4, ""], ["Validator", "done", "validator", 5, ""]], "tier": "", "events": [[0, "07:36:45", "orchestrator", "orchestrator", "run_started", "info", "", "all controls active"], [1, "07:36:45", "profiler", "profiler", "agent_started", "info", "", "runtime instantiated Data Profiler; template=data_analysis; tools=[read_columns, profile_dataset]; rbac=structural columns; PII and proxies withheld"], [2, "07:36:45", "profiler", "profiler", "rbac_access_denied", "blocked", "personal_status_sex", "Denied access to 1 column(s): personal_status_sex"], [3, "07:36:45", "profiler", "profiler", "profiled", "info", "checking_status, duration_months, credit_history, purpose, c", "1000 rows, default rate 0.300 (class imbalance present)"], [4, "07:36:45", "profiler", "profiler", "agent_finished", "info", "", "Data Profiler lifecycle complete"], [5, "07:36:45", "eda", "eda", "agent_started", "info", "", "runtime instantiated EDA / Feature; template=data_analysis; tools=[read_columns, profile_dataset]; rbac=structural columns; PII and proxies withheld"], [6, "07:36:45", "eda", "eda", "pii_redacted", "redaction", "email", "Redacted 1 PII item(s): emailx1"], [7, "07:36:45", "eda", "eda", "eda_reviewed", "info", "", "Protected attribute 'age_band' marked for exclusion. Sample note scrubbed: Example applicant [REDACTED_EMAIL] (age band 60+) illustrates the join key."], [8, "07:36:45", "eda", "eda", "agent_finished", "info", "", "EDA / Feature lifecycle complete"], [9, "07:36:45", "modeler", "modeler", "agent_started", "info", "", "runtime instantiated Modeler; template=modeling; tools=[read_columns, train_model]; rbac=features only; cannot validate its own model"], [10, "07:36:45", "modeler", "modeler", "model_trained", "info", "", "AUC 0.8018, accuracy 0.756"], [11, "07:36:45", "modeler", "modeler", "approval_requested", "gate", "", "Model proposed; awaiting human approval before promotion."], [12, "07:36:45", "modeler", "modeler", "agent_finished", "info", "", "Modeler lifecycle complete"], [13, "07:36:45", "human_reviewer", "mrm_approver", "approval_decision", "gate", "", "APPROVED at model gate"], [14, "07:36:45", "validator", "validator", "agent_started", "info", "", "runtime instantiated Validator; template=validation; tools=[read_columns, compute_fairness, run_eval_gate, retrieve_policy]; rbac=adds the protected attribute, for fairness only; cannot train"], [15, "07:36:46", "validator", "validator", "policy_retrieved", "info", "Four-Fifths Rule, 29 CFR 1607.4(D), ECOA / Regulation B, 12 ", "Retrieved 3 passage(s); top: Four-Fifths Rule, 29 CFR 1607.4(D)"], [16, "07:36:46", "validator", "validator", "eval_gate", "gate", "", "6/6 passed; promotion allowed"], [17, "07:36:46", "validator", "validator", "validated", "info", "", "Disparity 0.569 (FLAGGED for review); eval gate 6/6"], [18, "07:36:46", "validator", "validator", "agent_finished", "info", "", "Validator lifecycle complete"], [19, "07:36:46", "orchestrator", "orchestrator", "run_ended", "info", "", "status=completed; promotion=allowed"], [20, "07:36:46", "orchestrator", "orchestrator", "model_registered", "info", "", "Registered model credit-lr-44b44a to the inventory (status=promoted)."]]});
+run({"when": "Jun 26 16:05", "id": "c06d7d5acba0", "kind": "analysis", "ref": "data_profiling", "ds": "ulb_fraud", "by": "analyst", "eyes": "na", "outcome": "completed", "raw": "completed", "approver": "", "stopped": "", "caught": [], "origin": "seeded", "nev": 10, "steps": [["Governed data access", "ok", "data_connector", 3, ""], ["Profile columns", "ok", "data_profiler", 2, ""], ["Quality expectation suite", "ok", "quality_checker", 2, ""]], "tier": "", "events": [[0, "07:36:45", "analysis_engine", "analyst", "run_started", "info", "", "params={'sample_rows': 0, 'max_cardinality': 50, 'missing_threshold': 0.2, 'outlier_z': 4.0}"], [1, "07:36:45", "analysis_engine", "analysis_engine", "contract_check", "info", "", "contract satisfied"], [2, "07:36:45", "data_connector", "data_connector", "agent_started", "info", "", "Governed data access"], [3, "07:36:45", "data_connector", "data_connector", "data_access", "info", "ulb_fraud", "loaded 'ulb_fraud': 20,000 rows x 30 cols"], [4, "07:36:45", "data_connector", "data_connector", "agent_finished", "info", "", "loaded 'ulb_fraud': 20,000 rows x 30 cols"], [5, "07:36:45", "data_profiler", "data_profiler", "agent_started", "info", "", "Profile columns"], [6, "07:36:45", "data_profiler", "data_profiler", "agent_finished", "info", "", "20,000 rows x 30 cols; 123 duplicate rows; target minority 2.5%"], [7, "07:36:45", "quality_checker", "quality_checker", "agent_started", "info", "", "Quality expectation suite"], [8, "07:36:45", "quality_checker", "quality_checker", "agent_finished", "info", "", "5/7 passed, 2 warnings, 0 failures"], [9, "07:36:45", "analysis_engine", "analysis_engine", "run_ended", "info", "", "status=completed; steps=3"]]});
+run({"when": "Jun 25 09:20", "id": "e172f12c5692", "kind": "analysis", "ref": "data_profiling", "ds": "uci_taiwan_credit", "by": "analyst", "eyes": "na", "outcome": "completed", "raw": "completed", "approver": "", "stopped": "", "caught": [], "origin": "seeded", "nev": 10, "steps": [["Governed data access", "ok", "data_connector", 3, ""], ["Profile columns", "ok", "data_profiler", 2, ""], ["Quality expectation suite", "ok", "quality_checker", 2, ""]], "tier": "", "events": [[0, "07:36:45", "analysis_engine", "analyst", "run_started", "info", "", "params={'sample_rows': 0, 'max_cardinality': 50, 'missing_threshold': 0.2, 'outlier_z': 4.0}"], [1, "07:36:45", "analysis_engine", "analysis_engine", "contract_check", "info", "", "contract satisfied"], [2, "07:36:45", "data_connector", "data_connector", "agent_started", "info", "", "Governed data access"], [3, "07:36:45", "data_connector", "data_connector", "data_access", "info", "uci_taiwan_credit", "loaded 'uci_taiwan_credit': 10,000 rows x 24 cols"], [4, "07:36:45", "data_connector", "data_connector", "agent_finished", "info", "", "loaded 'uci_taiwan_credit': 10,000 rows x 24 cols"], [5, "07:36:45", "data_profiler", "data_profiler", "agent_started", "info", "", "Profile columns"], [6, "07:36:45", "data_profiler", "data_profiler", "agent_finished", "info", "", "10,000 rows x 24 cols; 2 duplicate rows; target minority 21.8%"], [7, "07:36:45", "quality_checker", "quality_checker", "agent_started", "info", "", "Quality expectation suite"], [8, "07:36:45", "quality_checker", "quality_checker", "agent_finished", "info", "", "5/7 passed, 2 warnings, 0 failures"], [9, "07:36:45", "analysis_engine", "analysis_engine", "run_ended", "info", "", "status=completed; steps=3"]]});
+run({"when": "Jun 24 14:40", "id": "ea13288a2208", "kind": "credit risk", "ref": "build_model", "ds": "german_credit", "by": "analyst", "eyes": "mrm", "outcome": "completed", "raw": "promoted", "approver": "mrm_approver", "stopped": "", "caught": ["rbac_access_denied", "pii_redacted"], "origin": "seeded", "nev": 21, "steps": [["Data Profiler", "done", "profiler", 4, ""], ["EDA / Feature", "done", "eda", 4, ""], ["Modeler", "approved", "modeler", 4, ""], ["Validator", "done", "validator", 5, ""]], "tier": "", "events": [[0, "07:36:45", "orchestrator", "orchestrator", "run_started", "info", "", "all controls active"], [1, "07:36:45", "profiler", "profiler", "agent_started", "info", "", "runtime instantiated Data Profiler; template=data_analysis; tools=[read_columns, profile_dataset]; rbac=structural columns; PII and proxies withheld"], [2, "07:36:45", "profiler", "profiler", "rbac_access_denied", "blocked", "personal_status_sex", "Denied access to 1 column(s): personal_status_sex"], [3, "07:36:45", "profiler", "profiler", "profiled", "info", "checking_status, duration_months, credit_history, purpose, c", "1000 rows, default rate 0.300 (class imbalance present)"], [4, "07:36:45", "profiler", "profiler", "agent_finished", "info", "", "Data Profiler lifecycle complete"], [5, "07:36:45", "eda", "eda", "agent_started", "info", "", "runtime instantiated EDA / Feature; template=data_analysis; tools=[read_columns, profile_dataset]; rbac=structural columns; PII and proxies withheld"], [6, "07:36:45", "eda", "eda", "pii_redacted", "redaction", "email", "Redacted 1 PII item(s): emailx1"], [7, "07:36:45", "eda", "eda", "eda_reviewed", "info", "", "Protected attribute 'age_band' marked for exclusion. Sample note scrubbed: Example applicant [REDACTED_EMAIL] (age band 60+) illustrates the join key."], [8, "07:36:45", "eda", "eda", "agent_finished", "info", "", "EDA / Feature lifecycle complete"], [9, "07:36:45", "modeler", "modeler", "agent_started", "info", "", "runtime instantiated Modeler; template=modeling; tools=[read_columns, train_model]; rbac=features only; cannot validate its own model"], [10, "07:36:45", "modeler", "modeler", "model_trained", "info", "", "AUC 0.8018, accuracy 0.756"], [11, "07:36:45", "modeler", "modeler", "approval_requested", "gate", "", "Model proposed; awaiting human approval before promotion."], [12, "07:36:45", "modeler", "modeler", "agent_finished", "info", "", "Modeler lifecycle complete"], [13, "07:36:45", "human_reviewer", "mrm_approver", "approval_decision", "gate", "", "APPROVED at model gate"], [14, "07:36:45", "validator", "validator", "agent_started", "info", "", "runtime instantiated Validator; template=validation; tools=[read_columns, compute_fairness, run_eval_gate, retrieve_policy]; rbac=adds the protected attribute, for fairness only; cannot train"], [15, "07:36:45", "validator", "validator", "policy_retrieved", "info", "Four-Fifths Rule, 29 CFR 1607.4(D), ECOA / Regulation B, 12 ", "Retrieved 3 passage(s); top: Four-Fifths Rule, 29 CFR 1607.4(D)"], [16, "07:36:45", "validator", "validator", "eval_gate", "gate", "", "6/6 passed; promotion allowed"], [17, "07:36:45", "validator", "validator", "validated", "info", "", "Disparity 0.569 (FLAGGED for review); eval gate 6/6"], [18, "07:36:45", "validator", "validator", "agent_finished", "info", "", "Validator lifecycle complete"], [19, "07:36:45", "orchestrator", "orchestrator", "run_ended", "info", "", "status=completed; promotion=allowed"], [20, "07:36:45", "orchestrator", "orchestrator", "model_registered", "info", "", "Registered model credit-lr-ea1328 to the inventory (status=promoted)."]]});
+run({"when": "Jun 23 10:15", "id": "8896e54df1c3", "kind": "analysis", "ref": "data_profiling", "ds": "german_credit", "by": "analyst", "eyes": "na", "outcome": "completed", "raw": "completed", "approver": "", "stopped": "", "caught": [], "origin": "seeded", "nev": 10, "steps": [["Governed data access", "ok", "data_connector", 3, ""], ["Profile columns", "ok", "data_profiler", 2, ""], ["Quality expectation suite", "ok", "quality_checker", 2, ""]], "tier": "", "events": [[0, "07:36:45", "analysis_engine", "analyst", "run_started", "info", "", "params={'sample_rows': 0, 'max_cardinality': 50, 'missing_threshold': 0.2, 'outlier_z': 4.0}"], [1, "07:36:45", "analysis_engine", "analysis_engine", "contract_check", "info", "", "contract satisfied"], [2, "07:36:45", "data_connector", "data_connector", "agent_started", "info", "", "Governed data access"], [3, "07:36:45", "data_connector", "data_connector", "data_access", "info", "german_credit", "loaded 'german_credit': 1,000 rows x 21 cols"], [4, "07:36:45", "data_connector", "data_connector", "agent_finished", "info", "", "loaded 'german_credit': 1,000 rows x 21 cols"], [5, "07:36:45", "data_profiler", "data_profiler", "agent_started", "info", "", "Profile columns"], [6, "07:36:45", "data_profiler", "data_profiler", "agent_finished", "info", "", "1,000 rows x 21 cols; target minority 30.0%"], [7, "07:36:45", "quality_checker", "quality_checker", "agent_started", "info", "", "Quality expectation suite"], [8, "07:36:45", "quality_checker", "quality_checker", "agent_finished", "info", "", "6/7 passed, 1 warnings, 0 failures"], [9, "07:36:45", "analysis_engine", "analysis_engine", "run_ended", "info", "", "status=completed; steps=3"]]});
+
+/* ---------------- render ---------------- */
+const OUT = {
+  completed:['ok','completed'], promoted:['ok','promoted'],
+  refused:['danger','refused'], rejected:['danger','rejected'], awaiting:['warn','awaiting']
+};
+/* Five states, and the two refusals are NOT the same finding. approve() tests
+   promotion authority before segregation of duties, so an author without
+   authority is refused before CTL-SOD-01 is ever reached. */
+function eyesCell(r){
+  if (r.eyes==='mrm') return `<span class="badge ok">signed</span><span class="sub2">${P[r.approver==='mrm_approver'?'mrm':'analyst'].short}</span>`;
+  if (r.eyes==='sod') return `<button class="badge danger" onclick="event.stopPropagation();pop(event,'CTL-SOD-01')">self-approval refused</button><span class="sub2">CTL-SOD-01</span>`;
+  if (r.eyes==='authority') return `<button class="badge danger" onclick="event.stopPropagation();pop(event,'approval_denied')">no authority</button><span class="sub2">role check</span>`;
+  if (r.eyes==='none') return `<span class="badge neutral">not reached</span>`;
+  return `<span class="badge neutral">not required</span>`;
+}
+function ctlChip(c, cls){
+  return `<button class="ctl ${cls||'block'}" onclick="event.stopPropagation();pop(event,'${c}')"><span class="st"></span>${c}</button>`;
+}
+function caughtCell(r){
+  if (!r.caught.length) return `<span class="clean">nothing refused</span>`;
+  const order = c => (c.startsWith('CTL-SOD')||c.startsWith('CTL-EGRESS')||c.startsWith('CTL-TIER')||c.startsWith('CTL-PURP')||c==='rbac_access_denied') ? 0 : 1;
+  const s = [...r.caught].sort((a,b)=>order(a)-order(b));
+  const shown = s.slice(0,3).map(c=>ctlChip(c, c==='eval_gate'||c==='approval_decision' ? 'pass' : (order(c)===0?'block':'fired'))).join(' ');
+  return `<div class="caught">${shown}${s.length>3?`<span class="more">+${s.length-3}</span>`:''}</div>`;
+}
+function rowHTML(r){
+  const [bc,bt] = OUT[r.outcome];
+  const bad = r.outcome==='refused' || r.outcome==='rejected' || r.outcome==='awaiting';
+  return `<tr data-id="${r.id}" class="${bad?'rowbad':''}" onclick="select('${r.id}')">
+    <td><span class="when">${r.when}<span class="org">${r.origin}</span></span></td>
+    <td><span class="rid">${r.id}</span><span class="refln sub2">${r.ref}</span></td>
+    <td><span class="badge neutral">${r.kind}</span></td>
+    <td><span class="dsc"><span class="dn">${r.ds}</span><span class="cls ${CLS[r.ds]}">${CLS[r.ds]}</span></span></td>
+    <td><span class="who">${P[r.by].short}<span class="rl">${P[r.by].srole}</span></span></td>
+    <td>${eyesCell(r)}</td>
+    <td><span class="badge ${bc}">${bt}</span>${r.stopped?`<span class="stop sub2">stopped at ${r.stopped}</span>`:''}</td>
+    <td>${caughtCell(r)}</td></tr>`;
+}
+
+let posture='all', sel=null;
+function visible(){
+  const k=document.getElementById('f-kind').value, w=document.getElementById('f-who').value,
+        d=document.getElementById('f-ds').value, c=document.getElementById('f-ctl').value.split(' ')[0];
+  return R.filter(r=>{
+    if (posture==='refusals' && !r.caught.length) return false;
+    if (posture==='approvals' && r.kind!=='credit risk') return false;
+    if (k && r.kind!==k) return false;
+    if (w && P[r.by].name!==w) return false;
+    if (d && r.ds!==d) return false;
+    if (c && !r.caught.includes(c)) return false;
+    return true;
+  });
+}
+function draw(){
+  const v=visible();
+  document.getElementById('tbody').innerHTML = v.map(rowHTML).join('') ||
+    `<tr><td colspan="8"><div class="note info" style="margin:6px 0"><span class="m">i</span><span>No runs match these filters. Clear them, or run an analysis from the Run or Analyses screen to add a live one.</span></div></td></tr>`;
+  document.getElementById('showing').textContent = `showing ${v.length} of ${R.length} runs`;
+  if (sel) { const tr=document.querySelector(`tr[data-id="${sel}"]`); if(tr) tr.classList.add('sel'); }
+}
+function setPosture(b){ document.querySelectorAll('.seg button').forEach(x=>x.classList.remove('on')); b.classList.add('on'); posture=b.dataset.posture; draw(); }
+function applyFilters(){ draw(); }
+function clearFilters(){ ['f-kind','f-who','f-ds','f-ctl'].forEach(i=>document.getElementById(i).value=''); posture='all';
+  document.querySelectorAll('.seg button').forEach((x,i)=>x.classList.toggle('on', i===0)); draw(); }
+
+/* ---- detail ---- */
+/* Each run kind names its own step statuses; map them onto the four the
+   timeline can draw rather than inventing a shared vocabulary upstream. */
+const STEP_CLASS = { ok:'ok', done:'ok', approved:'ok', blocked:'blocked', error:'blocked',
+  rejected:'blocked', awaiting_approval:'gate', skipped:'skipped' };
+function stepClass(s){ return STEP_CLASS[s] || 'skipped'; }
+
+function decision(r){
+  /* "N refusals. M stopped the run. K were recorded and the run continued."
+     M is 0 or 1: a run stops once. Everything else was withheld in flight. */
+  const stopped = r.stopped ? 1 : 0;
+  return {n: r.caught.length, stopped, withheld: Math.max(0, r.caught.length - stopped)};
+}
+function eyesLine(r){
+  if (r.eyes==='mrm') return {cls:'good',
+    b:`<b>MRM Approver</b> ${r.raw==='rejected'?'rejected':'approved'} at the model gate. Second line (MRM), promotion authority. Author was <b>${P[r.by].name}</b>; author and approver are different identities, which is what CTL-SOD-01 requires.`,
+    s:'One signature. Sentinel has no dual-control path: no quorum, no second-signature state, nothing that could hold two approvals. Four-eyes here means author is not approver, and that is all it means.'};
+  if (r.eyes==='sod') return {cls:'bad',
+    b:`<b>${P[r.by].name}</b> authored this run and then tried to approve it. Refused by ${ctlChip('CTL-SOD-01')}. The run is still awaiting an independent approver; no promotion occurred.`,
+    s:'This is the four-eyes control proper, enforced by identity comparison rather than by role: actor.id was equal to RunState.started_by. The author holds promotion authority, so the role check passed and this is what caught it.'};
+  if (r.eyes==='authority') return {cls:'bad',
+    b:`<b>${P[r.by].name}</b> tried to promote their own model and was refused for lacking promotion authority. The run is still awaiting the MRM Approver.`,
+    s:'Not CTL-SOD-01. approve() tests promotion authority before it tests segregation of duties, so this refusal happened first and the four-eyes check was never reached. The two are different findings and the record keeps them apart: only the SoD refusal stamps a control id.'};
+  if (r.eyes==='none') return {cls:'bad',
+    b:`Never reached. The run was refused at ${r.stopped} before any approval point existed.`,
+    s:'The govflow and L3 routes have no human promotion gate at all. Their only sign-off surface is the evidence pack, which ships pending because sign_evidence_pack is never called from app code.'};
+  return {cls:'', b:'Not required. This run kind has no human promotion gate.',
+    s:'A linear analysis produces no model version, so there is nothing to promote and nothing to sign.'};
+}
+function evTable(r){
+  if (!r.events) return `<div class="note warn"><span class="m">!</span><span><b>No event trail was persisted for this run.</b> This is not the same statement as "nothing was refused." The seeder collapsed this run to its control summary and discarded the per-event stream; govflow and L3 additionally construct their AuditLog with persist=False. Both are fixed by items (a) and (d) in the plan.</span></div>`;
+  const rows = r.events.map(e=>`<tr class="lv-${e[5]}">
+    <td>${e[0]}</td><td>${e[1]}</td><td>${e[2]}</td><td>${e[3]}</td><td>${e[4]}</td>
+    <td><span class="lvl ${e[5]}">${e[5]}</span></td><td class="dt">${e[6]||'—'}</td><td class="sm">${e[7]}</td></tr>`).join('');
+  const n=r.events.length;
+  return `<div class="seqcap"><span class="ok">seq 0-${n-1}, no gaps.</span> Sequence is monotonic within a run and resets per run; there is no global ordering and no hash chain.</div>
+    <div class="tbl-wrap"><div class="tbl-scroll"><table class="ev">
+    <thead><tr><th>seq</th><th>ts</th><th>agent</th><th>actor</th><th>action</th><th>level</th><th>data touched</th><th>summary</th></tr></thead>
+    <tbody>${rows}</tbody></table></div></div>
+    <p class="cap">tokens and cost are omitted deliberately: no call site populates them, so they are always 0. Run economics live in the cost ledger.</p>`;
+}
+function select(id){
+  sel=id; const r=R.find(x=>x.id===id);
+  const [bc,bt]=OUT[r.outcome]; const d=decision(r); const e=eyesLine(r);
+  const glyph={ok:'&#10003;',blocked:'&#10005;',gate:'&#9679;',skipped:'&#8213;'};
+  const stepRows = (r.steps||[]).map(s=>{ const c=stepClass(s[1]); return `<div class="tl-row ${c}">
+      <span class="g ${c}">${glyph[c]}</span>
+      <span class="nm">${s[0]}</span><span class="ag">${s[2]}</span>
+      <span class="ec">${s[3]? s[3]+' ev' : ''}</span>
+      <span>${s[4]?ctlChip(s[4]):''}</span></div>`; }).join('') ||
+    `<div class="note warn"><span class="m">!</span><span>No step records for this run kind in the seeded store.</span></div>`;
+
+  document.getElementById('detail').innerHTML = `
+  <div class="detail">
+    <div class="dhead">
+      <span class="rid" style="font-size:14px">${r.id}</span>
+      <span class="badge neutral">${r.kind}</span>
+      <span class="badge ${bc}">${bt}</span>
+      <button class="btn x" onclick="closeDetail()">Close</button>
+    </div>
+
+    <div class="dblock">
+      <span class="eyebrow">Identity</span>
+      <div class="idline">
+        <span class="kv">analysis <b>${r.ref}</b></span><span class="kv">·</span>
+        <span class="kv">dataset <b>${r.ds}</b></span><span class="cls ${CLS[r.ds]}">${CLS[r.ds]}</span><span class="kv">·</span>
+        <span class="kv">tier ${r.tier?`<b>${r.tier}</b>`:`<i style="color:var(--faint)">n/a, this run kind predates the autonomy ladder</i>`}</span><span class="kv">·</span>
+        <span class="kv">origin <b>${r.origin}</b></span><span class="kv">·</span>
+        <span class="kv">policy <b>2026.07-rbac-v1</b></span>
+      </div>
+    </div>
+
+    <div class="dblock">
+      <span class="eyebrow">Decision summary</span>
+      <div class="scope good"><div class="lbl">Allowed</div>
+        <div class="bd">${r.kind==='analysis'
+          ? 'Read the declared columns of the dataset contract, profile them, and run quality checks. No model produced, nothing promoted.'
+          : r.kind==='credit risk'
+            ? 'Read the six columns on the Profiler allow-list, train a logistic-regression baseline, run the golden-set evals and the fairness review.'
+            : 'Bind a certified agent to the declared purpose, project a scoped table to the granted columns, generate code against the fenced API, and execute it in the sandbox.'}</div></div>
+      <div class="scope ${d.n?'bad':''}"><div class="lbl">Caught</div>
+        <div class="bd">${d.n
+          ? `${d.n} refusal${d.n>1?'s':''}. <b>${d.stopped} stopped the run${r.stopped?` (at ${r.stopped})`:''}.</b> <b>${d.withheld} ${d.withheld===1?'was':'were'} recorded and the run continued.</b><div style="margin-top:7px;display:flex;gap:6px;flex-wrap:wrap">${r.caught.map(c=>ctlChip(c, ['CTL-SOD-01','CTL-EGRESS-01','tier_block'].includes(c)?'block':(c==='eval_gate'||c==='approval_decision'?'pass':'fired'))).join('')}</div>`
+          : 'Nothing was refused, suppressed or flagged on this run.'}</div></div>
+      <div class="scope ${e.cls}"><div class="lbl">Approvals</div>
+        <div class="bd">${e.b}</div><div class="sub">${e.s}</div>
+        <div class="sub">Ran by ${P[r.by].name}, ${P[r.by].role}. Persona selection is a demo sign-in with no credential; this identity is self-asserted.</div></div>
+    </div>
+
+    <div class="dblock">
+      <span class="eyebrow">Steps</span>
+      <div class="tl">${stepRows}</div>
+      <p class="cap">Rendered in this run kind's own vocabulary, not a normalized one. Skipped stages are struck, not hidden: the run reached them and declined to execute.</p>
+    </div>
+
+    <div class="dblock">
+      <span class="eyebrow">Event stream</span>
+      ${evTable(r)}
+    </div>
+
+    <div class="dblock">
+      <span class="eyebrow">Export</span>
+      <div class="exports">
+        <button class="btn primary">Events (JSONL)</button>
+        <button class="btn">Run record (JSON)</button>
+        <span class="cap" style="margin:0">Byte-identical to what AuditLog persists.</span>
+      </div>
+      <p class="cap" style="margin-top:12px">Not captured today: a written rationale on approve or reject (the gate takes two buttons and no text), an authenticated principal, and any tamper evidence. The JSONL has no hash chain, so this record is immutable by convention, not by cryptography.</p>
+    </div>
+  </div>`;
+  draw();
+  document.getElementById('detail').scrollIntoView({behavior:'smooth', block:'nearest'});
+}
+function closeDetail(){ sel=null; document.getElementById('detail').innerHTML=''; draw(); }
+
+/* ---- control popover ---- */
+function pop(ev, id){
+  const i = CTLINFO[id]; if(!i) return;
+  const p = document.getElementById('pop');
+  p.innerHTML = `<h4>${id}</h4><div style="font-weight:650;margin-bottom:6px">${i.t}</div>
+    <div class="r"><div class="k">What it is</div>${i.w}</div>
+    <div class="r"><div class="k">Why it fired here</div>${i.h}</div>
+    <div class="r"><div class="k">What it did</div>${i.d}</div>`;
+  p.classList.add('show');
+  const x = Math.min(ev.clientX, window.innerWidth-420), y = Math.min(ev.clientY+14, window.innerHeight-260);
+  p.style.left = Math.max(12,x)+'px'; p.style.top = Math.max(12,y)+'px';
+}
+document.addEventListener('click', e=>{ if(!e.target.closest('.ctl') && !e.target.closest('.pop') && !e.target.closest('.badge')) document.getElementById('pop').classList.remove('show'); });
+
+function toggleTheme(){
+  const r=document.documentElement;
+  const cur = r.getAttribute('data-theme') || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark':'light');
+  r.setAttribute('data-theme', cur==='dark'?'light':'dark');
+}
+draw();
+/* Deep-link: #run=<id> opens that run; #only=refusals also sets the posture. */
+(function(){
+  const h = new URLSearchParams(location.hash.slice(1));
+  if (h.get('only')==='refusals' || window.__ONLY_REFUSALS) { const b=document.querySelector('[data-posture="refusals"]'); if(b) setPosture(b); }
+  select(h.get('run') || window.__RUN || R.find(x=>x.eyes==='sod').id);
+})();
+</script>
+</body>
+</html>

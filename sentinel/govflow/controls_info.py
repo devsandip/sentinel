@@ -356,6 +356,33 @@ _INFOS: list[ControlInfo] = [
             "an approver who is not the author."
         ),
     ),
+    # Moved out of the doc-only list 2026-07-20. The Audit Log surfaced the
+    # contradiction: a seeded run was refused by this control at Ask while the
+    # catalogue said it could not fire. run_governed_analysis blocks the run
+    # when the resolved tier is outside (L1, L2, L3), records action
+    # 'tier_block' at LEVEL_BLOCKED, and marks every downstream stage skipped.
+    ControlInfo(
+        id="CTL-TIER-01",
+        name="Operation exceeds tier",
+        stage="Ask",
+        action=ACT_REFUSE,
+        what=(
+            "An operation beyond the requester's resolved autonomy tier is "
+            "refused before anything runs. The tier is the lower of the data "
+            "classification ceiling and the person ceiling, where the person "
+            "ceiling comes from role plus earned attestations."
+        ),
+        why=(
+            "Autonomy has to be a property of the pairing, not of the person "
+            "or the data alone. This gate, not the persona's can_run flag, is "
+            "what enforces it: a caller that bypasses the UI still lands here."
+        ),
+        fired_means=(
+            "The resolved tier was outside L1-L3 (an L0 read-only role, for "
+            "example), so the run was refused at Ask and the remaining eight "
+            "stages were recorded skipped rather than silently omitted."
+        ),
+    ),
 ]
 
 # -- Doc-only ids from the PRD (named in the design, not implemented) -----
@@ -377,8 +404,6 @@ _DOC_ONLY: list[ControlInfo] = [
          "The identity's row filter is injected into every query."),
         ("CTL-PURP-02", "Column outside purpose scope", "Access", ACT_REFUSE,
          "A column outside the declared purpose's scope is denied."),
-        ("CTL-TIER-01", "Operation exceeds tier", "Ask", ACT_REFUSE,
-         "An operation beyond the resolved autonomy tier is refused."),
         ("CTL-INJECT-01", "Injection screen", "Generate", ACT_FLAG,
          "Instruction-shaped text in data-derived model context is screened."),
         ("CTL-COST-01", "Spend cap", "Execute", ACT_REFUSE,

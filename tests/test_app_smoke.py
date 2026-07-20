@@ -358,6 +358,156 @@ def test_adoption_section_renders_seeded_history():
     # layer in test_adoption.py::test_per_dataset_matches_the_store.
 
 
+def test_audit_log_section_renders_the_cross_run_ledger():
+    at = _boot()
+    at.button(key="nav_auditlog").click().run()
+    assert not at.exception
+    body = " ".join(m.value for m in at.markdown)
+    assert "Every run the platform has executed" in body
+    # The four KPI tiles, by their exact labels.
+    labels = {m.label for m in at.metric}
+    assert {"Runs logged", "Runs with a refusal", "Four-eyes coverage",
+            "Controls fired"} <= labels
+
+
+def test_audit_log_opens_a_run_and_shows_its_decision_summary():
+    """The five things the feature exists to answer, on one screen."""
+    at = _boot()
+    at.button(key="nav_auditlog").click().run()
+    # Open the run seeded to hit CTL-SOD-01: it is the only row that exercises
+    # every part of the detail block at once.
+    from sentinel.platform.audit_store import audit_runs
+
+    target = next(
+        r
+        for r in audit_runs()
+        if any(
+            (e.get("extra") or {}).get("control") == "CTL-SOD-01" for e in r.events
+        )
+    )
+    at.button(key=f"audopen_{target.run_id}").click().run()
+    assert not at.exception
+    # The decision summary spans markdown and the semantic callouts: the
+    # "Caught" line is an st.warning, "nothing refused" an st.success.
+    body = " ".join(
+        [m.value for m in at.markdown]
+        + [w.value for w in at.warning]
+        + [e.value for e in at.success]
+        + [e.value for e in at.error]
+    )
+    assert target.run_id in body
+    assert "stopped the run" in body  # allowed vs caught, counted
+    assert "CTL-SOD-01" in body  # who else had to sign, and what refused
+    assert "MRM Approver" in body  # who ran it
+
+
+def test_audit_log_posture_filter_separates_stopped_from_withheld():
+    """A run that finished must never appear under a "stopped" filter.
+
+    The first version of this screen offered one "Refusals only" option that
+    meant "a control caught something here", so a promoted run whose only
+    refusal was a denied column sat under a label implying it had been refused.
+    Two different findings; the filter splits them now.
+    """
+    from sentinel.platform.audit_store import audit_runs
+
+    runs = audit_runs()
+    stopped = [r for r in runs if r.has_refusal and r.stopped_run]
+    withheld = [r for r in runs if r.has_refusal and not r.stopped_run]
+
+    assert stopped and withheld, "corpus needs both to make the split meaningful"
+    # The whole point: nothing is in both, and every withheld run reached a
+    # normal outcome despite a control firing on it.
+    assert not ({r.run_id for r in stopped} & {r.run_id for r in withheld})
+    for r in withheld:
+        assert not r.stopped_run
+        assert r.refusal_controls, "a withheld run must still name what fired"
+
+
+def test_audit_run_opens_as_its_own_screen_and_back_returns():
+    """Opening a run is a navigation, not an accordion under the table."""
+    from sentinel.platform.audit_store import audit_runs
+
+    target = audit_runs()[0]
+    at = _boot()
+    at.button(key="nav_auditlog").click().run()
+    at.button(key=f"audopen_{target.run_id}").click().run()
+    assert not at.exception
+    assert at.session_state["section"] == "Audit Run"
+    # The ledger is gone; this screen is just the run.
+    body = " ".join(m.value for m in at.markdown)
+    assert "showing" not in body
+    assert target.run_id in body
+
+    at.button(key="audrun_back").click().run()
+    assert not at.exception
+    assert at.session_state["section"] == "Audit Log"
+
+
+def test_every_audit_row_has_two_ways_into_the_run():
+    """The id is a link and there is an explicit Open button.
+
+    A tertiary button renders as plain body text, so the run id alone read as
+    an inert cell value and the drill-down was undiscoverable.
+    """
+    from sentinel.platform.audit_store import audit_runs
+
+    at = _boot()
+    at.button(key="nav_auditlog").click().run()
+    keys = {b.key for b in at.button}
+    for r in audit_runs()[:5]:
+        assert f"audopen_{r.run_id}" in keys, "run id is not a button"
+        assert f"audopen2_{r.run_id}" in keys, "row has no explicit Open action"
+
+
+def test_the_row_open_button_reaches_the_same_run_as_the_id():
+    from sentinel.platform.audit_store import audit_runs
+
+    target = audit_runs()[1]
+    at = _boot()
+    at.button(key="nav_auditlog").click().run()
+    at.button(key=f"audopen2_{target.run_id}").click().run()
+    assert not at.exception
+    assert at.session_state["section"] == "Audit Run"
+    assert at.session_state["aud_sel"] == target.run_id
+
+
+def test_audit_run_deep_link_resolves_a_run_by_url():
+    """?run=<id> is a real address, so a run's evidence can be sent to someone.
+
+    The examiner workflow is "send me the evidence for that run", which a
+    session-state-only accordion cannot serve.
+    """
+    at = AppTest(script_path=APP, default_timeout=60)
+    at.session_state["persona_id"] = "auditor"
+    at.query_params["run"] = "e2694026ad0c"
+    at.run()
+    assert not at.exception
+    assert at.session_state["section"] == "Audit Run"
+
+
+def test_audit_run_deep_link_to_an_unknown_id_says_so():
+    at = AppTest(script_path=APP, default_timeout=60)
+    at.session_state["persona_id"] = "auditor"
+    at.query_params["run"] = "deadbeefdead"
+    at.run()
+    assert not at.exception
+    assert any("deadbeefdead" in e.value for e in at.error)
+
+
+def test_audit_log_never_shows_a_refused_run_with_an_empty_caught_cell():
+    """The screen-level counterpart to the store-level test.
+
+    A run refused at Ask carries an empty controls_fired, so this would render
+    a visibly-refused row with nothing explaining it.
+    """
+    at = _boot()
+    at.button(key="nav_auditlog").click().run()
+    body = " ".join(m.value for m in at.markdown)
+    # The tier-block run is the case: its only refusal lives in the events.
+    assert "tier_block" in body or "CTL-TIER-01" in body
+
+
 def _popover_labels(at) -> list[str]:  # noqa: ANN001
     """Every popover trigger label on the current screen. A control chip that
     explains itself is a popover, so this is how the tests below tell a wired

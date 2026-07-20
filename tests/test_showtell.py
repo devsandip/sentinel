@@ -233,9 +233,29 @@ def test_catalog_controls_are_covered_too():
 
 
 def test_doc_only_controls_are_marked_unimplemented():
-    for cid in ("CTL-RBAC-01", "CTL-PURP-02", "CTL-TIER-01", "CTL-INJECT-01"):
+    for cid in ("CTL-RBAC-01", "CTL-PURP-02", "CTL-INJECT-01"):
         assert cid in CONTROLS_INFO
         assert CONTROLS_INFO[cid].implemented is False
+
+
+def test_tier_control_is_implemented_because_it_actually_refuses_runs():
+    """CTL-TIER-01 was catalogued doc-only while flow.py was enforcing it.
+
+    The Audit Log surfaced the contradiction: a seeded run is refused by this
+    control at Ask, and its chip would have read "cannot fire: not implemented"
+    beside the run it stopped. The catalogue was stale, not the code.
+    """
+    assert CONTROLS_INFO["CTL-TIER-01"].implemented is True
+
+    from sentinel.platform.audit_store import audit_runs
+
+    refused_at_ask = [r for r in audit_runs() if r.stopped_at == "Ask"]
+    assert refused_at_ask, "expected a seeded run refused by the tier gate"
+    assert any(
+        e.get("action") == "tier_block"
+        for r in refused_at_ask
+        for e in r.events
+    )
 
 
 def test_unknown_control_gets_an_honest_placeholder():
