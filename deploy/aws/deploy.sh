@@ -13,6 +13,53 @@ STACK="sentinel-eb"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$REPO_ROOT"
 
+# Guard: the bundle is built from the working TREE, not from HEAD. `zip` walks the
+# filesystem, so what ships is whatever is on disk right now. A checkout can sit on
+# exactly origin/main and still hold something else in its index: on 2026-07-20 this
+# folder was on main at origin/main with a full revert of three merges staged, 2,699
+# deletions, and every check in use at the time passed it. The bundle would have gone
+# Green without the Gate read or the Live LLM fix and reported success.
+#
+# So the check has two clauses and the second is the one that fires: HEAD is an
+# ancestor of origin/main (nothing unreviewed ships) AND the tree is clean (what
+# ships is what HEAD says). Untracked files count, because a new module under
+# sentinel/ is inside the zip's file list and would ship without ever being in git.
+#
+# Verifiable failure is fatal; inability to verify is a warning, matching the
+# requirements guard below. A deploy from a non-git copy is unusual but not wrong.
+echo "==> Checking the tree being zipped is what origin/main says it is"
+if ! git rev-parse --git-dir >/dev/null 2>&1; then
+  echo "    WARNING: not a git checkout; cannot verify what is being shipped. Proceeding." >&2
+else
+  git fetch --quiet origin main 2>/dev/null \
+    || echo "    WARNING: could not fetch origin/main; comparing against the local ref." >&2
+
+  DIRTY="$(git status --porcelain)"
+  if [ -n "$DIRTY" ]; then
+    echo "!! The working tree is DIRTY. Aborting before touching AWS." >&2
+    echo "   deploy.sh zips the tree, so these differences would ship without review:" >&2
+    echo "$DIRTY" | sed 's/^/     /' >&2
+    echo "" >&2
+    echo "   Untracked (??) files count: anything under a zipped path ships too." >&2
+    echo "   Commit, stash or clean, then re-run this deploy." >&2
+    exit 1
+  fi
+
+  if ! git rev-parse --verify --quiet origin/main >/dev/null; then
+    echo "    WARNING: no origin/main ref; cannot verify HEAD is merged. Proceeding." >&2
+  elif ! git merge-base --is-ancestor HEAD origin/main; then
+    echo "!! HEAD is NOT an ancestor of origin/main. Aborting before touching AWS." >&2
+    echo "     HEAD        $(git rev-parse --short HEAD) ($(git rev-parse --abbrev-ref HEAD))" >&2
+    echo "     origin/main $(git rev-parse --short origin/main)" >&2
+    echo "" >&2
+    echo "   This checkout holds commits that are not on main. Merge them first," >&2
+    echo "   or deploy from a checkout that is on main." >&2
+    exit 1
+  else
+    echo "    clean, and HEAD is on origin/main."
+  fi
+fi
+
 # Guard: prod installs from requirements.txt (a uv export), NOT pyproject/uv.lock.
 # If that export drifts from the lock, a dependency added in code but missing from
 # requirements.txt ships a bundle that imports a module the instance never installed,

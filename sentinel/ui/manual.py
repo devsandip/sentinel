@@ -81,6 +81,7 @@ from sentinel.sandbox.execute import (
 )
 from sentinel.ui.brand import SHIELD_SVG
 from sentinel.ui.nav import DRILL_DOWNS, SECTION_TEMPLATES, screen_count
+from sentinel.ui.shell import nav_to
 
 # --------------------------------------------------------------------------
 # Chapters
@@ -651,7 +652,7 @@ def _stage_controls() -> dict[str, list[str]]:
 # --------------------------------------------------------------------------
 # Chapter 1: the presentation
 # --------------------------------------------------------------------------
-def _deck(nav_to) -> None:  # noqa: ANN001, C901
+def _deck() -> None:  # noqa: C901
     n_ctl = len(implemented_ids())
     n_named = len(CONTROLS_INFO)
     datasets = all_datasets()
@@ -1039,7 +1040,7 @@ def _deck(nav_to) -> None:  # noqa: ANN001, C901
 # --------------------------------------------------------------------------
 # Chapter 2: quick start
 # --------------------------------------------------------------------------
-def _quick_start(nav_to) -> None:  # noqa: ANN001
+def _quick_start() -> None:
     st.markdown("#### Five minutes, in order")
     _numbered(
         [
@@ -1574,7 +1575,7 @@ def _regulation_chapter() -> None:
 # --------------------------------------------------------------------------
 # Chapter 6: screens
 # --------------------------------------------------------------------------
-def _screens_chapter(nav_to) -> None:  # noqa: ANN001
+def _screens_chapter() -> None:
     st.markdown(
         f"<span class='muted'>{screen_count()} screens in the sidebar, plus "
         f"{len(DRILL_DOWNS)} drill-downs that are deliberately not nav items: "
@@ -2217,13 +2218,8 @@ def _step(delta: int) -> None:
     ]
 
 
-def render_manual(nav_to) -> None:  # noqa: ANN001
-    """The User Manual screen.
-
-    `nav_to` is `app._nav_to`, passed in rather than imported: `app.py` imports
-    this module, so importing back would be a cycle. It is what the deck's
-    screen-map buttons and the quick start's "Go to Run" use.
-    """
+def render_manual() -> None:
+    """The User Manual screen: a nine-slide deck, then ten chapters."""
     st.markdown(_MANUAL_CSS, unsafe_allow_html=True)
     st.markdown(
         "<div class='eyebrow' style='margin-bottom:4px'>Help</div>",
@@ -2250,9 +2246,9 @@ def render_manual(nav_to) -> None:  # noqa: ANN001
     )
 
     if chapter == PRESENTATION:
-        _deck(nav_to)
+        _deck()
     elif chapter == "Quick start":
-        _quick_start(nav_to)
+        _quick_start()
     elif chapter == "The nine stages":
         _stages_chapter()
     elif chapter == "Autonomy levels":
@@ -2262,7 +2258,7 @@ def render_manual(nav_to) -> None:  # noqa: ANN001
     elif chapter == "Controls and regulation":
         _regulation_chapter()
     elif chapter == "Screens":
-        _screens_chapter(nav_to)
+        _screens_chapter()
     elif chapter == "Roles & access":
         _roles_chapter()
     elif chapter == "Data":

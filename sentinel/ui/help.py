@@ -6,9 +6,7 @@ and routes to the chapter, and Ask me answers only from retrieved manual
 passages and shows them.
 
 Both screens jump into the manual by writing `manual_chapter` before navigating,
-so "read the chapter" lands on the chapter rather than on the deck. `nav_to` is
-injected the same way `render_manual` takes it, and for the same reason: `app.py`
-imports this module, so importing back would be a cycle.
+so "read the chapter" lands on the chapter rather than on the deck.
 """
 
 from __future__ import annotations
@@ -21,6 +19,7 @@ from sentinel.gateway.model_gateway import ANTHROPIC, TEMPLATED, ModelGateway
 from sentinel.help import faq as faq_mod
 from sentinel.help.ask import ANSWERED, IRRELEVANT, UNSUPPORTED, Answer, ask
 from sentinel.help.corpus_loader import page_by_id
+from sentinel.ui.shell import nav_to
 
 _HELP_CSS = """
     <style>
@@ -55,7 +54,7 @@ def _esc(v: object) -> str:
     return html.escape(str(v))
 
 
-def _open_chapter(nav_to, page_id: str) -> None:  # noqa: ANN001
+def _open_chapter(page_id: str) -> None:
     """Jump to the manual chapter a corpus page renders.
 
     Called from the button's return value rather than from `on_click`: `nav_to`
@@ -71,7 +70,7 @@ def _open_chapter(nav_to, page_id: str) -> None:  # noqa: ANN001
 # --------------------------------------------------------------------------
 # FAQ
 # --------------------------------------------------------------------------
-def render_faq(nav_to) -> None:  # noqa: ANN001
+def render_faq() -> None:
     """The FAQ screen: common questions, each routing to its chapter."""
     st.markdown(_HELP_CSS, unsafe_allow_html=True)
     st.markdown(
@@ -127,7 +126,7 @@ def render_faq(nav_to) -> None:  # noqa: ANN001
                         f"Open the {page.chapter} chapter",
                         key=f"faq_go_{entry.page_id}_{shown}",
                     ):
-                        _open_chapter(nav_to, entry.page_id)
+                        _open_chapter(entry.page_id)
 
     if shown == 0:
         st.info(
@@ -157,7 +156,7 @@ _VERDICT_CHIP = {
 }
 
 
-def _render_answer(answer: Answer, nav_to, turn: int) -> None:  # noqa: ANN001
+def _render_answer(answer: Answer, turn: int) -> None:
     cls, label = _VERDICT_CHIP[answer.verdict]
     st.markdown(
         f"<span class='ask-verdict {cls}'>{_esc(label)}</span>",
@@ -179,7 +178,7 @@ def _render_answer(answer: Answer, nav_to, turn: int) -> None:  # noqa: ANN001
                 )
             top = answer.citations[0].chunk
             if st.button(f"Open the {top.chapter} chapter", key=f"ask_go_{turn}"):
-                _open_chapter(nav_to, top.page_id)
+                _open_chapter(top.page_id)
 
     bits = []
     bits.append("answer: live model" if answer.live else "answer: scripted (passages)")
@@ -198,7 +197,7 @@ def _submit(question: str) -> None:
     st.session_state.ask_pending = question
 
 
-def render_ask(nav_to) -> None:  # noqa: ANN001
+def render_ask() -> None:
     """Ask me: a question answered from the manual, or refused."""
     st.markdown(_HELP_CSS, unsafe_allow_html=True)
     st.markdown(
@@ -256,7 +255,7 @@ def render_ask(nav_to) -> None:  # noqa: ANN001
         with st.chat_message("user"):
             st.write(question)
         with st.chat_message("assistant"):
-            _render_answer(answer, nav_to, turn)
+            _render_answer(answer, turn)
 
     typed = st.chat_input("Ask a question about Sentinel")
     if typed:

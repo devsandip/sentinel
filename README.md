@@ -61,7 +61,9 @@ sentinel/
   config/      rbac.yaml, questions.yaml, evals.yaml, agents.yaml
   orchestrator.py   LangGraph StateGraph + interrupt-based approval + run store
   data/        german_credit.csv
-app.py         Streamlit UI (screens; the Run walkthrough lives in sentinel/ui/)
+  ui/          screens/ (one module per sidebar screen), shell.py (nav + chrome),
+               theme.py (the stylesheet), govflow.py (the Run walkthrough)
+app.py         Streamlit entry point: boots the session and routes one screen
 ```
 
 The pipeline (agents) and the control plane (harness) are separate modules.
