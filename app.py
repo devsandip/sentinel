@@ -2253,6 +2253,11 @@ _AUDIT_CTL_ALIAS = {
 # it can say which one fired; a single chip would have to pick one and be
 # wrong half the time.
 
+# A drill-down screen, deliberately NOT in _NAV_GROUPS: you reach it by opening
+# a run, not from the rail. It still participates in the nav stack, so the
+# sidebar Back button returns to the ledger like any other screen.
+_SECTION_AUDIT_RUN = "Audit Run"
+
 _AUD_HEAD = ("when", "run / analysis", "kind", "dataset", "ran by", "second signature",
              "outcome", "caught")
 _AUD_COLS = (0.95, 1.45, 1.15, 1.4, 1.3, 1.5, 1.15, 2.15)
@@ -2462,6 +2467,43 @@ def _audit_approval_prose(r) -> str:  # noqa: ANN001
     )
 
 
+def _audit_open(run_id: str) -> None:
+    """Open one run as its own screen.
+
+    A drill-down, not an accordion. Two things follow from that. The sidebar
+    Back button works, because this pushes onto the same nav stack every other
+    screen uses. And the run id goes into the query string, so a single run's
+    evidence has a real address: an auditor can link it, bookmark it, or open
+    it in a new browser tab. That matters more here than anywhere else in the
+    app, because "send me the evidence for that run" is the actual workflow.
+    """
+    st.session_state["aud_sel"] = run_id
+    st.query_params["run"] = run_id
+    _nav_to(_SECTION_AUDIT_RUN)
+
+
+def render_audit_run() -> None:
+    """One run, full screen: the evidence for a single execution."""
+    run_id = st.session_state.get("aud_sel") or st.query_params.get("run", "")
+    run = next((r for r in audit_runs() if r.run_id == run_id), None)
+
+    back, _ = st.columns([1, 5])
+    if back.button("Back to audit log", icon=":material/arrow_back:", key="audrun_back"):
+        st.query_params.pop("run", None)
+        _nav_to("Audit Log")
+
+    if run is None:
+        # Reachable by editing the URL, so it says which id failed rather than
+        # rendering an empty screen.
+        st.error(
+            f"No run on file with id `{run_id}`. It may have been a live run "
+            "from a previous session: those write to runtime/, which does not "
+            "survive a restart."
+        )
+        return
+    _audit_detail(run)
+
+
 def render_audit_log() -> None:
     st.subheader("Audit log")
     st.markdown(
@@ -2506,11 +2548,36 @@ def render_audit_log() -> None:
         "passed counts here.",
     )
 
+    # "Refusals only" used to mean "a control caught something on this run",
+    # which includes runs that then completed: a denied column or a redacted
+    # value is a refusal the run survived. Reading that label next to an
+    # "approved" outcome is a fair contradiction to raise, so the filter now
+    # splits on the same axis the KPI caption does, and counts each option so
+    # the split is legible before you pick one.
+    n_stopped = sum(1 for r in runs if r.has_refusal and r.stopped_run)
+    n_withheld = sum(1 for r in runs if r.has_refusal and not r.stopped_run)
+    n_gated = sum(1 for r in runs if r.reached_gate)
+    _POSTURE_ALL = "All runs"
+    _POSTURE_STOPPED = f"Stopped by a control ({n_stopped})"
+    _POSTURE_WITHHELD = f"Withheld, ran on ({n_withheld})"
+    _POSTURE_GATED = f"Reached a human gate ({n_gated})"
+    # Drilling into a run unmounts these widgets, and Streamlit drops the state
+    # of a widget it did not render. Without this, Back returns you to the
+    # ledger with every filter reset, which is the opposite of going back.
+    # Durable copies live under _-prefixed keys and re-seed the widgets.
+    for _wk in ("aud_posture", "aud_kind", "aud_who", "aud_ctl"):
+        if _wk not in st.session_state and f"_{_wk}" in st.session_state:
+            st.session_state[_wk] = st.session_state[f"_{_wk}"]
+
     posture = st.segmented_control(
         "Show",
-        ["All runs", "Refusals only", "Approval decisions"],
-        default="All runs",
+        [_POSTURE_ALL, _POSTURE_STOPPED, _POSTURE_WITHHELD, _POSTURE_GATED],
+        default=_POSTURE_ALL,
         key="aud_posture",
+        help="Stopped: the run ended at a control. Withheld: a control refused "
+        "something (a column, a cell, a value) and the run continued to a "
+        "normal outcome. The two are different findings and the ledger keeps "
+        "them apart.",
     )
     f1, f2, f3 = st.columns(3)
     kinds = sorted({r.run_kind for r in runs})
@@ -2532,11 +2599,15 @@ def render_audit_log() -> None:
     ctls = sorted({c for r in runs for c in r.refusal_controls})
     ctl = f3.selectbox("Control", ["Any control", *ctls], key="aud_ctl")
 
+    for _wk in ("aud_posture", "aud_kind", "aud_who", "aud_ctl"):
+        st.session_state[f"_{_wk}"] = st.session_state.get(_wk)
+
     shown = [
         r
         for r in runs
-        if (posture != "Refusals only" or r.has_refusal)
-        and (posture != "Approval decisions" or r.reached_gate)
+        if (posture != _POSTURE_STOPPED or (r.has_refusal and r.stopped_run))
+        and (posture != _POSTURE_WITHHELD or (r.has_refusal and not r.stopped_run))
+        and (posture != _POSTURE_GATED or r.reached_gate)
         and (kind == "All kinds" or r.run_kind == kind)
         and (who == "Anyone" or r.actor == who)
         and (ctl == "Any control" or ctl in r.refusal_controls)
@@ -2558,13 +2629,13 @@ def render_audit_log() -> None:
     # keys shrink cleanly from the tail. Nothing is lost, because the CSS hooks
     # off the key prefix rather than the id.
     for i, r in enumerate(shown):
+        # Tint the row you last opened, so Back lands you where you left off.
         sel = st.session_state.get("aud_sel") == r.run_id
         cols = table_row(_AUD_COLS, f"aud_{'sel_' if sel else ''}{i}")
         td(cols[0], r.when[:16].replace("T", " "), mono=True)
         with cols[1]:
             if st.button(r.run_id, key=f"audopen_{r.run_id}", type="tertiary"):
-                st.session_state["aud_sel"] = None if sel else r.run_id
-                st.rerun()
+                _audit_open(r.run_id)
             st.markdown(
                 f"<span class='muted' style='font-size:11px'>{html.escape(r.ref_id)}</span>",
                 unsafe_allow_html=True,
@@ -2619,10 +2690,11 @@ def render_audit_log() -> None:
         "live rows carry real execution time. Click a run id to open it."
     )
 
-    selected = next((r for r in shown if r.run_id == st.session_state.get("aud_sel")), None)
-    if selected:
-        st.divider()
-        _audit_detail(selected)
+    st.caption(
+        "A run opens as its own screen. Sidebar Back returns here, and the "
+        "address bar carries ?run=<id>, so a single run's evidence can be "
+        "linked, bookmarked, or opened in a new browser tab."
+    )
 
 
 def _param_widget(spec_id: str, p):  # noqa: ANN001
@@ -3050,6 +3122,16 @@ _NAV_ICONS = {
     "Audit Log": ":material/gavel:",
 }
 
+# Deep link. ?run=<id> lands directly on that run's evidence, so an audit-log
+# URL opened in a new tab or pasted to a colleague resolves to the run rather
+# than the landing screen. Honoured once per session: after that the nav stack
+# owns where you are, or the param would drag you back on every rerun.
+if "run" in st.query_params and not st.session_state.get("aud_deeplinked"):
+    st.session_state["aud_deeplinked"] = True
+    st.session_state["aud_sel"] = st.query_params["run"]
+    st.session_state["section"] = _SECTION_AUDIT_RUN
+    st.session_state.setdefault("nav_stack", []).append("Audit Log")
+
 section = st.session_state.setdefault("section", "Overview")
 
 # In-app Back: return to the previous screen instead of leaving Sentinel.
@@ -3114,6 +3196,10 @@ if section == "Adoption":
 
 if section == "Audit Log":
     render_audit_log()
+    st.stop()
+
+if section == _SECTION_AUDIT_RUN:
+    render_audit_run()
     st.stop()
 
 # Fall-through: the credit-pipeline hero ("Pipeline" in the sidebar).

@@ -401,6 +401,72 @@ def test_audit_log_opens_a_run_and_shows_its_decision_summary():
     assert "MRM Approver" in body  # who ran it
 
 
+def test_audit_log_posture_filter_separates_stopped_from_withheld():
+    """A run that finished must never appear under a "stopped" filter.
+
+    The first version of this screen offered one "Refusals only" option that
+    meant "a control caught something here", so a promoted run whose only
+    refusal was a denied column sat under a label implying it had been refused.
+    Two different findings; the filter splits them now.
+    """
+    from sentinel.platform.audit_store import audit_runs
+
+    runs = audit_runs()
+    stopped = [r for r in runs if r.has_refusal and r.stopped_run]
+    withheld = [r for r in runs if r.has_refusal and not r.stopped_run]
+
+    assert stopped and withheld, "corpus needs both to make the split meaningful"
+    # The whole point: nothing is in both, and every withheld run reached a
+    # normal outcome despite a control firing on it.
+    assert not ({r.run_id for r in stopped} & {r.run_id for r in withheld})
+    for r in withheld:
+        assert not r.stopped_run
+        assert r.refusal_controls, "a withheld run must still name what fired"
+
+
+def test_audit_run_opens_as_its_own_screen_and_back_returns():
+    """Opening a run is a navigation, not an accordion under the table."""
+    from sentinel.platform.audit_store import audit_runs
+
+    target = audit_runs()[0]
+    at = _boot()
+    at.button(key="nav_auditlog").click().run()
+    at.button(key=f"audopen_{target.run_id}").click().run()
+    assert not at.exception
+    assert at.session_state["section"] == "Audit Run"
+    # The ledger is gone; this screen is just the run.
+    body = " ".join(m.value for m in at.markdown)
+    assert "showing" not in body
+    assert target.run_id in body
+
+    at.button(key="audrun_back").click().run()
+    assert not at.exception
+    assert at.session_state["section"] == "Audit Log"
+
+
+def test_audit_run_deep_link_resolves_a_run_by_url():
+    """?run=<id> is a real address, so a run's evidence can be sent to someone.
+
+    The examiner workflow is "send me the evidence for that run", which a
+    session-state-only accordion cannot serve.
+    """
+    at = AppTest(script_path=APP, default_timeout=60)
+    at.session_state["persona_id"] = "auditor"
+    at.query_params["run"] = "e2694026ad0c"
+    at.run()
+    assert not at.exception
+    assert at.session_state["section"] == "Audit Run"
+
+
+def test_audit_run_deep_link_to_an_unknown_id_says_so():
+    at = AppTest(script_path=APP, default_timeout=60)
+    at.session_state["persona_id"] = "auditor"
+    at.query_params["run"] = "deadbeefdead"
+    at.run()
+    assert not at.exception
+    assert any("deadbeefdead" in e.value for e in at.error)
+
+
 def test_audit_log_never_shows_a_refused_run_with_an_empty_caught_cell():
     """The screen-level counterpart to the store-level test.
 

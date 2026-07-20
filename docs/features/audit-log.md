@@ -266,6 +266,31 @@ blocks:
 
 **6. Empty state.** The app's existing `st.info` convention.
 
+**Two corrections after first use (2026-07-20).**
+
+*The posture filter conflated two findings.* It offered "Refusals only",
+meaning "a control caught something on this run" — which includes runs that
+then completed, because a denied column or a redacted value is a refusal the
+run survived. Reading that label beside an `approved` outcome is a fair
+contradiction to raise. The filter now splits on the same axis the Caught line
+already used, with counts in the labels: **All runs / Stopped by a control /
+Withheld, ran on / Reached a human gate**. Nothing appears under both of the
+middle two, and a test asserts it.
+
+*Opening a run is a navigation, not an accordion.* The detail was an inline
+block under the table, so every run rendered into the same spot at the bottom
+of a 24-row list. A run now opens as its own screen, pushed onto the app's nav
+stack, so sidebar Back works like everywhere else, plus an in-page Back. The
+run id also goes into the query string: `?run=<id>` is a real address, so a
+single run's evidence can be linked, bookmarked, or opened in a new browser
+tab. That matters more here than anywhere else in the app, because "send me
+the evidence for that run" is the actual examiner workflow. An unknown id says
+which id failed rather than rendering blank.
+
+Drilling in unmounts the filter widgets, and Streamlit discards the state of a
+widget it did not render, so Back originally returned you to an unfiltered
+ledger. Durable `_`-prefixed copies re-seed them.
+
 Not gated to the Auditor persona. It is the auditor's natural home, but gating
 it would hide the platform's best argument from a panelist logged in as the
 Analyst, and every other surface is persona-independent.
