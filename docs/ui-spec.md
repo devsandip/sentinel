@@ -656,8 +656,13 @@ the decision was made against, what was read, and where.
 `--ok` or `--danger`. **Both directions carry a reason.** A refusal that names
 its control is halfway there already; an approval that says only "no violations"
 is an assertion, and this stage exists to replace assertions. The reason states
-the number of constructs judged, and then names the checks that judged nothing,
-because a green verdict that hides those claims more than the gate established.
+the size of the read, and then names the checks that judged nothing, because a
+green verdict that hides those claims more than the gate established.
+
+The size of the read is **two numbers, never one**: judgements and constructs.
+One import is judged by four checks (the allowlist plus three deny lists), so
+judgements run more than double constructs. The gutter adds up to the second,
+so a reader who checks the screen against itself must find them agreeing.
 
 **`.gatein`** — four tiles: the code, the import allowlist, the column grant,
 the SQL scope. Each prints its contents, not just its size. "Every column

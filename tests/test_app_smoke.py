@@ -831,7 +831,12 @@ def test_gate_states_why_it_cleared_and_what_it_did_not_cover():
     verdict = re.search(r"<div class='gvd pass'>(.*?)</div></div>", body, re.S)
     assert verdict, "the Gate verdict block is not rendering as a pass"
     text = verdict.group(1)
-    assert "constructs" in text and "refused none of them" in text
+    assert "judgements" in text and "refused none of them" in text
+    # Two distinct numbers, never printed as one: one import is judged by
+    # four checks, so judgements exceed constructs.
+    n_judged = int(re.search(r"<b>(\d+) judgements</b>", text).group(1))
+    n_constructs = int(re.search(r"over the (\d+) constructs", text).group(1))
+    assert n_judged > n_constructs > 0
     assert "which is not the same as clearing it" in text, (
         "a green verdict that does not name the checks with nothing to read is "
         "claiming more assurance than the gate established"

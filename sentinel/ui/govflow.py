@@ -1580,7 +1580,12 @@ def _gate_verdict(gate: dict, checks: list[dict]) -> None:
     and an assertion is what this stage exists to replace."""
     scope = gate.get("scope") or {}
     passed = bool(gate.get("passed"))
+    # Two numbers, deliberately: one import is judged by four checks, so the
+    # judgement count is larger than the construct count. Printing either as
+    # the other is the sloppiness this whole stage is against, and the gutter
+    # below adds up to the second one, so a reader can check it.
     judged = sum(int(c.get("examined") or 0) for c in checks)
+    constructs = sum((scope.get("line_counts") or {}).values())
     lines = scope.get("lines", 0)
     quiet = [c for c in checks if c.get("verdict") == GATE_NO_SUBJECT]
     unarmed = [c for c in checks if c.get("verdict") == GATE_NOT_ARMED]
@@ -1588,9 +1593,9 @@ def _gate_verdict(gate: dict, checks: list[dict]) -> None:
     if passed:
         head = "Cleared for execution"
         why = (
-            f"The nine checks judged <b>{judged} constructs</b> across "
-            f"{lines} lines of generated code, each against the rule below it, "
-            "and refused none of them."
+            f"The nine checks made <b>{judged} judgements</b> over the "
+            f"{constructs} constructs in {lines} lines of generated code, each "
+            "against the rule below it, and refused none of them."
         )
     else:
         refusing = [c for c in checks if c.get("verdict") == GATE_REFUSED]
@@ -1608,8 +1613,8 @@ def _gate_verdict(gate: dict, checks: list[dict]) -> None:
         n = len(refusing)
         why = (
             f"{n} of the nine checks refused. " + "; ".join(bits) + ". "
-            f"The other {9 - n} judged the rest of the "
-            f"{judged} constructs and cleared them."
+            f"The other {9 - n} made the remaining judgements over the "
+            f"{constructs} constructs in {lines} lines and cleared them."
         )
 
     then = (

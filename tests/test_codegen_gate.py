@@ -316,3 +316,13 @@ def test_public_payload_carries_the_read_alongside_the_pinned_keys():
     first = pub["checks"][0]
     assert set(first) >= {"key", "label", "controls", "rule", "verdict", "summary", "items"}
     assert pub["scope"]["tier"] == "L2"
+
+
+def test_judgements_and_constructs_are_not_the_same_number():
+    """One import is judged by four checks (the allowlist plus three deny
+    lists), so the judgement count exceeds the construct count. They had better
+    not be printed as one number: the gutter adds up to the second, so a reader
+    who checks would find the screen off by more than a factor of two."""
+    result = gate_code('import pandas\nctx.emit(1)\n')
+    assert result.examined > result.constructs > 0
+    assert result.constructs == sum(result.scope["line_counts"].values())

@@ -371,8 +371,21 @@ class GateResult:
 
     @property
     def examined(self) -> int:
-        """Constructs judged across every check. The size of the read."""
+        """Judgements made across every check.
+
+        Not a count of constructs: one import is judged by four checks (the
+        allowlist and the three deny lists), so it lands here four times. Use
+        `constructs` for the distinct count. Presenting either number as the
+        other is the exact sloppiness the read exists to remove.
+        """
         return sum(c.examined for c in self.checks)
+
+    @property
+    def constructs(self) -> int:
+        """Distinct constructs the gate formed a view about, counted once each.
+        The same total the per-line gutter adds up to."""
+        counts = self.scope.get("line_counts") or {}
+        return sum(counts.values()) if isinstance(counts, dict) else 0
 
     def check(self, key: str) -> CheckReading | None:
         return next((c for c in self.checks if c.key == key), None)
