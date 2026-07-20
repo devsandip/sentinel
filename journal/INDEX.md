@@ -1,16 +1,78 @@
 # Sentinel — Journal Index
 
-Last refreshed: 2026-07-20 11:21
+Last refreshed: 2026-07-20 13:10
 
-Latest entry: [2026-07-20-1121-chrome-recedes-and-an-audit-finds-the-landmine.md](entries/2026-07-20-1121-chrome-recedes-and-an-audit-finds-the-landmine.md)
+Latest entry: [2026-07-20-1310-a-list-that-granted-what-nothing-installed.md](entries/2026-07-20-1310-a-list-that-granted-what-nothing-installed.md)
 
 ## Where we are now
+
+**All five audit findings are closed on PR #17: four fixed, one closed by a
+decision. Nothing is deployed yet, so prod still runs v10 with the broken Live
+LLM path. The deploy needs both scripts, because one of the fixes is a
+CloudFront change.**
+
+The Live LLM path failed 100% of the time because the L2 allowlist advertised
+statsmodels, lifelines, shap, dowhy and econml and none were installed anywhere.
+The allowlist goes verbatim into the codegen system prompt, so each name is an
+instruction to the model to use that package: the gate stamped "imports on the
+tier's allowlist, clear" and the sandbox died with ModuleNotFoundError. All five
+are dependencies now, and `tests/test_allowlist_env.py` reconciles the grant
+against `requirements.txt` (what the instance pip-installs, not a local venv,
+which hides the fault precisely when it matters). Installing them cost a major
+version of the numerical stack: econml and numba cap pandas at 2.3.3,
+scikit-learn at 1.6.1, numpy at 2.4.6, scipy at 1.15.3. **An allowlist entry is
+not only a package, it is that package's constraints on everything else.** And
+it cost time: shap imports in 4.2-4.6s warm and 15.5s cold, against a 10s wall
+clock, so there is now a boot-time warm-up (`sentinel/sandbox/warmup.py`, a
+throwaway subprocess, since the caches are on disk not in the process) and the
+wall clock moved to 30s. An infinite loop dies at 30s as it dies at 10s; what
+changed is that the control stopped firing on the imports. **An import grant is
+also a time budget.**
+
+The adoption bars rendered as four identical 17.2px rectangles for four
+different weeks, with the inline heights correct throughout. The value label was
+a flex sibling, so it took 16.8px out of a 56px column and the bar, the only
+child with no intrinsic height, absorbed the whole deficit. ui-spec 4.10 had
+already specified the fix ("value printed above each bar"), and following it
+fixes the cause rather than making room for it. **An element whose size encodes
+data must be out of the flex-shrink pool, and anything decorating it must be out
+of flow.**
+
+The six seconds of blank white was never an EB cold start; TTFB is 1.8s. It was
+61 files and 2.5MB of Streamlit front end served uncompressed and uncached,
+because the single CloudFront behavior is CachingDisabled with Compress:false,
+which is right for the WebSocket and wrong for the bundle. `/static/*` has its
+own behavior now. Compress:true alone would have done nothing: CloudFront
+compresses what it caches, and CachingDisabled also drops Accept-Encoding from
+the cache key.
+
+**The fifth finding dissolved.** It was written up as the largest hole: the gate
+clears nine checks on the default path and never refuses, so its best capability
+is asserted rather than shown. Both halves of that were wrong. The gate is right
+to clear a benign request, since blocking it would be a false positive, which
+this build treats as costing as much as a missed block. And the refusal is not
+missing: three adversarial requests are wired into the L2 analysis dropdown and
+three at L3, each real code with a real violation, nothing seeded. The finding
+reduces to "the default selection is the benign one". Sandip's call: drive two
+demos, happy path then adversarial. Nothing to build.
+
+**The thread through all five: this build states claims in prose that nothing
+holds it to.** The allowlist named packages nothing installed. The Execute panel
+claimed a 15s wall clock while the code enforced 10. The stepper doc listed
+DoWhy, lifelines and SHAP as permitted directly under its own rule to claim only
+libraries that actually run. The fix in each case was to make the claim read
+from the thing that enforces it.
+
+Everything below is the prior state: v10 in prod, audit findings open.
+
+---
 
 **v10 is merged and LIVE in prod: a small chrome pass. The bigger news is not
 in it. A cold-visit audit of the live site found that the Live LLM path fails
 100% of the time and prints a Python traceback on screen, because the codegen
 allowlist advertises packages that are not installed. Nothing from the audit is
-fixed yet.**
+fixed yet.** *(Superseded 2026-07-20 13:10: all five closed on PR #17, not yet
+deployed.)*
 
 v10 (PR #14, `58e51dd`, bundle `sentinel-20260720-111254.zip`) is three things.
 The sidebar group headers were being painted over by the first nav row in each
@@ -461,6 +523,7 @@ out).
 
 ## Recent entries
 
+- [2026-07-20-1310-a-list-that-granted-what-nothing-installed.md](entries/2026-07-20-1310-a-list-that-granted-what-nothing-installed.md) : all five audit findings closed in one session, four fixed and one dissolved. **The allowlist granted five packages nothing installed** (statsmodels, lifelines, shap, dowhy, econml), and since the list goes verbatim into the codegen prompt, the model took the instruction, the gate stamped the imports clear and the sandbox died with `ModuleNotFoundError`: a control that approved what the environment refuses. Reproduced at the seam before touching it. I fixed it by dropping the four unused ones; Sandip reversed it to install them, correctly, since the defect was never which side moved. That cost a major version of the numerical stack (econml/numba cap pandas at 2.3.3, sklearn 1.6.1, numpy 2.4.6, scipy 1.15.3) and it cost time: shap is 4.2-4.6s warm and 15.5s cold against a 10s wall clock, hence `sentinel/sandbox/warmup.py` and a 30s cap. **An import grant is also a time budget.** The adoption bars: correct inline heights thrown away by a flex-shrink squash, fixed by following ui-spec 4.10, which had specified the fix all along. **An element whose size encodes data must be out of the flex-shrink pool.** The six-second blank was 2.5MB of Streamlit bundle served uncompressed and uncached by a CloudFront behavior built for the WebSocket; `/static/*` split out, and `Compress:true` alone would have done nothing under CachingDisabled. **The fifth finding dissolved under Sandip's question**: the gate is right to clear a benign request, the adversarial requests are already wired and genuine, and the whole thing reduced to which option is selected by default. He drives two demos instead. The thread through all five: claims stated in prose that nothing holds to them, including a caption claiming a 15s wall clock while the code enforced 10. 423 tests. PR #17, not yet deployed.
 - [2026-07-20-1121-chrome-recedes-and-an-audit-finds-the-landmine.md](entries/2026-07-20-1121-chrome-recedes-and-an-audit-finds-the-landmine.md) : demo prep for the hiring manager, which turned into a chrome pass plus a cold-visit audit of the live site. The chrome (PR #14, `58e51dd`, v10): sidebar group headers were being painted over by the first nav row in each group, because Streamlit's `margin-bottom:-16px` on `stMarkdownContainer` exists to cancel a markdown `<p>`'s 16px and `.gl` is a bare div with 6px, so it over-pulled 10px; six other divs are over-pulled the same way and none are occluded, since a nav row is the only thing that paints over the element above it. Topbar Data/Purpose chips removed everywhere (duplication after v9 put both on the Ask row); the identity chip was removed too and **put back**, because switching persona is the only in-app way to show the ladder. Sidebar counts removed. Merged against a v9 that landed mid-session by resetting onto main and re-applying, rather than resolving markers. Deployed and verified live. 386 passed, 3 skipped. **The audit is the real output and nothing from it is fixed:** the codegen allowlist advertises statsmodels/lifelines/shap/dowhy/econml at L2 and none are in `requirements.txt`, so the Live LLM path fails 100% in prod with a visible `ModuleNotFoundError` while the Gate stamps the imports clear; the Adoption chart renders four flat bars from a flex-shrink squash; an L0 persona is pointed at a sidebar that has not held identity since v7; and on the default path the gate never refuses anything, so the headline claim is asserted rather than shown. prod is v10.
 - [2026-07-20-1055-the-row-becomes-the-control-v9.md](entries/2026-07-20-1055-the-row-becomes-the-control-v9.md) : the Ask stage stopped showing information beside a control that ignored it. Step 1's dataset table is now the control: a one-option radio per row labelled with the dataset id, exclusivity enforced in a callback (and tested, since Streamlit has no radio group spanning containers), the `.row-sel` tint and `.rowgood` bar built for the first time, and the mockup's `.pmatrix` showing all six purposes for the picked dataset off the real matrix. **Confirm Dataset gates steps 2 and 3** and changing the pick clears the drafted question, because a purpose and an analysis are declared against a dataset. Step 2 sentence-cased with a covers/excludes block from a new `PURPOSE_SCOPE` in the policy module; step 3 renamed "Select the Analysis" and stating method + libraries that genuinely run, with the refusing control named. Those ids are re-derived from the real gate by test rather than asserted. Rejected: `st.dataframe` single-row selection, which is a real row click but would have cost the classification popover 4.3 requires. Table helpers extracted to `sentinel/ui/tables.py`; `govflow_mode` deleted (the L3 route is now the synthetic_its row). PR #13, bundle `sentinel-20260720-104529.zip`, EB Green, verified live by run `e168559a3501`. 392 tests. Found: the deploy folder was 3 days stale, and the permission classifier now blocks `gh pr merge` outright. prod is v9.
 - [2026-07-19-1522-chips-that-explain-themselves-v8.md](entries/2026-07-19-1522-chips-that-explain-themselves-v8.md) : closed the control-chip gap and got a decision on OPA. The rule, now in ui-spec 4.3: a chip is clickable when it names a governance decision, inert when it names a fact. `_control_popover` was already the right mechanism and already proven at three sites while the engine bar built dead spans thirty lines below it. Wired: engine bar (all nine stages), Architecture stop, import allowlist (grouped by the control that denies each row, four popovers not thirty-six), topbar Data/Purpose chips (both onto CTL-PURP-01, whose two axes they name), certification gate rows, the Screen PII finding. Not wired, deliberately: the chips inside the Controls popover, since popovers should not nest. Datasets and both Registry tables rebuilt off `st.dataframe` into hand-laid tables so cells can carry chips; cost is lost sorting. Found on the way: the dataset registry had no classification column at all, and CTL-CODE-00 / CTL-DISC-03 were missing from their engine lists. PR #11, bundle `sentinel-20260719-151623.zip`, EB Green, verified live. 382 tests. **OPA externalisation ruled out by Sandip: not in scope for the foreseeable future.** prod is v8.
@@ -498,6 +561,8 @@ out).
 
 ## Working hypotheses
 
+- **A claim stated in prose is not a control; it drifts the moment nothing enforces it.** Found three times in one session (2026-07-20): the L2 allowlist named five packages that were installed nowhere, the Execute panel's caption claimed a 15s wall clock while the code enforced 10, and the stepper doc listed DoWhy/lifelines/SHAP as permitted directly beneath its own rule to claim only libraries that actually run. Each was written once and true once. The fix in each case was the same shape: make the claim read from the thing that enforces it, and add a test that fails when the two diverge. The allowlist reconciles against `requirements.txt`, the caption interpolates `DEFAULT_WALL_CLOCK_S`, the permitted column renders from `ALLOWED_IMPORTS`. Worth applying to any number or list this build shows a visitor.
+- **An import grant is also a time budget, and a version ceiling.** Adding shap/dowhy/econml to the allowlist (2026-07-20) pinned the whole numerical stack down a major version, because econml and numba cap it, and charged 4.2-4.6s of warm import to every sandbox run against what was a 10s wall clock. Widening an allowlist is never only a policy change.
 - Health 200 is necessary but not sufficient to call a deploy verified: Streamlit's health endpoint answers before app.py runs, so an import crash returns 200 while every page is broken (this happened 2026-07-18). Verify a deploy by loading a page and running a flow, not by probing health. And requirements.txt is a second dependency list that drifts from pyproject/uv.lock unless something regenerates it; the fix is to generate it at deploy time or diff it in CI.
 - **A control that approves something the environment then refuses is not a control that held, it is a control that guessed.** Found 2026-07-20: the codegen allowlist is a *third* dependency list, and nothing reconciles it with `requirements.txt`. The Gate stamps "imports on the tier's allowlist, clear" for `statsmodels`, and Execute throws `ModuleNotFoundError` because it was never installed. `requirements.txt` and `uv.lock` agree perfectly here, so the existing deploy guard cannot see it: they are both simply missing what the allowlist promises. Any list that grants permission must be checked against the thing that has to honour it, not just against the list next to it. Local environments hide this precisely when it matters, since `statsmodels` is installed here transitively and absent in prod.
 - A naturally-flagging fairness result is more convincing than a staged one. Keep it real. This now extends to the gate: if the demo shows generated code being blocked, the block must be genuine, never seeded.
@@ -516,7 +581,7 @@ out).
 - Retrieval ranking: the SR 11-7 query ranks the internal modeling standard above the SR 11-7 document itself (SR 11-7 chunks still return at ranks 2-3). Worth a later look at chunking or reranking.
 - Should `deploy.sh` refuse when `HEAD` is not an ancestor of `origin/main`? Opened 2026-07-20: the primary checkout had been parked on `docs/v6-deploy-record` since Sunday, 16 commits behind, and a deploy from it would have shipped v6 while reporting success. Nothing keeps that folder current, and it is the only place the gitignored live-LLM key exists, so it cannot simply be abandoned for a worktree. A one-line guard in the script would have caught it. The related structural question is whether the primary checkout should hold `main` at all, given another worktree currently does and git refuses the same branch twice.
 - How should concurrent sessions on this repo be handled? Opened 2026-07-20: a second session pushed `claude/demo-prep-hiring-manager-5c0866` (a real nav-bar paint fix) mid-conversation, while I was reporting the branch list as settled. Sandip chose to deploy without it. There is no convention yet for noticing another live session, and the branch list is not a reliable signal because it changes underneath you. **Update the same day:** that branch shipped four hours later as v10, after Sandip looked at it, and the merge needed a reset-onto-main-and-reapply because v9 had restructured the same regions underneath it. The question stands; the specific instance resolved the ordinary way, by a human looking. The practical lesson is narrower: when main moves under a branch, re-applying a small diff onto the new main beats resolving conflict markers in a file that has been restructured.
-- Should the demo's default path include a refusal? Opened 2026-07-20 by the cold-visit audit. Today the happy path runs nine checks and clears all nine, so a visitor never sees the gate refuse anything, and the gate refusing generated code by name is the most compelling thing in the build. Making the default path include one genuine block would show the claim instead of asserting it. The constraint is the standing rule that a block must be real and never seeded, so this is a question about which genuine request to put on the default path, not about staging one.
+- ~~Should the demo's default path include a refusal?~~ Resolved 2026-07-20, and the question was malformed. The gate is right to clear a benign request: blocking it would be a false positive, which this build treats as costing as much as a missed block. And the refusal was never missing, only unselected: three adversarial requests are wired into the L2 analysis dropdown and three at L3, each real code with a real violation the gate genuinely catches. The finding reduced to "the default selection is the benign one". Sandip drives two demos, happy path then adversarial, so nothing was built. Worth remembering as a case where a finding written up as the largest product hole was a note about a default value.
 - ~~`synthetic_its` is registered but has no onboarder~~ Resolved: onboarded in v4 (generated with a known +12 effect), and in v6 (2026-07-19) it gained CAP_TABULAR so profiling is legal on it too. It is the Public-class L3 home.
 - Demo GIF/Loom for the README: dropped for now per Sandip (2026-07-14).
 

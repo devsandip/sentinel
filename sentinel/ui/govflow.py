@@ -1023,7 +1023,25 @@ def _purpose_scope(purpose: str) -> None:
 
 
 def _cfg_question(is_l3: bool) -> tuple[str, str, str]:
-    """Step 3: select a prebuilt analysis. Returns (style, intent, question)."""
+    """Step 3: select a prebuilt analysis. Returns (style, intent, question).
+
+    The default is deliberately the benign analysis, and deliberately stays that
+    way. A cold-visit audit on 2026-07-20 noted that a visitor clicking the
+    obvious path never sees the gate refuse anything: nine checks, nine clears.
+    That is true, and it is not a defect in the gate. The benign request
+    generates benign code and a gate that blocked it would be a false positive,
+    which this build treats as costing as much as a missed block (section 16:
+    governance that blocks legitimate work gets routed around).
+
+    The refusal is not missing either. Three adversarial requests sit in this
+    dropdown at L2 and three more at L3, each one real code with a real
+    violation the gate genuinely catches; nothing is seeded. Resolved by Sandip
+    on 2026-07-20: the demo is driven as two runs, the happy path first and an
+    adversarial one second, rather than by making the default path refuse or by
+    automating both. So this stays an opt-in second run, and the honest framing
+    of the finding is that the gate's refusal is demonstrated, not that it is
+    absent.
+    """
     draft = _draft()
     st.markdown("**Step 3 of 3 · Select the Analysis**")
     styles = _L3_STYLES if is_l3 else _GOVFLOW_STYLES
