@@ -246,6 +246,13 @@ def render_pdf(card: ModelCard, path: str | Path) -> Path:
     from fpdf import FPDF
 
     path = Path(path)
+    # Create the parent, because the caller's directory may not exist. The UI
+    # writes under `runtime/`, which is gitignored and therefore absent from the
+    # deploy bundle: every local checkout has one and prod never did, so the
+    # Registry's model-card download raised FileNotFoundError on the live site
+    # while passing every test. Fixed here rather than at the call site so the
+    # CLI (scripts/generate_model_card.py) cannot hit it either.
+    path.parent.mkdir(parents=True, exist_ok=True)
     pdf = FPDF(format="A4")
     pdf.set_auto_page_break(auto=True, margin=15)
     pdf.add_page()

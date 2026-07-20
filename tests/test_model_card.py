@@ -60,3 +60,22 @@ def test_render_pdf_writes_file(tmp_path):
     assert out.stat().st_size > 2000
     # PDF magic header.
     assert out.read_bytes()[:4] == b"%PDF"
+
+
+def test_render_pdf_creates_the_directory_it_writes_into(tmp_path):
+    """The bug this catches only ever appeared in prod.
+
+    The UI writes model-card PDFs under `runtime/`, which is gitignored and so
+    is absent from the deploy bundle. Every local checkout has one, prod never
+    did, and the Registry's download raised FileNotFoundError on the live site
+    while the whole suite stayed green. The old test passed a `tmp_path` that
+    pytest had already created, which is exactly the condition prod does not
+    meet."""
+    card, _ = _card()
+    missing = tmp_path / "runtime" / "nested"
+    assert not missing.exists()
+
+    out = render_pdf(card, missing / "card.pdf")
+
+    assert out.exists()
+    assert out.read_bytes()[:4] == b"%PDF"
