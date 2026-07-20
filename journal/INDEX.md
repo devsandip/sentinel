@@ -71,7 +71,10 @@ Everything below is the prior state: v10 in prod, audit findings open.
 ---
 
 **v12 is merged to main but NOT deployed. The Registry screen now says what
-each agent does and what the three registries on it are.**
+each agent does and what the three registries on it are. Note that the v12
+entry below, and the v10 block under it, both say the cold-visit audit is
+untouched. That was true when each was written and is not now: all five findings
+are fixed or closed, in the section above.**
 
 v12 (PR #18, `a924ffe`) started from Sandip asking what the agents on the
 Registry screen actually do, and what the difference is between Models, Agents,
