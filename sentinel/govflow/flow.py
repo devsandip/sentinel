@@ -40,7 +40,7 @@ from ..platform.certification import (
     get_entry,
     plan_visible_entries,
 )
-from ..sandbox import ExecutionResult, run_sandboxed
+from ..sandbox import GOVFLOW_WALL_CLOCK_S, ExecutionResult, run_sandboxed
 from .access import (
     DATASET_ID,
     FAIR_LENDING_GRANT,
@@ -664,7 +664,7 @@ def run_governed_analysis(
             tables={DATASET_ID: scoped},
             granted_columns=FAIR_LENDING_GRANT,
             row_filter_sql=FAIR_LENDING_ROW_FILTER,
-            wall_clock_s=15,
+            wall_clock_s=GOVFLOW_WALL_CLOCK_S,
         )
         if not execution.ok:
             ctl = [execution.control] if execution.control else []

@@ -616,6 +616,27 @@ def test_no_screen_hardcodes_the_wall_clock():
     assert DEFAULT_WALL_CLOCK_S > 0
 
 
+def test_governed_routes_pass_the_named_wall_clock_not_a_literal():
+    """The cap a run actually gets is GOVFLOW_WALL_CLOCK_S, not the default.
+
+    Both governed routes carried a bare `wall_clock_s=15` literal while every
+    surface documented the 30s default as though it were operative. Two numbers,
+    two places, and no way for a caption to know which one to print. The literal
+    is now a named constant, and this pins it: a route that goes back to typing
+    a number puts the manual and the Execute panel out of step with the run.
+    """
+    from sentinel.sandbox.execute import GOVFLOW_WALL_CLOCK_S
+
+    root = os.path.dirname(os.path.dirname(__file__))
+    for rel in ("sentinel/govflow/flow.py", "sentinel/govflow/l3.py"):
+        with open(os.path.join(root, rel)) as f:
+            src = f.read()
+        assert "wall_clock_s=GOVFLOW_WALL_CLOCK_S" in src, f"{rel} lost the constant"
+        literals = re.findall(r"wall_clock_s\s*=\s*[\d.]+", src)
+        assert not literals, f"{rel} passes a literal wall clock: {literals}"
+    assert 0 < GOVFLOW_WALL_CLOCK_S <= DEFAULT_WALL_CLOCK_S
+
+
 def test_certification_gates_explain_their_control():
     """A certification gate that names a catalogue control explains it through
     the same popover the run walkthrough uses, not a static .ctrl-chip span."""
@@ -652,6 +673,124 @@ def test_registry_section_shows_certification_lifecycle():
     # The certification lifecycle section and its visible refusal both render.
     assert any("certification lifecycle" in m.value for m in at.markdown)
     assert any("cohort-retention" in e.label for e in at.expander)
+
+
+# -- the User Manual (Help) --------------------------------------------------
+
+
+def test_user_manual_opens_on_the_presentation():
+    at = _boot()
+    at.button(key="nav_manual").click().run()
+    assert not at.exception
+    assert at.session_state["section"] == "User Manual"
+    assert at.session_state["manual_chapter"] == "Presentation"
+    body = " ".join(m.value for m in at.markdown)
+    # The deck's spine: the cover, and a slide per subject the manual promises.
+    assert "SENTINEL" in body
+    for heading in (
+        "Two planes",
+        "Ask, Plan, Access, Generate, Gate, Execute, Screen, Interpret, Attest",
+        "computed, never chosen",
+        "The maths is bought",
+        "Nobody both runs an analysis and approves it",
+    ):
+        assert heading in body, f"deck is missing: {heading}"
+
+
+def test_user_manual_deck_reads_its_numbers_from_the_modules():
+    """The deck's whole claim is that it cannot drift. Assert the counts it
+    prints are the live ones, not literals typed into the slide."""
+    from sentinel.datasets import all_datasets
+    from sentinel.govflow.controls_info import implemented_ids
+    from sentinel.govflow.tiers import TIERS
+    from sentinel.harness.identity import all_personas
+    from sentinel.platform.audit_stages import CANONICAL_STAGES
+
+    at = _boot()
+    at.button(key="nav_manual").click().run()
+    body = " ".join(m.value for m in at.markdown)
+    for value, label in (
+        (len(CANONICAL_STAGES), "governance stages"),
+        (len(TIERS), "autonomy tiers"),
+        (len(implemented_ids()), "controls enforced"),
+        (len(all_datasets()), "datasets classified"),
+        (len(all_personas()), "governed personas"),
+    ):
+        assert f"<div class='v'>{value}</div>" in body, f"stat drifted: {label}"
+
+
+@pytest.mark.parametrize(
+    "chapter",
+    [
+        "Quick start",
+        "The nine stages",
+        "Autonomy levels",
+        "Controls",
+        "Screens",
+        "Roles & access",
+        "Data",
+        "Architecture",
+        "Glossary",
+    ],
+)
+def test_user_manual_every_chapter_renders(chapter):
+    at = _boot()
+    at.session_state["section"] = "User Manual"
+    at.session_state["manual_chapter"] = chapter
+    at.run()
+    assert not at.exception, f"{chapter} raised"
+
+
+def test_user_manual_control_chapter_separates_enforced_from_declared():
+    """The catalogue's honesty claim: a doc-only id is never shown as live."""
+    from sentinel.govflow.controls_info import CONTROLS_INFO, implemented_ids
+
+    at = _boot()
+    at.session_state["section"] = "User Manual"
+    at.session_state["manual_chapter"] = "Controls"
+    at.run()
+    assert not at.exception
+    body = " ".join(m.value for m in at.markdown)
+    declared = [c for c in CONTROLS_INFO.values() if c.id not in set(implemented_ids())]
+    assert declared, "fixture assumes at least one doc-only control"
+    for info in declared:
+        assert info.id in body
+    assert body.count("declared, not implemented") == len(declared)
+
+
+def test_user_manual_roles_chapter_states_every_persona_entitlement():
+    """Every boolean on Persona is an entitlement, and the manual has to show
+    all of them.
+
+    Reading personas live keeps the *count* honest for free, but says nothing
+    about a *field*: `can_view_all_runs` landed on main while this screen was
+    being written, and the roles chapter rendered six correct personas with the
+    new entitlement invisible. Counting the rendered yes/no verdicts against the
+    persona set is what makes a future field additive here instead of silent.
+    """
+    from sentinel.harness.identity import all_personas
+
+    personas = all_personas()
+    at = _boot()
+    at.session_state["section"] = "User Manual"
+    at.session_state["manual_chapter"] = "Roles & access"
+    at.run()
+    assert not at.exception
+    body = " ".join(m.value for m in at.markdown)
+    for label in ("can run", "can approve", "can toggle controls", "audit ledger scope"):
+        assert body.count(label) >= len(personas), f"{label} missing for some persona"
+    # The scoping split is real, not uniform: at least one persona each way.
+    assert any(p.can_view_all_runs for p in personas)
+    assert any(not p.can_view_all_runs for p in personas)
+    assert "every run" in body and "its own runs only" in body
+
+
+def test_user_manual_deck_links_out_to_every_nav_screen():
+    at = _boot()
+    at.button(key="nav_manual").click().run()
+    at.button(key="man_go_Run").click().run()
+    assert not at.exception
+    assert at.session_state["section"] == "Run"
 
 
 # -- the governed-run walkthrough (the Run section) --------------------------

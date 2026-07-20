@@ -74,12 +74,14 @@ from sentinel.platform.run_history import KIND_CREDIT_RISK
 from sentinel.platform.templates import AVAILABLE, LIVE
 from sentinel.rag import corpus_summary
 from sentinel.sandbox.warmup import start_background_warmup
+from sentinel.ui.brand import SHIELD_SVG
 from sentinel.ui.govflow import (
     cls_label,
     control_popover,
     purpose_extra,
     render_govflow,
 )
+from sentinel.ui.manual import render_manual
 from sentinel.ui.tables import table_head, table_row, td
 
 st.set_page_config(page_title="Sentinel — Governed Agentic Analysis", layout="wide")
@@ -704,12 +706,9 @@ analysis_engine: AnalysisEngine = st.session_state.analysis_engine
 # --------------------------------------------------------------------------
 # Login gate (ui-spec 3.1): the six personas as cards, before any chrome.
 # --------------------------------------------------------------------------
-_SHIELD_SVG = (
-    "<svg viewBox='0 0 24 24' aria-hidden='true'>"
-    "<path d='M12 2 4 5v6c0 5 3.4 8.5 8 11 4.6-2.5 8-6 8-11V5z' fill='#1e50a0'/>"
-    "<path d='M8 12l3 3 5-6' fill='none' stroke='#fff' stroke-width='2' "
-    "stroke-linecap='round' stroke-linejoin='round'/></svg>"
-)
+# The mark itself lives in sentinel/ui/brand.py: the User Manual's cover slide
+# draws it too, and a logo pasted into two files goes stale in one of them.
+_SHIELD_SVG = SHIELD_SVG
 
 # Card copy per ui-spec 3.1 (display name, role line, capability, tier badge).
 # `name` is the spec's card name (shorter than the persona's full config name,
@@ -3353,13 +3352,17 @@ def render_home(persona) -> None:  # noqa: ANN001
 # Layout
 # --------------------------------------------------------------------------
 # The grouped sidebar (ui-spec 2.2): Overview, then Workspace / Governance /
-# Platform groups. Buttons write st.session_state.section; the active item
-# renders as the primary variant (styled as the nav active state).
+# Platform groups, and Help last. Buttons write st.session_state.section; the
+# active item renders as the primary variant (styled as the nav active state).
+# Help sits at the bottom because it is a reference surface, not a step in any
+# workflow: nothing in the product routes through it, and putting it above
+# Platform would imply otherwise.
 _NAV_GROUPS: list[tuple[str | None, list[str]]] = [
     (None, ["Overview"]),
     ("Workspace", ["Run", "Pipeline", "Analyses"]),
     ("Governance", ["Datasets", "Registry"]),
     ("Platform", ["Platform", "Adoption", "Audit Log"]),
+    ("Help", ["User Manual"]),
 ]
 _NAV_KEYS = {
     "Overview": "nav_home",
@@ -3371,6 +3374,7 @@ _NAV_KEYS = {
     "Platform": "nav_platform",
     "Adoption": "nav_adoption",
     "Audit Log": "nav_auditlog",
+    "User Manual": "nav_manual",
 }
 # Nav icons (ui-spec 2.2, sentinel-stepper-mockup.html sidenav). Material
 # Symbols, rounded/outline style, matching the mockup's stroked SVG set:
@@ -3387,6 +3391,7 @@ _NAV_ICONS = {
     "Platform": ":material/grid_view:",
     "Adoption": ":material/bar_chart:",
     "Audit Log": ":material/gavel:",
+    "User Manual": ":material/menu_book:",
 }
 
 # Deep link. ?run=<id> lands directly on that run's evidence, so an audit-log
@@ -3470,6 +3475,12 @@ if section == "Adoption":
 
 if section == "Audit Log":
     render_audit_log(persona)
+    st.stop()
+
+if section == "User Manual":
+    # _nav_to is passed in rather than imported by the manual: app.py imports
+    # sentinel.ui.manual, so the manual importing back would be a cycle.
+    render_manual(_nav_to)
     st.stop()
 
 if section == _SECTION_AUDIT_RUN:
