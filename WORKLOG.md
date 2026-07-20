@@ -659,3 +659,28 @@ Append-only session handoff log. Newest entries at the bottom.
 - **The dictionary is one HTML table, not Streamlit rows.** LendingClub is 152 columns wide and a widget per row would crawl; nothing in a column row needs a popover.
 - **Foreign keys render as an edge list, not an ERD.** The relationships are the fact; a hand-laid 8-node SVG would be decoration and fragile.
 - Wrote the journal entry and this handoff on a docs branch cut from `origin/main` inside the worktree, since `main` is checked out in the primary folder and git refuses the same branch twice.
+
+## 2026-07-20 — Registry says what each agent does, and what its three registries are
+
+**Did:**
+- Answered Sandip's two questions about the Registry screen by rewriting the page around them. The agents were listed with no statement of what any of them does, and one subtitle covered three different registries while describing two.
+- Named the distinction in terms of a run: a model is what a run produces, an agent is a worker inside a run, an analysis-agent is what a run is allowed to be (the certified unit Plan binds, executed by the four agents). The analysis-agent section now opens by saying it is not the four agents above.
+- Added a `does` one-liner to each agent class (`profiler`, `eda`, `modeler`, `validator`) and had `agent_registry()` read it off the class, so the inventory cannot drift from the code. The agents table gained a "what it does" column and shows the human title under the agent id.
+- Verified in the browser: renamed the version header to "ver" after Streamlit shrank the column to min-content and broke "VERSION" mid-word at laptop width.
+- Merged PR #18 (squash, `a924ffe`). 391 passed, 2 skipped.
+
+**State now:**
+- `main` has `a924ffe` (this) and `4e106ec` (v11, the contract view) from a concurrent session. Neither is deployed.
+- **Prod is still v10 at `58e51dd` with the Live LLM path failing 100% of the time on the allowlist `ModuleNotFoundError`.** None of the cold-visit audit findings are fixed.
+- Registry reads correctly end to end: three sections, each with its own subtitle, agent descriptions sourced from the classes.
+
+**Next:**
+- Unchanged and still the top item: fix the allowlist drift, either by adding `statsmodels`, `lifelines`, `shap`, `dowhy`, `econml` to `requirements.txt` or by narrowing the advertised allowlist to what is installed.
+- Then the Adoption chart flex-shrink squash and the stale "switch persona in the sidebar" string at `sentinel/ui/govflow.py:1365`.
+- Deploy once the allowlist fix lands, so v11, v12 and the fix ship together.
+
+**Decisions:**
+- **The agent description lives on the agent class, not in the registry.** A dict of descriptions in `registry.py` is a copy of a fact, and copies drift. Same rule the model-status popover already follows by computing off the row.
+- **Left `eda`'s tools column alone.** It shows the `data_analysis` template's allow-list including `profile_dataset`, which eda never calls. Honest as a scope, misleading as a description; the fix is a per-agent scope or a renamed column, and neither was this session's question.
+- **Left `AGENT_LINEAGE` duplicating each class's `template`.** Deduping it means importing agent classes into `templates.py`, which `agents/runtime.py` imports from, closing an import cycle. The registry imports the classes inside the function instead, so the platform package stays importable without the ML stack.
+- Wrote the journal entry and this handoff on a docs branch cut from `origin/main` inside the worktree, since `main` is checked out in the primary folder.
