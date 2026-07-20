@@ -89,6 +89,11 @@ class CodeGen:
     live: bool
     fell_back: bool = False
     fallback_reason: str = ""
+    # The response hit the output cap and stops mid-token. Carried separately
+    # because the gate cannot tell a truncated answer from a badly written one,
+    # and reporting the first as the second blames the model for the platform's
+    # cut. See MAX_CODE_TOKENS.
+    truncated: bool = False
 
 
 # Routing tiers. The gateway classifies each call by stakes and routes to a tier:
@@ -375,7 +380,7 @@ class ModelGateway:
             )
 
         try:
-            text, tokens, cost = self._call_code_live(system, user, model)
+            text, tokens, cost, truncated = self._call_code_live(system, user, model)
         except Exception as exc:  # noqa: BLE001 - any live failure degrades safely
             self._log(
                 call_kind, "elevated", TIER_CAPABLE, model, TEMPLATED, False,
@@ -395,12 +400,12 @@ class ModelGateway:
         )
         return CodeGen(
             code=_strip_code_fences(text), tokens=tokens, cost_usd=round(cost, 6),
-            provider=self.provider, live=True,
+            provider=self.provider, live=True, truncated=truncated,
         )
 
     def _call_code_live(
         self, system: str, user: str, model: str
-    ) -> tuple[str, int, float]:
+    ) -> tuple[str, int, float, bool]:
         if self.provider == ANTHROPIC:
             return _call_anthropic_code(system, user, model)
         raise ValueError(f"code generation not supported for provider {self.provider}")
@@ -454,13 +459,34 @@ def _call_openai(prompt: str, model: str) -> tuple[str, int, float]:
     return text.strip(), tokens, cost
 
 
-def _call_anthropic_code(system: str, user: str, model: str) -> tuple[str, int, float]:
+# Output cap for a code generation. 1024 until 2026-07-20, when real API calls
+# showed it was set just under what the flagship analysis needs: the benign
+# fair-lending question says "holding income constant", the model answers it with
+# a logistic regression plus the grouped table, and that runs 1256-1642 output
+# tokens. At 1024 it truncated 3 times out of 3, mid-token -- `for g in df['age`,
+# `).f`, `'ci_high'`. The code then either did not parse (gate: CTL-CODE-00
+# "generated code does not parse") or parsed but stopped before ctx.emit, which
+# reached the Execute check as "emitted result must be a DataFrame with an 'n'
+# count column". Both read as the model's fault. Neither was: the platform cut
+# the answer off and then blamed the fragment.
+#
+# The cap only bounds a runaway; it is not a budget, because output tokens are
+# billed as used. Setting it near the expected length buys nothing and truncates
+# the tail of the distribution.
+MAX_CODE_TOKENS = 4096
+
+
+def _call_anthropic_code(
+    system: str, user: str, model: str
+) -> tuple[str, int, float, bool]:
+    """Returns (code, tokens, cost, truncated). `truncated` is the honest signal:
+    a response that hit the cap is not a generation the gate should judge."""
     import anthropic  # lazy: only imported in live mode
 
     client = anthropic.Anthropic()
     msg = client.messages.create(
         model=model,
-        max_tokens=1024,
+        max_tokens=MAX_CODE_TOKENS,
         system=system,
         messages=[{"role": "user", "content": user}],
     )
@@ -468,7 +494,7 @@ def _call_anthropic_code(system: str, user: str, model: str) -> tuple[str, int, 
     tokens = msg.usage.input_tokens + msg.usage.output_tokens
     # Rough Sonnet pricing; exact accounting is not the point of the demo.
     cost = (msg.usage.input_tokens * 3e-6) + (msg.usage.output_tokens * 1.5e-5)
-    return text.strip(), tokens, cost
+    return text.strip(), tokens, cost, msg.stop_reason == "max_tokens"
 
 
 def _strip_code_fences(text: str) -> str:

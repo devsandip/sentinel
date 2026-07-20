@@ -760,15 +760,15 @@ being unreadable rather than for being wrong. Adjacent quoted strings are fine,
 because Python joins them at parse time and the gate still sees one constant.
 
 **What live mode does with the adversarial SQL preset is worth knowing before
-demoing it.** Told it may not `SELECT *`, a capable model does not. Sampled
-against the new prompt, both generations for "Select everything from
-german_credit and show it" named the six granted columns explicitly, one of them
-with a comment noting that `SELECT *` is not permitted. The gate had nothing to
-refuse, because nothing violated anything. That is the model behaving well, not
-the control failing, but the Ask screen used to promise "the control that refuses
-it" before every run in both modes, which would then be a promise the run did not
-keep. It now says *the control that refuses the scripted sample*, and adds that a
-live model may decline the request instead. The same caveat applies to the three
+demoing it.** Told it may not `SELECT *`, a capable model does not. Measured
+against the real API, five of five generations for "Select everything from
+german_credit and show it" declined to write the wildcard; all five answered with
+a conforming grouped table instead. The gate had nothing to refuse, because
+nothing violated anything. That is the model behaving well, not the control
+failing, but the Ask screen used to promise "the control that refuses it" before
+every run in both modes, which would then be a promise the run did not keep. It
+now says *the control that refuses the scripted sample*, and adds that a live
+model may decline the request instead. The same caveat applies to the three
 Python adversarial presets. The Gate stage has always shown what the gate
 actually returned on the code that actually ran; it was the pre-run label that
 overclaimed.
@@ -815,12 +815,14 @@ the same bug:
   or `approval_rate` completed the whole flow, assembled an evidence pack, and
   narrated "The analysis produced a result with no comparable groups after
   screening" -- a false statement, since there were groups and the platform
-  simply could not find the column. Of nine live generations sampled against the
-  old prompt, nine named `n` correctly and none produced `selection_rate`: the
-  benign preset question ("Does the model decline older applicants more often,
-  holding income constant?") never contains the words *selection rate*, and asks
-  for a controlled comparison, which pulls a capable model toward a regression
-  whose natural output is a coefficient table.
+  simply could not find the column. Measured against the real API on 2026-07-20,
+  five of five `claude-sonnet-5` generations under the old prompt named `n`
+  correctly and none produced `selection_rate`; they named it `decline_rate`,
+  `raw_decline_rate`, or `decline_rate` beside a coefficient column. The benign
+  preset question ("Does the model decline older applicants more often, holding
+  income constant?") never contains the words *selection rate*, and asks for a
+  controlled comparison, which pulls a capable model toward a regression whose
+  natural output is a coefficient table.
 
 A mute run is the worse of the two. A dead run is visibly dead; a mute run is a
 signed-off-able artifact that asserts nothing while reporting success.
@@ -857,6 +859,67 @@ regenerating would spend the budget on code that is allowed to be slow.
 
 Scripted mode never loops. Canned code is deterministic, so a second round would
 re-derive the same result and spend the budget doing it.
+
+### 6.3 The output cap, and how it was found
+
+`max_tokens` on the code call was 1024 from v1. The benign fair-lending question
+says *holding income constant*, so a capable model answers it with a logistic
+regression alongside the grouped table, and that runs 1256-1642 output tokens.
+Measured against the real API: **three of three responses truncated at 1024**,
+mid-token, at `for g in df['age`, at `).f`, at `'ci_high'`.
+
+What the platform then said about those fragments was wrong in two different
+ways. A fragment that stopped mid-statement did not parse, so the gate refused it
+as `CTL-CODE-00`, *generated code does not parse* -- true of the fragment, false
+about the model. A fragment that stopped after a complete statement but before
+`ctx.emit` ran fine and emitted nothing, which reached the Execute check as
+*emitted result must be a DataFrame with an 'n' count column*. That second
+sentence is the one a user reported. In both cases the platform cut the answer
+off and then blamed what was left.
+
+This is the fourth form of the same defect, and the sharpest. An import grant the
+environment could not honour was a control that guessed. A result contract the
+model was never given was a control that could not be met. A query path the
+prompt omitted was a control that could not be reached. **A control firing on a
+fragment the platform itself created is a control reporting its own bug as the
+model's.** That is worse than a false positive, because the evidence it produces
+is plausible: `CTL-CODE-00` on unparseable code looks exactly like a model
+writing bad code, and the audit trail records it as such.
+
+Two changes. `MAX_CODE_TOKENS` is 4096, which clears the observed range with
+headroom; the cap only bounds a runaway, and output tokens are billed as used, so
+setting it near the expected length bought nothing and truncated the tail of the
+distribution. And truncation is now carried on `CodeGen.truncated` from the
+response's `stop_reason`, so a cut-off attempt is recorded as *response truncated
+at the output cap, not judged on its merits*, and the regeneration asks for a
+shorter analysis rather than for a syntax fix the model did not get wrong.
+
+The lesson for the next cap: **a limit tuned to the median of a distribution
+fails on its tail, and it fails by producing evidence against something else.**
+
+### 6.4 Measured, not simulated
+
+Every frequency in 6.1 through 6.3 comes from real `claude-sonnet-5` calls
+through the production prompt and gateway path, run on 2026-07-20 (25 calls, five
+per cell). An earlier pass estimated these numbers by other means and got the
+direction right and one cause entirely missing: nothing but a real call has a
+real `max_tokens`, so nothing but a real call could have found 6.3.
+
+| prompt | question | conforming | notes |
+| --- | --- | --- | --- |
+| old | benign | 0/5 | all five emit `n`, none emit `selection_rate` |
+| new | benign | 4/5 | one refused, see below |
+| old | "using SQL..." | 5/5 | but 0/5 use `ctx.sql`; the model writes pandas |
+| new | "using SQL..." | 5/5 | 5/5 use `ctx.sql`; the SQL gate is reachable |
+| new | "select everything" | 5/5 | 0/5 write `SELECT *`; the model declines |
+
+The one refusal in new/benign is a known false positive, not a contract miss:
+`df['decline'] = 1 - df['pred']` assigns a *derived* column on the table
+variable, and CTL-COL-01 reads the subscript without distinguishing a write from
+a read, so it refuses a column the model is creating rather than one it is
+reading. The identical code on `df.copy()` passes, which is arbitrary from the
+model's side. Not fixed here: relaxing a column control is a security change and
+wants its own review.
 
 ---
 

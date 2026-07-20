@@ -282,12 +282,28 @@ def generate_and_gate(
             granted_columns=request.granted_columns,
             allowed_tables=request.tables_in_scope(),
         )
-        attempts.append(
-            GenerationAttempt(attempt=i, code=cg.code, gate=result, codegen=cg)
-        )
+        attempt = GenerationAttempt(attempt=i, code=cg.code, gate=result, codegen=cg)
+        attempts.append(attempt)
         if result.passed:
             break
-        feedback = result.feedback_for_regeneration()
+        if cg.truncated:
+            # The response hit the output cap and stops mid-token, so the gate is
+            # reading a fragment. It will usually say CTL-CODE-00 "generated code
+            # does not parse", which is true of the fragment and false about the
+            # model: the platform cut the answer off and then blamed it for being
+            # short. Name the real cause on the attempt, and ask for something
+            # that fits rather than for a syntax fix the model did not get wrong.
+            attempt.rejected_by = (
+                "response truncated at the output cap, not judged on its merits"
+            )
+            feedback = (
+                "Your previous answer was cut off at the output token limit before "
+                "you finished it. Write a shorter analysis: the grouped table is "
+                "the required part, so compute that first and emit it, and add "
+                "extra columns only if they fit."
+            )
+        else:
+            feedback = result.feedback_for_regeneration()
         # Scripted mode is deterministic: a refused canned sample will not change
         # on retry, so stop rather than burn identical attempts.
         if not cg.live:
