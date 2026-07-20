@@ -62,6 +62,12 @@ class SeedRun:
     # (Ask/Plan/... for govflow, profiler/eda/... for credit_risk); only the
     # envelope is shared.
     steps: list = field(default_factory=list)
+    # The SR 11-7 style model card, for the run kinds that train something.
+    # Captured at seed time because it is generated from live run objects that
+    # do not survive the process; without it the Registry could list a model
+    # version and not show its documentation, which is the wrong way round for
+    # a model inventory. None for the routes that produce no model.
+    model_card: dict | None = None
 
     @property
     def week(self) -> str:

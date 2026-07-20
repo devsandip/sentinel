@@ -53,4 +53,4 @@ CloudFront carries two cache behaviors. The default behavior carries the app wit
 
 An alternative deployment ships in the repo: a render.yaml and a Procfile for a one-click Render deploy. The default posture is the templated model provider, so the public link costs nothing and cannot be abused, and live model mode is opt-in and capped.
 
-Known documentation drift is stated rather than hidden. The README still describes an older tab count for the user interface and a plain-Python orchestrator, and neither is true: the Pipeline screen has grown its tab set, and the orchestrator has been a LangGraph StateGraph since the interrupt-based human gate landed.
+Known documentation drift is stated rather than hidden. The README still describes a tabbed user interface and a plain-Python orchestrator, and neither is true: the tabs are gone entirely, folded into the nine stages, and the orchestrator has been a LangGraph StateGraph since the interrupt-based human gate landed. That orchestrator still runs, since the credit-risk runs in the Audit Log are its work, but it no longer has a screen of its own.

@@ -2,7 +2,7 @@
 id: screens
 title: Screens
 chapter: Screens
-summary: Every screen in the sidebar and what it answers, the two drill-downs that are not nav items, and the tabs inside the Pipeline screen.
+summary: Every screen in the sidebar and what it answers, the two drill-downs that are not nav items, and where the retired Pipeline screen's tabs went.
 ---
 
 ## How the app is laid out
@@ -19,7 +19,9 @@ The Overview call to action names the dataset, the purpose and the autonomy tier
 
 ## Run
 
-Run is the nine-stage governed walkthrough and the centre of the product. The Run rail carries the nine stages plus the Architecture appendix, and once a run exists each stage marks itself clear, refused or skipped.
+Run is the nine-stage governed walkthrough and the centre of the product. The Run rail carries the nine stages, and once a run exists each stage marks itself clear, refused or skipped. Architecture is not a stage: it describes the platform rather than advancing a run, so it sits in the topbar next to Controls, reachable from every screen.
+
+The Run header states the run id, its status, the tier, whether generation was scripted or live, and what the run cost: tokens, dollars and wall clock. An Audit trail button on the header opens that run in the Audit Log rather than rendering the event stream a second time inside a stage.
 
 Ask on the Run screen is three explicit steps: confirm a dataset, declare a purpose, pick an analysis. After those steps Ask prints the tier arithmetic in full.
 
@@ -27,15 +29,19 @@ Plan on the Run screen binds a certified analysis, checks its data contract for 
 
 Attest on the Run screen shows the evidence pack and its downloads: Quarto source for a leadership audience, and a marimo notebook for a data scientist.
 
-## Pipeline and its tabs
+## Where the Pipeline screen went
 
-Pipeline is the four-agent credit-risk pipeline and the evidence from one run of it. Pipeline is the older route in the product, and it is the only route with a human interrupt in the graph.
+Pipeline was the four-agent credit-risk build and ten tabs of evidence from one run of it. The screen is retired. Its tabs were tested one at a time against a single question: does the surviving route produce the data, and does a stage own the question the tab answers?
 
-The Pipeline tab shows the LangGraph orchestration graph, the control envelope, and one card per step. The human gate lives on this tab, which is where an MRM Approver clears or rejects a run.
+Four moved into a stage. The gateway ledger is at Generate, which is where the tokens are spent; it shows every model call, its stakes, the tier it routed to, cache hits and cost, and it records the routing decision even in scripted mode where the call costs nothing. The emitted result is at Execute, shown raw before the Screen has removed anything, so the screened table next door reads as something a control acted on. The four-fifths disparity ratio is at Interpret, merged into the narration rather than given its own panel, because the result contract already forces every result to be a selection rate per group. The model card moved to the Registry, since a card documents a model and the Registry is the model inventory.
 
-The Fairness tab shows the disparity ratio against its threshold and the selection rate by group. The Model Card tab renders an SR 11-7 style model-risk document generated from the run, exportable to PDF.
+Two became header items. Tokens, dollars and cycle time are chips on the run header, because no single stage owns what a run cost. Architecture moved to the topbar.
 
-The Cost and KPIs tab shows tokens, dollars, cycle time, eval pass-rate, human overrides and the eval gate's verdict. The Gateway tab shows the model-gateway ledger: every call, its stakes, the tier it routed to, cache hits and cost.
+One became a link. The audit trail opens the Audit Log's drill-down for that run instead of rendering the events a third time.
+
+Four were dropped rather than moved. Knowledge and citations, memory and retention, and traces all describe things the nine-stage route does not do: it runs no retrieval, keeps no cross-run precedent, and emits no OpenTelemetry spans. Moving them would have produced a panel that renders an empty state on every run forever, which is a discard with extra steps. The eval-gate half of Cost and KPIs went the same way: it was the orchestrator's model-promotion gate, which is a different control from the Gate stage, and promotion machinery has no meaning without a model to promote.
+
+The credit-risk runs themselves were not deleted. They are in the Audit Log, including the two that a control refused, and the orchestrator that produced them is still what the seeding script executes.
 
 ## Analyses
 
@@ -66,6 +72,8 @@ Deploy registers the spec as a draft analysis-agent, with the dataset's content 
 ## Registry
 
 Registry holds inventories that are easy to confuse, so the screen separates them explicitly. The Models tab is what a run produced: one row per run that trained something, with AUC, disparity, fairness verdict and promotion status.
+
+Each model row opens its own model card: an SR 11-7 style model-risk document generated from that run, exportable to PDF. A run that never cleared the human gate has no card, and the row says so rather than showing an empty one.
 
 The Agents tab is the workers inside a run: the pipeline agents in run order, with the template, tools and RBAC scope each one has. The Analysis-agents tab is what a run is allowed to be: the certified unit that Plan binds, under a certification lifecycle, and it is not the same thing as the agents on the previous tab.
 

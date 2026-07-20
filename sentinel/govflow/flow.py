@@ -13,6 +13,7 @@ slices; v1 ends at Interpret.
 
 from __future__ import annotations
 
+import time
 import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -117,6 +118,17 @@ class GovernedRunResult:
     access: dict[str, Any] = field(default_factory=dict)
     # The blocked run this run repairs ("Fix it" at the Gate), if any.
     repaired_from: str = ""
+    # What the run cost and how the gateway routed it. The numbers were always
+    # computed -- _generate_execute_loop sums tokens and dollars, the gateway
+    # writes a ledger row per call -- and were then thrown away at the door,
+    # which is why the retired Pipeline screen was the only place in the app
+    # that could show a routing decision. Carried here so the stepper's header
+    # can state the spend and Generate can show the routing.
+    gateway_ledger: list[dict] = field(default_factory=list)
+    elapsed_s: float = 0.0
+    # `persona` above is the display name, which the panels print. The audit
+    # entitlement compares ids, so it needs this one and cannot use that one.
+    persona_id: str = ""
 
     def to_public_dict(self) -> dict[str, Any]:
         return {
@@ -124,6 +136,11 @@ class GovernedRunResult:
             "question": self.question,
             "tier": self.tier,
             "persona": self.persona,
+            # The id as well as the display name. The Audit Log scopes a first
+            # line reader to their own runs by comparing actor ids, and the
+            # display name is not one: a live run filed under "Data Scientist /
+            # Analyst" was withheld from the analyst who had just executed it.
+            "persona_id": self.persona_id,
             "dataset": self.dataset,
             "purpose": self.purpose,
             "status": self.status,
@@ -138,6 +155,12 @@ class GovernedRunResult:
                 self.screen.screened.to_dict(orient="records") if self.screen else []
             ),
             "narration": self.narration,
+            # The four-fifths verdict on this run's own screened numbers, so
+            # Interpret can state it in the vocabulary a fair-lending reviewer
+            # uses instead of leaving them to divide two rates in their head.
+            "fairness": (
+                _fairness_from_screened(self.screen) if self.screen else {}
+            ),
             "evidence": self.evidence.to_public_dict() if self.evidence else None,
             "lineage": self.lineage,
             "controls_fired": self.controls_fired,
@@ -159,6 +182,16 @@ class GovernedRunResult:
             "tier_decision": self.tier_decision,
             "access": self.access,
             "repaired_from": self.repaired_from,
+            # Run economics. tokens/cost come off the generation outcome, which
+            # already summed them across every repair round; the ledger is the
+            # per-call record behind that total. They agree because codegen is
+            # the only thing this route asks a model for -- the narration is
+            # composed deterministically from the screened table, which is the
+            # point of CTL-EVAL-01 and not an accident of cost control.
+            "gateway_ledger": self.gateway_ledger,
+            "tokens": self.generation.tokens if self.generation else 0,
+            "cost_usd": self.generation.cost_usd if self.generation else 0.0,
+            "elapsed_s": self.elapsed_s,
         }
 
 
@@ -330,6 +363,51 @@ def _narrate(scr: ScreenResult) -> str:
     return lead + tail
 
 
+def _fairness_from_screened(scr: ScreenResult) -> dict[str, Any]:
+    """The four-fifths verdict on the screened table.
+
+    The retired Fairness tab computed this from a trained model's predictions.
+    This route has no model, but it has the same numbers: the result contract
+    refuses anything that is not a grouped table with a selection_rate column,
+    so a selection rate per band is structurally guaranteed to be what a run
+    produced. Reading it here is not a new analysis, it is naming the one that
+    already happened.
+
+    Computed from the screened frame, never the raw one. That understates the
+    spread whenever a band was suppressed, so `suppressed` rides along and the
+    panel says so; the alternative is a fairness number that quietly reads
+    cells the disclosure control removed, which would make CTL-DISC-02
+    decorative.
+
+    The threshold is imported rather than retyped. Deferred to the call because
+    ml.fairness pulls in fairlearn, and this route is deliberately independent
+    of the credit pipeline's ML stack; it is imported for the number, not for
+    the machinery.
+    """
+    from ..ml.fairness import DISPARITY_THRESHOLD
+
+    df = scr.screened
+    band_col = _band_column(df)
+    if band_col is None or "selection_rate" not in df.columns or df.empty:
+        return {}
+    rates = df.set_index(band_col)["selection_rate"]
+    hi, lo = float(rates.max()), float(rates.min())
+    # min/max, the same orientation as the credit route's report and as the
+    # four-fifths rule itself. The narration says "a 2.3x gap" (max/min) about
+    # the same numbers; one reads as a legal test, the other as English.
+    ratio = (lo / hi) if hi > 0 else 1.0
+    return {
+        "protected_attribute": band_col,
+        "disparity_ratio": round(ratio, 4),
+        "disparity_metric": "selection_rate_min_over_max",
+        "threshold": DISPARITY_THRESHOLD,
+        "passes": ratio >= DISPARITY_THRESHOLD,
+        "high_band": str(rates.idxmax()),
+        "low_band": str(rates.idxmin()),
+        "suppressed": [c.label() for c in scr.suppressed],
+    }
+
+
 def _faithfulness(narration: str, scr: ScreenResult) -> tuple[bool, str]:
     """CTL-EVAL-01: the narration must not assert a value for a suppressed band.
     The suppression note names the band as removed, which is allowed; asserting a
@@ -379,6 +457,11 @@ def run_governed_analysis(
     gate-blocked run (its run id); ``repair_feedback`` carries that gate's
     refusal so the model can address it. The repair is a fresh governed run --
     same stages, same gate, fresh audit -- linked to the blocked one."""
+    # Wall clock for the whole flow, including the stages that refuse early.
+    # perf_counter rather than the ISO started_at below, because that one is a
+    # provenance timestamp for the lineage events and subtracting two ISO
+    # strings to get a duration invites a clock change to produce a negative.
+    t0 = time.perf_counter()
     gateway = gateway or ModelGateway(provider=TEMPLATED)
     persona = persona or default_persona()
     run_id = uuid.uuid4().hex[:12]
@@ -402,6 +485,7 @@ def run_governed_analysis(
             question=question,
             tier=tier,
             persona=persona.name,
+            persona_id=persona.id,
             dataset=DATASET_ID,
             purpose=PURPOSE,
             status=status,
@@ -423,6 +507,12 @@ def run_governed_analysis(
             # Generate branch); an L0/L1 route or an upstream block must not
             # claim a repair it never performed.
             repaired_from=repair_of if repair_engaged else "",
+            # Read at finish rather than accumulated: the gateway is the one
+            # object that sees every model call, so asking it once at the end
+            # cannot miss a call the way a hand-maintained list would. A run
+            # refused at Ask returns an empty ledger, which is the truth.
+            gateway_ledger=gateway.ledger_dicts(),
+            elapsed_s=round(time.perf_counter() - t0, 3),
         )
 
     outcome: GenerationOutcome | None = None

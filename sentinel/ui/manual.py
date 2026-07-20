@@ -52,7 +52,11 @@ from sentinel.codegen.allowlist import (
 from sentinel.codegen.sql_gate import DEFAULT_JOIN_CEILING
 from sentinel.datasets import all_datasets
 from sentinel.disclosure.screen import DEFAULT_CELL_FLOOR
-from sentinel.govflow.controls_info import CONTROLS_INFO, implemented_ids
+from sentinel.govflow.controls_info import (
+    CATALOG_INFO,
+    CONTROLS_INFO,
+    implemented_ids,
+)
 from sentinel.govflow.purpose_matrix import (
     DATA_CLASSIFICATION,
     PURPOSE_LABEL,
@@ -88,6 +92,7 @@ CHAPTERS: list[str] = [
     "The nine stages",
     "Autonomy levels",
     "Controls",
+    "Controls and regulation",
     "Screens",
     "Roles & access",
     "Data",
@@ -273,7 +278,6 @@ _BUILT: list[tuple[str, str]] = [
 _SCREEN_MAP: list[tuple[str, str, str]] = [
     ("Overview", "Overview", "Four live tiles and the CTA into a governed run."),
     ("Run", "Run", "The nine-stage walkthrough. The centre of the product."),
-    ("Pipeline", "Pipeline", "The four-agent credit-risk pipeline and its ten evidence tabs."),
     (
         "Analyses",
         "Analyses",
@@ -1142,9 +1146,14 @@ def _quick_start(nav_to) -> None:  # noqa: ANN001
                 "No cell values, no distributions, no samples.",
             ),
             (
-                "Approve a model",
-                "Run the credit pipeline from Pipeline, then switch to the MRM Approver to clear "
-                "the human gate. The analyst who ran it cannot approve it.",
+                "Read a model card",
+                "Registry, then Models, then the card on any promoted row. An SR 11-7 style "
+                "document generated from that run, not written by hand.",
+            ),
+            (
+                "Watch four eyes refuse",
+                "Audit Log, then any run whose author signed it themselves. The refusal is "
+                "CTL-SOD-01, and it compares identities rather than roles.",
             ),
         ]
     )
@@ -1480,6 +1489,89 @@ def _controls_chapter() -> None:
 
 
 # --------------------------------------------------------------------------
+# Chapter 5a: controls and regulation
+# --------------------------------------------------------------------------
+def _regulation_chapter() -> None:
+    """What each control answers to, read live from the catalogue.
+
+    Sorted by the regulation line rather than grouped by a parsed regime: same
+    regime sorts together for free, and nothing here has to know how a regime
+    string is punctuated. A `regime` field would be the tidier data model and a
+    second thing to keep in step with the first.
+    """
+    enforced = set(implemented_ids())
+    st.markdown(
+        "<span class='muted'>Every control names the regime it answers to and "
+        "the principle within it. Controls with no external driver say so in as "
+        "many words rather than leaving the line blank, because a blank reads as "
+        "an oversight. Sorted by regime, so a second-line reviewer can read down "
+        "one family at a time.</span>",
+        unsafe_allow_html=True,
+    )
+    st.write("")
+
+    st.info(
+        "**Answers to, not complies with.** A control serves a principle. "
+        "Compliance is a determination a firm's own second and third lines make "
+        "against their own policy, on systems with authenticated users and a "
+        "real model inventory. This build has none of those, and says so on the "
+        "Audit Log."
+    )
+    st.write("")
+
+    for info in sorted(CONTROLS_INFO.values(), key=lambda c: (c.regulation, c.id)):
+        live = info.id in enforced
+        st.markdown(
+            f"<div class='man-ctl{'' if live else ' doc'}'>"
+            f"<div class='ch'><span class='cid'>{_esc(info.id)}</span>"
+            f"<span class='cnm'>{_esc(info.name)}</span>"
+            + ("" if live else "<span class='badge neutral'>declared, not implemented</span>")
+            + f"</div><div class='cw'>{_esc(info.regulation)}</div></div>",
+            unsafe_allow_html=True,
+        )
+
+    st.markdown("#### The harness controls")
+    st.markdown(
+        "<span class='muted'>The switchable controls on the credit-risk pipeline "
+        "carry the same field, so a chip explains its regime wherever it "
+        "appears.</span>",
+        unsafe_allow_html=True,
+    )
+    for info in sorted(CATALOG_INFO.values(), key=lambda c: (c.regulation, c.id)):
+        st.markdown(
+            f"<div class='man-ctl'><div class='ch'>"
+            f"<span class='cid'>{_esc(info.id)}</span>"
+            f"<span class='cnm'>{_esc(info.name)}</span></div>"
+            f"<div class='cw'>{_esc(info.regulation)}</div></div>",
+            unsafe_allow_html=True,
+        )
+
+    st.markdown("#### Where this is heading")
+    _defs(
+        [
+            (
+                "EU AI Act",
+                "Creditworthiness assessment of natural persons is Annex III high-risk. Article "
+                "10 data governance, Article 11 technical documentation, Article 12 automatic "
+                "logging and Article 14 human oversight are the four obligations that map to "
+                "things already on screen. Note the Act requires technical documentation, not "
+                "'model cards': that phrase is a paper convention with no legal standing.",
+            ),
+            (
+                "NIST AI RMF",
+                "Govern, Map, Measure, Manage. Useful vocabulary rather than an obligation. The "
+                "control catalogue is a MANAGE artifact.",
+            ),
+            (
+                "ISO/IEC 42001",
+                "AI management systems. The certification track a bank eventually wants, and "
+                "nothing this build attempts.",
+            ),
+        ]
+    )
+
+
+# --------------------------------------------------------------------------
 # Chapter 6: screens
 # --------------------------------------------------------------------------
 def _screens_chapter(nav_to) -> None:  # noqa: ANN001
@@ -1525,8 +1617,13 @@ def _screens_chapter(nav_to) -> None:  # noqa: ANN001
         [
             (
                 "The rail",
-                "Nine stages plus an Architecture appendix. Each stage marks itself clear, refused "
-                "or skipped once a run exists.",
+                "Nine stages. Each marks itself clear, refused or skipped once a run exists. "
+                "Architecture is a topbar popover, not a tenth stop.",
+            ),
+            (
+                "The header",
+                "Run id, status, tier, generation mode, then what the run cost: tokens, dollars "
+                "and wall clock. An Audit trail button opens this run in the ledger.",
             ),
             (
                 "Each panel",
@@ -1544,9 +1641,24 @@ def _screens_chapter(nav_to) -> None:  # noqa: ANN001
                 "scripted or live generation.",
             ),
             (
+                "Generate",
+                "The unexecuted code, the attempt history, the prompt the model is given, and the "
+                "gateway ledger: every model call, its stakes and the tier it routed to.",
+            ),
+            (
                 "Gate",
                 "Nine static checks with a verdict on each, the offending line highlighted, and a "
                 "Fix it button that resubmits to the same gate.",
+            ),
+            (
+                "Execute",
+                "The sandbox spelled out, then what the code emitted: the raw table, before the "
+                "Screen has removed anything from it.",
+            ),
+            (
+                "Interpret",
+                "The narration, its faithfulness verdict, and the four-fifths disparity ratio "
+                "against its threshold. Suppressed bands are named as absent from the ratio.",
             ),
             (
                 "Attest",
@@ -1557,52 +1669,6 @@ def _screens_chapter(nav_to) -> None:  # noqa: ANN001
                 "Policy explorer",
                 "Inside Access: the purpose-by-dataset matrix and an interactive tier resolver.",
             ),
-        ],
-    )
-    _screen(
-        "Pipeline",
-        "Pipeline",
-        "The four-agent credit-risk pipeline, and ten tabs of evidence from one run.",
-        [
-            (
-                "Pipeline",
-                "The LangGraph orchestration graph, the control envelope, and one card per step. "
-                "The human gate lives here.",
-            ),
-            (
-                "Results",
-                "AUC, accuracy, the confusion matrix, top features by coefficient, the ROC curve.",
-            ),
-            ("Audit Log", "This run's append-only event trail, tinted by level."),
-            (
-                "Fairness",
-                "The four-fifths disparity ratio against its threshold, selection rate by group.",
-            ),
-            (
-                "Model Card",
-                "An SR 11-7 style model-risk document generated from the run, exportable to PDF.",
-            ),
-            (
-                "Cost & KPIs",
-                "Tokens, dollars, cycle time, eval pass-rate, human overrides, and the eval gate's "
-                "verdict.",
-            ),
-            (
-                "Gateway",
-                "The model-gateway ledger: every call, its stakes, the tier it routed to, cache "
-                "hits and cost.",
-            ),
-            (
-                "Knowledge",
-                "Retrieved policy passages with provenance, marked public or synthetic, and which "
-                "backend served them.",
-            ),
-            (
-                "Memory",
-                "Short-term working context (ephemeral) and long-term precedents, with their "
-                "retention class.",
-            ),
-            ("Traces", "OpenTelemetry spans, one per agent, with durations and attributes."),
         ],
     )
     _screen(
@@ -1686,6 +1752,11 @@ def _screens_chapter(nav_to) -> None:  # noqa: ANN001
                 "Models",
                 "What a run produced. One row per run that trained something, with AUC, disparity, "
                 "fairness verdict and promotion status.",
+            ),
+            (
+                "Model card",
+                "Each model's SR 11-7 documentation, opened from its own row and exportable to "
+                "PDF. A run that never cleared the human gate has none, and says so.",
             ),
             (
                 "Agents",
@@ -2111,10 +2182,15 @@ def _architecture_chapter() -> None:
     )
 
     _note(
-        "<b>Known documentation drift, stated rather than hidden.</b> The README "
-        "still describes a six-tab UI and a plain-Python orchestrator. The "
-        "Pipeline screen has ten tabs, and the orchestrator has been a LangGraph "
-        "StateGraph since the interrupt-based human gate landed."
+        "<b>Known documentation drift, stated rather than hidden.</b> The README's "
+        "quick-start still quotes a test count from an early cut of the project; "
+        "the suite is the source of truth for that number, not the prose. Its "
+        "description of the UI and the orchestrator was wrong for longer and is "
+        "now corrected: the tab set is gone entirely, folded into the nine stages, "
+        "and the orchestrator has been a LangGraph StateGraph since the "
+        "interrupt-based human gate landed. That orchestrator still runs -- the "
+        "credit-risk runs in the Audit Log are its work -- but it no longer has a "
+        "screen of its own."
     )
 
 
@@ -2183,6 +2259,8 @@ def render_manual(nav_to) -> None:  # noqa: ANN001
         _levels_chapter()
     elif chapter == "Controls":
         _controls_chapter()
+    elif chapter == "Controls and regulation":
+        _regulation_chapter()
     elif chapter == "Screens":
         _screens_chapter(nav_to)
     elif chapter == "Roles & access":

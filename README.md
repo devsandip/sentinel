@@ -21,8 +21,9 @@ KRAs, the metric tree, and the prototype-to-platform path).
 - A live logistic-regression baseline: real AUC, accuracy, confusion, fairness.
 - A full governance harness, with two controls that fire on every run (an RBAC
   denial and a PII redaction) and a fairness check that flags a real disparity.
-- A six-tab Streamlit UI: Pipeline, Results, Audit Log, Fairness, Model Card,
-  Cost & KPIs.
+- A Streamlit UI built around a nine-stage governed walkthrough (Ask, Plan,
+  Access, Generate, Gate, Execute, Screen, Interpret, Attest), with the model
+  inventory, the cross-run audit ledger and the manual beside it.
 
 The analysis is always real (metrics change with the dataset and seed). Agent
 narration is deterministic ("scripted") by default so the public link costs
@@ -37,11 +38,11 @@ uv run python scripts/prepare_data.py        # build the named CSV from the raw 
 uv run pytest -q                             # 36 tests
 uv run python cli.py                         # ML core only (metrics + fairness)
 uv run python demo.py                        # full governed pipeline in the terminal
-./run.sh                                      # the six-tab UI (stable launcher)
+./run.sh                                      # the full UI (stable launcher)
 ```
 
-Open the UI at http://localhost:8501, pick a question, click Run, approve at the
-gate.
+Open the UI at http://localhost:8501, pick a persona, open Run, confirm a
+dataset and step through the nine stages.
 
 Use `./run.sh` rather than a bare `streamlit run` on macOS: it pins BLAS/OpenMP
 to one thread and disables the file watcher, which avoids a duplicate-OpenMP
@@ -58,16 +59,17 @@ sentinel/
   gateway/     model_gateway.py (templated | anthropic | openai)
   agents/      base.py, profiler.py, eda.py, modeler.py, validator.py
   config/      rbac.yaml, questions.yaml, evals.yaml, agents.yaml
-  orchestrator.py   plain-Python state machine + approval pause + run store
+  orchestrator.py   LangGraph StateGraph + interrupt-based approval + run store
   data/        german_credit.csv
-app.py         Streamlit UI (six tabs)
+app.py         Streamlit UI (screens; the Run walkthrough lives in sentinel/ui/)
 ```
 
 The pipeline (agents) and the control plane (harness) are separate modules.
 Every agent action funnels through the harness: RBAC on column reads, guardrails
 on tool calls, PII redaction before narration, an audit event, and cost
-accounting. The orchestrator is a plain state machine (no LangGraph) so the flow
-is fully owned and inspectable via the audit log.
+accounting. The orchestrator is a LangGraph StateGraph with a fixed topology and
+an interrupt-based human gate, so the flow is inspectable via the audit log and
+an examiner can read the whole path before any request takes it.
 
 ### A note on the launcher
 

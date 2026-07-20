@@ -25,7 +25,7 @@ from .agent_templates import SECTION as SECTION_TEMPLATES
 # Platform would imply otherwise.
 NAV_GROUPS: list[tuple[str | None, list[str]]] = [
     (None, ["Overview"]),
-    ("Workspace", ["Run", "Pipeline", "Analyses"]),
+    ("Workspace", ["Run", "Analyses"]),
     # Governance reads in lifecycle order: the data you may use, the blueprint
     # you build from, the inventory of what got built.
     ("Governance", ["Datasets", SECTION_TEMPLATES, "Registry"]),
@@ -36,7 +36,6 @@ NAV_GROUPS: list[tuple[str | None, list[str]]] = [
 NAV_KEYS: dict[str, str] = {
     "Overview": "nav_home",
     "Run": "nav_run",
-    "Pipeline": "nav_pipeline",
     "Analyses": "nav_analyses",
     "Datasets": "nav_datasets",
     SECTION_TEMPLATES: "nav_templates",
@@ -51,13 +50,12 @@ NAV_KEYS: dict[str, str] = {
 
 # Nav icons (ui-spec 2.2, sentinel-stepper-mockup.html sidenav). Material
 # Symbols, rounded/outline style, matching the mockup's stroked SVG set:
-# home, play, database, verified-check, grid, bar-chart. Pipeline (the
-# credit-risk DAG) and Analyses are app-only items not in the mockup; they
-# get the nearest matching glyphs (a branching tree and a stats magnifier).
+# home, play, database, verified-check, grid, bar-chart. Analyses is an
+# app-only item not in the mockup; it gets the nearest matching glyph (a stats
+# magnifier).
 NAV_ICONS: dict[str, str] = {
     "Overview": ":material/home:",
     "Run": ":material/play_arrow:",
-    "Pipeline": ":material/account_tree:",
     "Analyses": ":material/query_stats:",
     "Datasets": ":material/database:",
     SECTION_TEMPLATES: ":material/dashboard_customize:",

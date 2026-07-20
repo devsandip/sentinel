@@ -124,12 +124,32 @@ def test_cta_routes_to_the_run_walkthrough():
 # -- sections under the grouped sidebar (S2) ---------------------------------
 
 
-def test_pipeline_section_renders():
+def test_pipeline_screen_is_retired():
+    """Pipeline is gone from the sidebar, and Workspace is Run plus Analyses.
+
+    Its ten tabs either moved into a Run stage, became header chips, or were
+    dropped because this route produces nothing to put in them. What must not
+    happen is the nav item coming back on its own: a Workspace with a third
+    entry means someone re-added a screen whose panels have no data source.
+    """
     at = _boot()
-    at.button(key="nav_pipeline").click().run()
+    keys = {b.key for b in at.button}
+    assert "nav_pipeline" not in keys, "the Pipeline nav item is back"
+    assert {"nav_run", "nav_analyses"} <= keys, "Workspace lost a screen"
+
+
+def test_a_stale_pipeline_section_lands_on_overview():
+    """A session left open on Pipeline must not render a blank page.
+
+    Every dispatch branch stops explicitly, so an unknown section falls through
+    to the bottom of app.py. That fall-through used to BE the Pipeline screen,
+    which is exactly why it needs a test now that it is a redirect.
+    """
+    at = _boot()
+    at.session_state["section"] = "Pipeline"
+    at.run()
     assert not at.exception
-    # Pre-run, the credit-pipeline section prompts the user to start a run.
-    assert any("click Run" in i.value for i in at.info)
+    assert at.session_state["section"] == "Overview"
 
 
 def test_platform_section_renders():
@@ -528,7 +548,7 @@ def test_topbar_carries_no_run_context_chips():
     scope chip; matching plain text would also catch the identity chip, whose
     label happens to start "Data Scientist / Analyst"."""
     at = _boot()
-    for screen in ("nav_run", "nav_pipeline", "nav_datasets"):
+    for screen in ("nav_run", "nav_registry", "nav_datasets"):
         at.button(key=screen).click().run()
         assert not at.exception
         labels = _popover_labels(at)
@@ -569,13 +589,180 @@ def test_engine_bar_controls_are_clickable():
         assert cid in labels, cid
 
 
-def test_architecture_stop_wires_its_controls_and_import_rows():
-    """The Architecture stop lists every control by stage, and the import
+# -- what the retired Pipeline screen's tabs became ---------------------------
+
+
+def _completed_run(persona_id: str = "analyst"):
+    """Drive one governed run to completion and hand back the AppTest."""
+    at = _boot(persona_id=persona_id, timeout=180)
+    at.button(key="nav_run").click().run()
+    at.button(key="gv_ds_confirm").click().run()
+    at.radio(key="govflow_stage").set_value("Plan").run()
+    at.button(key="gv_run").click().run()
+    _assert_run_completed(at)
+    return at
+
+
+def test_run_header_states_what_the_run_cost():
+    """Cost & KPIs was a tab; tokens, spend and wall clock are now header chips.
+
+    They are cross-cutting -- no single stage owns what a run cost -- so they
+    belong beside the run id. Zero is rendered rather than hidden: a scripted
+    run costing nothing is the claim the product makes about scripted mode, and
+    a blank would leave a reader unsure whether it was free or unmeasured.
+    """
+    at = _completed_run()
+    body = " ".join(m.value for m in at.markdown)
+    assert "tokens" in body, "no token chip on the run header"
+    assert "$" in body, "no spend chip on the run header"
+    pub = at.session_state["govflow_result"]
+    assert pub["elapsed_s"] > 0, "the run reported no wall-clock time"
+    assert pub["cost_usd"] == 0.0, "a scripted run should cost nothing"
+
+
+def test_generate_carries_the_gateway_ledger():
+    """The Gateway tab moved to Generate, which is where the tokens go.
+
+    In scripted mode the call still writes a ledger row: it executes as a
+    template at zero cost and the routing decision is recorded anyway, so a
+    reader can see how a live call would have been routed.
+    """
+    at = _completed_run()
+    at.radio(key="govflow_stage").set_value("Generate").run()
+    assert not at.exception
+    assert any("gateway ledger" in e.label.lower() for e in at.expander), (
+        "no gateway ledger at Generate"
+    )
+    ledger = at.session_state["govflow_result"]["gateway_ledger"]
+    assert ledger, "the run recorded no gateway calls"
+    assert all(e["call_kind"] in ("generate", "repair") for e in ledger), (
+        "a gateway call was made outside Generate and would render nowhere"
+    )
+
+
+def test_execute_shows_the_raw_result_before_the_screen_touches_it():
+    """The Results tab moved to Execute: what the sandbox emitted, unscreened.
+
+    This is the only place the raw numbers are visible, which is the point --
+    the Screen panel shows the same table with cells removed, and the pair is
+    what makes the disclosure control legible as something that acted.
+    """
+    at = _completed_run()
+    at.radio(key="govflow_stage").set_value("Execute").run()
+    assert not at.exception
+    assert at.dataframe, "Execute renders no emitted table"
+    body = " ".join(m.value for m in at.markdown)
+    assert "unscreened" in body
+
+
+def test_interpret_states_the_four_fifths_verdict():
+    """Fairness merged into Interpret rather than moving as its own panel.
+
+    The screened table already IS the fairness analysis here: the result
+    contract refuses anything that is not a selection rate per group. What the
+    tab had that this route lacked was the vocabulary, so that is what moved.
+    """
+    at = _completed_run()
+    at.radio(key="govflow_stage").set_value("Interpret").run()
+    assert not at.exception
+    fr = at.session_state["govflow_result"]["fairness"]
+    assert fr, "no fairness verdict on a completed run"
+    assert 0.0 <= fr["disparity_ratio"] <= 1.0, "min/max ratio out of range"
+    assert fr["passes"] == (fr["disparity_ratio"] >= fr["threshold"])
+    body = " ".join(m.value for m in at.markdown)
+    assert "Disparity ratio" in body
+    # Never a finding of discrimination; the gap is put on the record and the
+    # judgment is left to Legal and Compliance.
+    assert any("not a finding of discrimination" in c.value for c in at.caption)
+
+
+def test_the_fairness_ratio_never_silently_reads_suppressed_cells():
+    """The ratio is computed on the screened frame, so a suppressed band is not
+    in it. That understates the spread, and the panel has to say so, or the
+    number quietly reads cells CTL-DISC-02 removed."""
+    at = _completed_run()
+    at.radio(key="govflow_stage").set_value("Interpret").run()
+    fr = at.session_state["govflow_result"]["fairness"]
+    if not fr.get("suppressed"):
+        pytest.skip("this run suppressed nothing; nothing to disclose")
+    assert any("not in this ratio" in c.value for c in at.caption), (
+        "a band was suppressed and the disparity ratio did not admit it"
+    )
+
+
+def test_the_run_links_out_to_its_own_audit_trail():
+    """The Audit Log tab became a link, not a third rendering of the stream.
+
+    The link has to resolve, which means the session must register its runs:
+    audit_runs() has always taken a live list and was never given one, so a
+    live run's id was not on file and the drill-down would have 404'd.
+    """
+    at = _completed_run()
+    run_id = at.session_state["govflow_result"]["run_id"]
+    assert "gv_audit" in {b.key for b in at.button}, "no audit link on the run header"
+    at.button(key="gv_audit").click().run()
+    assert not at.exception
+    assert at.session_state["aud_sel"] == run_id
+    # And it landed on the run, not on the "no run on file" error.
+    assert not [e for e in at.error if "No run on file" in e.value]
+    # Nor on the entitlement warning. A first-line reader sees its own runs, and
+    # the run it just executed is the most its own a run gets. This fired for
+    # real: the live record filed the persona's display name where the check
+    # compares ids, so the analyst was refused their own run.
+    assert not [w for w in at.warning if "reads only its own runs" in w.value], (
+        "the run's own author was refused it; actor is probably a name, not an id"
+    )
+    # The evidence itself rendered, not just the shell.
+    assert any(run_id in m.value for m in at.markdown)
+
+
+def test_the_model_card_lives_in_the_model_inventory():
+    """The Model Card tab hung off whichever run you had just executed, which
+    is the wrong anchor: a card documents a model, so it belongs on the model's
+    registry row. A run that never cleared the human gate has none, and the
+    absence is stated rather than rendered as an empty card."""
+    from sentinel.platform import model_versions
+
+    at = _boot(timeout=120)
+    at.button(key="nav_registry").click().run()
+    assert not at.exception
+    labels = _popover_labels(at)
+    assert "card" in labels, "no model card on any registry row"
+    assert "no card" in labels, "every row claims a card; the un-promoted ones have none"
+    # Scoped to seeded rows: a live row's card comes from the run object in
+    # this process, and whether one exists depends on what else the suite has
+    # executed. What must hold unconditionally is that the committed store
+    # carries a card for every model it says was promoted.
+    promoted = [m for m in model_versions() if m.seeded and m.status == "promoted"]
+    assert promoted, "the seeded store has no promoted model"
+    assert all(m.model_card for m in promoted), (
+        "a promoted model carries no card; re-run scripts/seed_runs.py"
+    )
+
+
+def test_architecture_is_a_topbar_popover_not_a_tenth_stage():
+    """Architecture describes the platform, not a run, so it sits beside
+    Controls in the topbar instead of ending the nine-stage rail.
+
+    It was the rail's tenth stop, which made the stepper count to ten under a
+    footer reading "Stage N / 9". Nothing fires there and the flow knows nothing
+    about it, so the rail is the wrong home for it.
+    """
+    at = _boot(timeout=120)
+    at.button(key="nav_run").click().run()
+    assert not at.exception
+    stops = at.radio(key="govflow_stage").options
+    assert "Architecture" not in stops, "Architecture is back on the stepper"
+    assert len(stops) == 9, f"the rail should carry nine stages, got {len(stops)}"
+    assert "Architecture" in _popover_labels(at), "no Architecture popover in the topbar"
+
+
+def test_architecture_wires_its_controls_and_import_rows():
+    """The Architecture overview lists every control by stage, and the import
     allowlist rows each carry the control that decides the row (a module name
     is not a control, so the module chips themselves stay inert)."""
     at = _boot(timeout=120)
     at.button(key="nav_run").click().run()
-    at.radio(key="govflow_stage").set_value("Architecture").run()
     assert not at.exception
     labels = _popover_labels(at)
     assert "CTL-SOD-01" in labels
@@ -982,19 +1169,26 @@ def test_run_l3_repair_walk():
 # -- persona switching (the retained sidebar switcher) -----------------------
 
 
-def test_admin_header_chip_toggle_degrades_and_recovers():
-    """The header-chip demo device: the Admin can disable a control (badge
-    DEGRADED, UNGOVERNED warning); a persona without toggle authority never
-    inherits the stale toggle."""
+def test_the_control_plane_carries_no_switch_that_does_nothing():
+    """The disable-a-control toggles went with the screen that could run one.
+
+    They existed so an Admin could switch a harness control off and watch the
+    failure it prevents, and the only route that honoured them was the Pipeline
+    screen's Run button. With that gone the checkboxes would still render and
+    change nothing, which argues the opposite of what the page claims. The
+    UNGOVERNED badge goes with them: no run this app can start is capable of
+    being ungoverned, so a warning about the next one would be a promise the
+    screen cannot keep.
+    """
     at = _boot(persona_id="admin", timeout=120)
-    at.button(key="nav_pipeline").click().run()
-    at.checkbox(key="ctrl_off_pii").set_value(True).run()
     assert not at.exception
-    assert any("UNGOVERNED" in e.value for e in at.error)
-    # Switch to a persona that cannot toggle: the stale key must not degrade
-    # their runs or their banner. The switcher now lives in the header popover.
-    at.selectbox(key="persona_switch").set_value("analyst").run()
-    assert not any("UNGOVERNED" in e.value for e in at.error)
+    assert not [c for c in at.checkbox if str(c.key or "").startswith("ctrl_off_")], (
+        "a control toggle is back, but nothing consumes it"
+    )
+    body = " ".join(m.value for m in at.markdown)
+    assert "UNGOVERNED" not in body, "the UNGOVERNED badge cannot fire any more"
+    # The controls themselves are still described; only the switch is gone.
+    assert "Control plane" in body
 
 
 # -- who may read the audit log (role scoping) -------------------------------

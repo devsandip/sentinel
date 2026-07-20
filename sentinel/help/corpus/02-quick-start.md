@@ -43,7 +43,9 @@ Switch to the Platform Admin. The Controls popover in the topbar becomes editabl
 
 Open a data contract. Go to the Datasets screen and click Contract on any row. A contract is metadata only and says so on its own face: schema, column roles, relationships and coverage, with no cell values, no distributions and no sample rows.
 
-Approve a model. Run the credit pipeline from the Pipeline screen, then switch to the MRM Approver to clear the human gate. The analyst who ran the pipeline cannot approve it, which is what author-is-not-approver means in practice.
+Read a model card. Open Registry, then the card on any promoted row in Models. It is an SR 11-7 style model-risk document generated from that run, not written by hand, and it exports to PDF.
+
+Watch four eyes refuse. Open Audit Log and pick a credit-risk run whose author signed it themselves. The refusal is CTL-SOD-01, and it compares identities rather than roles: an administrator who authored a run cannot approve it either. That is what author-is-not-approver means in practice.
 
 ## Running it locally
 

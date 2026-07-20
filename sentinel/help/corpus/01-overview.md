@@ -41,7 +41,7 @@ The Presentation chapter is the deck: the whole product at slide altitude, cover
 
 Read Quick start if you want to know what to click and in what order to see a governed run end to end. Read The nine stages for what each stage is for and which controls act there. Read Autonomy levels for the tier arithmetic, the import allowlists and the sandbox caps, which are printed there from the modules that enforce them.
 
-Read Controls for the full catalogue: every control id, its stage, its single action, and what firing means. Read Screens for every screen in the sidebar and every tab inside the Pipeline screen. Read Roles and access for the personas, column-level RBAC and the purpose matrix. Read Data for the registered datasets, the classification levels and what a data contract publishes. Read Architecture for the module map and deployment, and Glossary for the words this product uses in a specific way.
+Read Controls for the full catalogue: every control id, its stage, its single action, and what firing means. Read Screens for every screen in the sidebar and where the retired Pipeline screen's tabs went. Read Roles and access for the personas, column-level RBAC and the purpose matrix. Read Data for the registered datasets, the classification levels and what a data contract publishes. Read Architecture for the module map and deployment, and Glossary for the words this product uses in a specific way.
 
 ## Why the numbers are not in this corpus
 

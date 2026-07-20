@@ -61,12 +61,14 @@ FAQ_ENTRIES: tuple[FaqEntry, ...] = (
     ),
     FaqEntry(
         topic="Getting oriented",
-        question="Why is there both a Run screen and a Pipeline screen?",
+        question="There used to be a Pipeline screen. Where did it go?",
         answer=(
-            "Run is the governed nine-stage flow, and it is where the governance is "
-            "visible one stage at a time. Pipeline is the credit-risk model build, a "
-            "multi-agent run with its own tabs for results, fairness, the model card "
-            "and the gateway ledger."
+            "Its tabs moved into the stages that own the question they answer: the "
+            "gateway ledger at Generate, the emitted result at Execute, the "
+            "disparity ratio at Interpret, the model card in the Registry. Cost "
+            "became run-header chips. Four were dropped, because this route does "
+            "no retrieval, keeps no precedent and emits no traces, so those panels "
+            "would render empty forever. Its runs are still in the Audit Log."
         ),
         page_id="screens",
     ),

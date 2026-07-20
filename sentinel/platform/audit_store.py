@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -36,6 +37,7 @@ from ..harness.audit import LEVEL_BLOCKED, LEVEL_REDACTION, RUNTIME_DIR
 from ..harness.identity import Persona
 from .run_history import (
     KIND_CREDIT_RISK,
+    KIND_GOVFLOW,
     SeedRun,
     load_seed_audit,
     load_seed_runs,
@@ -235,6 +237,59 @@ def _from_seed(rec: SeedRun, events: list[dict]) -> AuditRun:
         steps=list(rec.steps),
         events=events,
         metrics=dict(rec.metrics),
+    )
+
+
+def from_govflow_pub(pub: dict, *, run_kind: str = KIND_GOVFLOW) -> AuditRun:
+    """One live govflow / L3 run, shaped as the Audit Log needs it.
+
+    `audit_runs(live=...)` has always accepted live runs; nothing ever passed
+    any, so the ledger held seeded rows only and the screen's own "may have
+    been a live run" error message described a path that did not exist. The
+    Run stepper now links its header to the drill-down, and a link that lands
+    on "no run on file" is worse than no link, so the session registers its
+    runs here.
+
+    Events come straight off the result rather than from runtime/: govflow
+    builds its AuditLog with persist=False, so there is no JSONL to read back.
+    The events are the same dicts the harness would have written.
+    """
+    return AuditRun(
+        run_id=pub["run_id"],
+        run_kind=run_kind,
+        ref_id=pub.get("purpose", ""),
+        dataset_id=pub.get("dataset", ""),
+        status=pub["status"],
+        outcome=normalize_status(pub["status"]),
+        # The persona id, not the display name. visible_runs compares ids, so
+        # filing the name here withheld a live run from the analyst who had
+        # just executed it: "reads only its own runs" matched nothing.
+        actor=pub.get("persona_id", ""),
+        # The nine-stage route has no human promotion gate, so nothing here is
+        # a signature. Left empty for the same reason the seeder leaves it
+        # empty: filling it with the author would read as one.
+        approver="",
+        origin=ORIGIN_LIVE,
+        when=datetime.now(UTC).isoformat(),
+        controls_fired=list(pub.get("controls_fired", [])),
+        steps=[
+            {
+                "name": s["stage"],
+                "status": s["status"],
+                "agent": "",
+                "controls": list(s.get("controls", [])),
+                "detail": s.get("detail", ""),
+                "attributable": False,
+            }
+            for s in pub.get("stages", [])
+        ],
+        events=list(pub.get("audit", [])),
+        metrics={
+            "tier": pub.get("tier", ""),
+            "stages": len(pub.get("stages", [])),
+            "tokens": pub.get("tokens", 0),
+            "cost_usd": pub.get("cost_usd", 0.0),
+        },
     )
 
 
