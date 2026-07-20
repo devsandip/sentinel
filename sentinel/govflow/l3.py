@@ -28,7 +28,7 @@ from ..evidence.pack import EvidencePack, ProvenanceChain
 from ..harness.audit import LEVEL_BLOCKED, LEVEL_GATE, AuditLog
 from ..harness.identity import Persona, default_persona, policy_version
 from ..lineage import run_lineage_events
-from ..sandbox import run_sandboxed
+from ..sandbox import GOVFLOW_WALL_CLOCK_S, run_sandboxed
 from .flow import STATUS_BLOCKED, STATUS_COMPLETED, STATUS_ERROR, GovernedRunResult, StageRecord
 from .tiers import resolve_tier_for_dataset
 
@@ -329,7 +329,10 @@ def run_l3_analysis(
 
     # Stage 6: Execute in the sandbox (CTL-TIME-01 wall clock still applies).
     execution = run_sandboxed(
-        code, tables={L3_DATASET: scoped}, granted_columns=L3_GRANT, wall_clock_s=15
+        code,
+        tables={L3_DATASET: scoped},
+        granted_columns=L3_GRANT,
+        wall_clock_s=GOVFLOW_WALL_CLOCK_S,
     )
     if not execution.ok:
         ctl = [execution.control] if execution.control else []
