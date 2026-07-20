@@ -1445,7 +1445,7 @@ _FAIR_BADGE = {
     False: "<span class='badge danger'>fail</span>",
     None: "<span class='badge neutral'>n/a</span>",
 }
-_AG_COLS = (1.8, 2.0, 1.0, 4.2, 4.4)
+_AG_COLS = (1.7, 0.8, 4.9, 1.8, 2.9, 3.0)
 
 
 def _model_status_extra(d: dict) -> str:
@@ -1470,24 +1470,47 @@ def _model_status_extra(d: dict) -> str:
 def _agent_table_head() -> None:
     head = st.container(key="tblhead_ag")
     cols = head.columns(_AG_COLS, vertical_alignment="center")
-    for col, label in zip(cols[:3], ("agent", "template", "version"), strict=True):
+    # "ver" not "version": at laptop widths Streamlit shrinks this column to its
+    # min-content and the longer word breaks mid-header.
+    labels = ("agent", "ver", "what it does", "template")
+    for col, label in zip(cols[:4], labels, strict=True):
         col.markdown(f"<span class='th'>{label}</span>", unsafe_allow_html=True)
-    with cols[3]:
-        control_popover("guardrails", label=":gray[tools]", key="agtools")
     with cols[4]:
+        control_popover("guardrails", label=":gray[tools]", key="agtools")
+    with cols[5]:
         control_popover("rbac", label=":gray[rbac scope]", key="agrbac")
 
 
 def render_registry() -> None:
     st.subheader("Model & agent registry")
     st.markdown(
-        "<span class='muted'>The MRM model inventory. Every trained model is "
-        "versioned with its metrics, fairness verdict, and promotion status; every "
-        "agent is versioned with its template lineage and tool scope.</span>",
+        "<span class='muted'>The MRM model inventory. Three different things are "
+        "inventoried here, and they are not interchangeable:</span>",
+        unsafe_allow_html=True,
+    )
+    # The page holds three registries and the names are close enough to blur, so
+    # say the distinction once, up front, in terms of what each thing *is* in a
+    # run: the output, the workers, and the thing a run is allowed to be.
+    st.markdown(
+        "<span class='muted'><b>Models</b> are what a run produces — a trained "
+        "classifier, versioned with its metrics, fairness verdict, and promotion "
+        "status.<br>"
+        "<b>Agents</b> are the workers inside a run — the four pipeline agents "
+        "that do the profiling, modeling, and validation, each with a tool "
+        "allow-list and an RBAC scope.<br>"
+        "<b>Analysis-agents</b> are what a run is allowed to be — named, owned, "
+        "certified analyses. Only a certified one is visible to the Plan stage, "
+        "so an uncertified analysis cannot reach a user. The four agents above "
+        "execute whichever analysis-agent Plan binds.</span>",
         unsafe_allow_html=True,
     )
 
     st.markdown("### Models")
+    st.markdown(
+        "<span class='muted'>Every trained model, newest first. One row per run "
+        "that trained something.</span>",
+        unsafe_allow_html=True,
+    )
     mv = model_versions()
     if mv:
         table_head(_MV_HEAD, _MV_COLS, "mv")
@@ -1525,6 +1548,12 @@ def render_registry() -> None:
         st.info("No models registered yet.")
 
     st.markdown("### Agents")
+    st.markdown(
+        "<span class='muted'>The four workers of the governed pipeline, in run "
+        "order. Every governed run executes these same four; what changes between "
+        "runs is the dataset and the analysis they are pointed at.</span>",
+        unsafe_allow_html=True,
+    )
     # The two governed columns explain themselves once at the header rather than
     # once per row: the control is the same for every agent, only the value
     # differs, so a chip per row would be four copies of one explanation.
@@ -1532,14 +1561,23 @@ def render_registry() -> None:
     for a in agent_registry():
         d = a.to_dict()
         cols = table_row(_AG_COLS, f"ag_{d['agent_id']}")
-        td(cols[0], d["agent_id"], mono=True)
-        td(cols[1], d["template"])
-        td(cols[2], d["version"], mono=True)
-        td(cols[3], d["tools"])
-        td(cols[4], d["rbac_scope"])
+        # Id and human title stack in one cell: the id is what the audit trail
+        # records, the title is what a reviewer calls it.
+        cols[0].markdown(
+            f"<span class='td mono'>{d['agent_id']}</span>"
+            f"<span class='muted'>{d['title']}</span>",
+            unsafe_allow_html=True,
+        )
+        td(cols[1], d["version"], mono=True)
+        td(cols[2], d["does"])
+        td(cols[3], d["template"])
+        td(cols[4], d["tools"])
+        td(cols[5], d["rbac_scope"])
     st.caption(
         "Each agent is derived from a template and carries its tool scope and RBAC "
-        "scope. This is where new agents built from templates would be inventoried."
+        "scope; the description is read off the agent class, so it cannot drift "
+        "from the code that runs. This is where new agents built from templates "
+        "would be inventoried."
     )
 
     render_agent_certification()
@@ -1564,6 +1602,12 @@ def _cert_pill(status: str) -> str:
 
 def render_agent_certification() -> None:
     st.markdown("### Analysis-agents (certification lifecycle)")
+    st.markdown(
+        "<span class='muted'>Not the four agents above. An analysis-agent is a "
+        "named analysis with an owner, a data contract, and an eval suite — the "
+        "unit the Plan stage binds and a reviewer signs off on.</span>",
+        unsafe_allow_html=True,
+    )
     st.markdown(
         "<span class='muted'>An analysis-agent earns the right to run. It moves "
         "draft → candidate → certified, and only a certified agent is visible to "

@@ -103,6 +103,8 @@ def model_versions() -> list[ModelVersion]:
 @dataclass
 class AgentVersion:
     agent_id: str
+    title: str
+    does: str
     template: str
     version: str
     tools: list[str]
@@ -112,6 +114,8 @@ class AgentVersion:
     def to_dict(self) -> dict:
         return {
             "agent_id": self.agent_id,
+            "title": self.title,
+            "does": self.does,
             "template": self.template,
             "version": self.version,
             "tools": ", ".join(self.tools),
@@ -120,14 +124,38 @@ class AgentVersion:
         }
 
 
+def _agent_classes() -> dict[str, type]:
+    """The live pipeline agent classes, keyed by id.
+
+    Imported inside the function so the platform package stays importable
+    without pulling in the ML stack; the registry is the only caller that
+    needs the classes, and it needs them for `title`/`does` -- reading those
+    off the class is what keeps the inventory honest about the running code.
+    """
+    from ..agents.eda import EDAAgent
+    from ..agents.modeler import ModelerAgent
+    from ..agents.profiler import ProfilerAgent
+    from ..agents.validator import ValidatorAgent
+
+    return {
+        cls.id: cls for cls in (ProfilerAgent, EDAAgent, ModelerAgent, ValidatorAgent)
+    }
+
+
 def agent_registry() -> list[AgentVersion]:
-    """The live agents, versioned, with their template lineage and tool scope."""
+    """The live agents, versioned, with what each one does, its template lineage,
+    and its tool scope. Order follows the pipeline: profiler, eda, modeler,
+    validator."""
+    classes = _agent_classes()
     out = []
     for agent_id, template_id in AGENT_LINEAGE.items():
         t = get_template(template_id)
+        cls = classes.get(agent_id)
         out.append(
             AgentVersion(
                 agent_id=agent_id,
+                title=getattr(cls, "title", agent_id),
+                does=getattr(cls, "does", ""),
                 template=template_id,
                 version="v1",
                 tools=t.tools if t else [],
