@@ -53,12 +53,17 @@ from sentinel.platform import (
     model_versions,
     reuse_metrics,
 )
-from sentinel.platform.audit_stages import NOT_IN_ROUTE, canonical_steps
+from sentinel.platform.audit_stages import (
+    CANONICAL_STAGES,
+    NOT_IN_ROUTE,
+    canonical_steps,
+)
 from sentinel.platform.audit_store import (
     OUTCOME_AWAITING,
     OUTCOME_OK,
     OUTCOME_REFUSED,
     audit_runs,
+    visible_runs,
 )
 from sentinel.platform.audit_store import summary as audit_summary
 from sentinel.platform.certification import CertificationError, assign_validator
@@ -69,12 +74,14 @@ from sentinel.platform.run_history import KIND_CREDIT_RISK
 from sentinel.platform.templates import AVAILABLE, LIVE
 from sentinel.rag import corpus_summary
 from sentinel.sandbox.warmup import start_background_warmup
+from sentinel.ui.brand import SHIELD_SVG
 from sentinel.ui.govflow import (
     cls_label,
     control_popover,
     purpose_extra,
     render_govflow,
 )
+from sentinel.ui.manual import render_manual
 from sentinel.ui.tables import table_head, table_row, td
 
 st.set_page_config(page_title="Sentinel — Governed Agentic Analysis", layout="wide")
@@ -558,6 +565,90 @@ st.markdown(
       .gv-below { color:var(--warn-ink); font-size:0.75rem; font-weight:600; white-space:nowrap; }
       .stage-status { margin:6px 0 10px 0; }
 
+      /* ---------- the Gate's read (Gate stage) ---------- */
+      /* Nine checks as nine cells, each carrying the count of constructs it
+         actually judged. The count is the point: a tick mark cannot tell a
+         check that read 16 names from one that had nothing to read, and the
+         four states below are four different facts (see codegen/gate.py). */
+      .gatein { display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr));
+                gap:10px; margin:4px 0 18px; }
+      .gatein .t { background:var(--surface); border:1px solid var(--border);
+                border-radius:var(--r-md); padding:10px 13px; box-shadow:var(--shadow-sm); }
+      .gatein .t .k { font-size:9.5px; font-weight:700; letter-spacing:.11em;
+                text-transform:uppercase; color:var(--faint); margin-bottom:5px; }
+      .gatein .t .v { font-size:13px; color:var(--ink); font-weight:600; }
+      .gatein .t .s { font-family:var(--mono); font-size:11px; color:var(--muted);
+                margin-top:3px; word-break:break-word; }
+
+      .gateread { display:grid; grid-template-columns:repeat(auto-fit,minmax(148px,1fr));
+                gap:9px; margin:4px 0 6px; }
+      .gateread .cell { border:1px solid var(--border); border-radius:var(--r-md);
+                padding:9px 11px 10px; background:var(--surface); min-width:0; }
+      .gateread .cell .cid { font-family:var(--mono); font-size:9.5px; font-weight:700;
+                letter-spacing:.04em; color:var(--faint); display:flex; align-items:center;
+                gap:5px; }
+      .gateread .cell .cid .d { width:7px; height:7px; border-radius:50%;
+                background:var(--faint); flex:none; }
+      /* The count and its unit are siblings, not nested: nesting the unit inside
+         the mono number would inherit mono, and there is no sans token to
+         override it with. */
+      .gateread .cell .nrow { display:flex; align-items:baseline; gap:5px;
+                margin:5px 0 1px; min-width:0; }
+      .gateread .cell .n { font-family:var(--mono); font-size:23px; font-weight:700;
+                font-variant-numeric:tabular-nums; line-height:1.15; color:var(--ink); }
+      .gateread .cell .nu { font-size:10.5px; font-weight:600; letter-spacing:.02em;
+                color:var(--muted); overflow:hidden; text-overflow:ellipsis;
+                white-space:nowrap; }
+      .gateread .cell .lab { font-size:11px; line-height:1.32; color:var(--muted); }
+      .gateread .cell.cleared { background:var(--ok-soft); border-color:var(--ok-border); }
+      .gateread .cell.cleared .cid, .gateread .cell.cleared .n { color:var(--ok-ink); }
+      .gateread .cell.cleared .cid .d { background:var(--ok); }
+      .gateread .cell.cleared .lab { color:var(--ok-ink); opacity:.86; }
+      .gateread .cell.refused { background:var(--danger-soft); border-color:var(--danger-border); }
+      .gateread .cell.refused .cid, .gateread .cell.refused .n { color:var(--danger-ink); }
+      .gateread .cell.refused .cid .d { background:var(--danger); }
+      .gateread .cell.refused .lab { color:var(--danger-ink); opacity:.86; }
+      /* Armed, but this code held nothing for it to judge. Not an assurance. */
+      .gateread .cell.none { background:var(--surface-2); border-style:dashed; }
+      .gateread .cell.none .n { color:var(--faint); }
+      /* Could not run: its rule was never supplied. A gap, so it reads amber. */
+      .gateread .cell.unarmed { background:var(--warn-soft); border-color:var(--warn-border); }
+      .gateread .cell.unarmed .cid, .gateread .cell.unarmed .n { color:var(--warn-ink); }
+      .gateread .cell.unarmed .cid .d { background:var(--warn); }
+      .gateread .cell.unarmed .lab { color:var(--warn-ink); opacity:.86; }
+
+      /* The verdict, stated once, with the reason under it. */
+      .gvd { border:1px solid var(--border); border-left-width:4px;
+             border-radius:var(--r-md); padding:12px 15px; margin:2px 0 14px;
+             background:var(--surface); }
+      .gvd.pass { border-left-color:var(--ok); background:var(--ok-soft);
+             border-color:var(--ok-border); border-left-color:var(--ok); }
+      .gvd.block { border-left-color:var(--danger); background:var(--danger-soft);
+             border-color:var(--danger-border); border-left-color:var(--danger); }
+      .gvd .h { font-size:15px; font-weight:700; letter-spacing:.01em; margin-bottom:5px; }
+      .gvd.pass .h { color:var(--ok-ink); }
+      .gvd.block .h { color:var(--danger-ink); }
+      .gvd .why { font-size:13px; line-height:1.5; color:var(--ink); max-width:78ch; }
+      .gvd .why code { font-family:var(--mono); font-size:11.5px; background:var(--surface);
+             padding:1px 5px; border-radius:4px; border:1px solid var(--border); }
+      .gvd .then { font-size:12px; color:var(--muted); margin-top:6px; }
+
+      /* Evidence chips: one construct the gate judged. */
+      .ev { display:inline-block; font-family:var(--mono); font-size:11px; font-weight:600;
+            padding:2px 7px; border-radius:6px; margin:2px 4px 2px 0;
+            background:var(--ok-soft); color:var(--ok-ink);
+            border:1px solid var(--ok-border); white-space:nowrap; }
+      .ev.no { background:var(--danger-soft); color:var(--danger-ink);
+            border-color:var(--danger-border); }
+      .ev.muted { background:var(--surface-2); color:var(--muted); border-color:var(--border);
+            font-family:inherit; font-style:italic; }
+      .evline { font-size:11.5px; color:var(--faint); font-family:var(--mono); }
+      /* The read, drawn in the code gutter: which check judged this line. */
+      .codeblk td.rd { width:74px; padding-right:12px; text-align:right;
+            font-size:9.5px; font-weight:700; letter-spacing:.03em;
+            color:var(--code-ln); user-select:none; white-space:nowrap; opacity:.85; }
+      .codeblk tr.viol td.rd { color:var(--code-viol-ln); }
+
       /* ---------- sidebar nav groups (ui-spec 2.2) ---------- */
       /* Rhythm from the mockup's .sidenav: rows stack flush (the padding is the
          row height), and the only vertical air is between groups. Streamlit's
@@ -699,12 +790,9 @@ analysis_engine: AnalysisEngine = st.session_state.analysis_engine
 # --------------------------------------------------------------------------
 # Login gate (ui-spec 3.1): the six personas as cards, before any chrome.
 # --------------------------------------------------------------------------
-_SHIELD_SVG = (
-    "<svg viewBox='0 0 24 24' aria-hidden='true'>"
-    "<path d='M12 2 4 5v6c0 5 3.4 8.5 8 11 4.6-2.5 8-6 8-11V5z' fill='#1e50a0'/>"
-    "<path d='M8 12l3 3 5-6' fill='none' stroke='#fff' stroke-width='2' "
-    "stroke-linecap='round' stroke-linejoin='round'/></svg>"
-)
+# The mark itself lives in sentinel/ui/brand.py: the User Manual's cover slide
+# draws it too, and a logo pasted into two files goes stale in one of them.
+_SHIELD_SVG = SHIELD_SVG
 
 # Card copy per ui-spec 3.1 (display name, role line, capability, tier badge).
 # `name` is the spec's card name (shorter than the persona's full config name,
@@ -2370,6 +2458,34 @@ _STEP_BADGE = {
 }
 
 
+def _plural(n: int, noun: str) -> str:
+    return f"{n} {noun}" if n == 1 else f"{n} {noun}s"
+
+
+def _audit_event_row(e: dict) -> dict:
+    return {
+        "seq": e["seq"],
+        "ts": e["ts"][11:19],
+        "agent": e["agent"],
+        "action": e["action"],
+        "level": e["level"],
+        "data touched": ", ".join(e.get("data_touched") or []),
+        "summary": e["output_summary"],
+    }
+
+
+def _audit_stage_events(events: list[dict], label: str) -> None:
+    """The events belonging to one stage, folded away until asked for."""
+    with st.expander(label):
+        st.dataframe(
+            pd.DataFrame([_audit_event_row(e) for e in events]).style.apply(
+                _audit_level_style, axis=1
+            ),
+            hide_index=True,
+            width="stretch",
+        )
+
+
 def _audit_steps(r) -> None:  # noqa: ANN001
     """The run, read as the nine governance stages the Run screen teaches.
 
@@ -2393,12 +2509,27 @@ def _audit_steps(r) -> None:  # noqa: ANN001
     st.caption(
         "The nine governance stages, the same spine the Run screen walks. "
         "Every run kind is read in this shape; each stage names the steps it "
-        "actually ran, what it was built with, and what governed it."
+        "actually ran, the events it recorded, what it was built with, and "
+        "what governed it."
     )
 
+    # Two attribution paths, and the first one wins where it exists.
+    #
+    # An event that carries its own `stage` is filed there, full stop: the
+    # emitting call site is the only thing that knows which stage it ran in,
+    # and now it says so. The nine-stage routes (govflow, L3) stamp all of it.
+    #
+    # Everything else falls back to matching the event's agent against a native
+    # step's agent, which is exact for the analysis and credit-risk routes
+    # because there one agent runs one step. It is not exact for the nine-stage
+    # routes, which is why they stamp the stage instead.
+    by_stage: dict[str, list[dict]] = {}
     by_agent: dict[str, list[dict]] = {}
     for e in r.events:
-        by_agent.setdefault(e["agent"], []).append(e)
+        if e.get("stage"):
+            by_stage.setdefault(str(e["stage"]), []).append(e)
+        else:
+            by_agent.setdefault(e["agent"], []).append(e)
 
     for i, c in enumerate(canonical_steps(r)):
         status = c["status"]
@@ -2432,22 +2563,17 @@ def _audit_steps(r) -> None:  # noqa: ANN001
                 unsafe_allow_html=True,
             )
             if events:
-                with st.expander(f"{len(events)} events at {s.get('name', 'this step')}"):
-                    st.dataframe(
-                        pd.DataFrame(
-                            [
-                                {
-                                    "seq": e["seq"], "ts": e["ts"][11:19],
-                                    "action": e["action"], "level": e["level"],
-                                    "data touched": ", ".join(e.get("data_touched") or []),
-                                    "summary": e["output_summary"],
-                                }
-                                for e in events
-                            ]
-                        ).style.apply(_audit_level_style, axis=1),
-                        hide_index=True,
-                        width="stretch",
-                    )
+                _audit_stage_events(
+                    events,
+                    f"{_plural(len(events), 'event')} at {s.get('name', 'this step')}",
+                )
+
+        stage_events = by_stage.get(c["stage"], [])
+        if stage_events:
+            _audit_stage_events(
+                stage_events,
+                f"{_plural(len(stage_events), 'event')} recorded at {c['stage']}",
+            )
 
         if c["libraries"]:
             st.markdown(
@@ -2474,20 +2600,25 @@ def _audit_steps(r) -> None:  # noqa: ANN001
                     fired=ctl in c["fired"],
                 )
 
-    placed = {s.get("agent") for s in r.steps if s.get("attributable")}
-    unplaced = [e for e in r.events if e["agent"] not in placed]
-    if unplaced:
-        why = (
-            "the emitting agent does not identify which stage it came from "
-            "(flow.py records agent=\"govflow\" from Ask, Plan and Access "
-            "alike), so filing them under a stage would place them wrongly"
-            if not placed
-            else "they are run-level: the run starting and ending, and the "
-            "model being registered"
+    # What is left over after both attribution paths. An event with a stage
+    # this route does not render is counted here too rather than dropped: a
+    # stage string the screen cannot place is a mismatch worth showing, not a
+    # line to swallow.
+    placed_agents = {s.get("agent") for s in r.steps if s.get("attributable")}
+    unplaced = [
+        e
+        for e in r.events
+        if (
+            str(e.get("stage") or "") not in CANONICAL_STAGES
+            and e["agent"] not in placed_agents
         )
+    ]
+    if unplaced:
         st.caption(
-            f"{len(unplaced)} of {len(r.events)} events are not shown under a "
-            f"stage, because {why}. All of them are in the stream below."
+            f"{len(unplaced)} of {len(r.events)} events are run-level rather "
+            "than stage-level: the run starting and ending, and the model "
+            "being registered. They carry no stage because they belong to "
+            "none. All of them are in the stream below."
         )
 
 
@@ -2560,7 +2691,11 @@ def _audit_detail(r) -> None:  # noqa: ANN001
             [
                 {
                     "seq": e["seq"], "ts": e["ts"][11:19], "agent": e["agent"],
-                    "actor": e["actor"], "action": e["action"], "level": e["level"],
+                    "actor": e["actor"],
+                    # Blank where the route has no stage spine, which is a fact
+                    # about the route and not a hole in the record.
+                    "stage": e.get("stage", ""),
+                    "action": e["action"], "level": e["level"],
                     "data touched": ", ".join(e.get("data_touched") or []),
                     "summary": e["output_summary"],
                 }
@@ -2635,15 +2770,35 @@ def _audit_open(run_id: str) -> None:
     _nav_to(_SECTION_AUDIT_RUN)
 
 
-def render_audit_run() -> None:
+def render_audit_run(persona) -> None:  # noqa: ANN001
     """One run, full screen: the evidence for a single execution."""
     run_id = st.session_state.get("aud_sel") or st.query_params.get("run", "")
-    run = next((r for r in audit_runs() if r.run_id == run_id), None)
+    all_runs = audit_runs()
+    run = next((r for r in all_runs if r.run_id == run_id), None)
+    # The same entitlement the ledger applies, applied again here. This screen
+    # is reachable by typing ?run=<id>, so checking only on the ledger would
+    # make the deep link a way around the check rather than a link to a run.
+    permitted = {r.run_id for r in visible_runs(all_runs, persona)}
 
     back, _ = st.columns([1, 5])
     if back.button("Back to audit log", icon=":material/arrow_back:", key="audrun_back"):
         st.query_params.pop("run", None)
         _nav_to("Audit Log")
+
+    if run is not None and run.run_id not in permitted:
+        # Says the run exists and is withheld, rather than claiming it does not
+        # exist. Hiding existence would be the stronger control, and on an
+        # external surface it is the right one; here the reader is an employee
+        # holding a link a colleague sent them, and "no such run" would send
+        # them chasing a bug instead of asking for access.
+        who = get_persona(run.actor)
+        st.warning(
+            f"Run `{run_id}` was executed by "
+            f"**{html.escape(who.name if who else run.actor)}**, and "
+            f"**{html.escape(persona.name)}** reads only its own runs. "
+            "The record exists and is unchanged; it is not shown to this role."
+        )
+        return
 
     if run is None:
         # Reachable by editing the URL, so it says which id failed rather than
@@ -2657,7 +2812,7 @@ def render_audit_run() -> None:
     _audit_detail(run)
 
 
-def render_audit_log() -> None:
+def render_audit_log(persona) -> None:  # noqa: ANN001
     st.subheader("Audit log")
     st.markdown(
         "<span class='muted'>Every run the platform has executed, every step "
@@ -2665,7 +2820,12 @@ def render_audit_log() -> None:
         "Append-only; nothing here is editable from the app.</span>",
         unsafe_allow_html=True,
     )
-    runs = audit_runs()
+    # The ledger is scoped to what this role may read before anything is
+    # counted, so the tiles below describe the reader's own view and not the
+    # platform. Every number on this screen is derived from `runs`.
+    all_runs = audit_runs()
+    runs = visible_runs(all_runs, persona)
+    hidden = len(all_runs) - len(runs)
     m = audit_summary(runs)
     st.caption(
         f"{m['runs']} runs on file, {m['events']} committed events. Seeded runs "
@@ -2675,6 +2835,21 @@ def render_audit_log() -> None:
         "gitignored and excluded from the deploy bundle, so they do not survive "
         "a restart."
     )
+    if hidden:
+        # Named, not silently applied. A filtered ledger that does not say it
+        # is filtered reads as the whole record, and every tile under it would
+        # then be a quiet understatement.
+        st.info(
+            f"**Scoped to your runs.** {hidden} further "
+            f"run{'s' if hidden != 1 else ''} on this platform "
+            f"{'are' if hidden != 1 else 'is'} not shown: "
+            f"**{html.escape(persona.name)}** reads its own runs only. The "
+            "counts and filters below describe this scoped view. Oversight "
+            "roles (Internal Auditor, Model Validator, MRM Approver, Platform "
+            "Admin) read the whole ledger; switch to one from the identity "
+            "chip above to see it, which is possible at all because that chip "
+            "is a demo sign-in with no credential behind it."
+        )
 
     a, b, c, d = st.columns(4)
     a.metric("Runs logged", m["runs"], f"{m['live_runs']} this session")
@@ -2740,7 +2915,12 @@ def render_audit_log() -> None:
         format_func=lambda k: _AUD_KIND_LABEL.get(k, k),
         key="aud_kind",
     )
+    # Built from the scoped set, so it can only ever offer people whose runs
+    # this role may already read: the filter narrows a view, it never widens
+    # one. For a role scoped to itself that leaves a single option, and the
+    # control is disabled and says why rather than pretending to be a choice.
     people = sorted({r.actor for r in runs})
+    scoped_to_self = not persona.can_view_all_runs
     who = f2.selectbox(
         "Ran by",
         ["Anyone", *people],
@@ -2748,6 +2928,9 @@ def render_audit_log() -> None:
         if x != "Anyone"
         else x,
         key="aud_who",
+        disabled=scoped_to_self,
+        help="Your role reads its own runs only, so there is nobody else to "
+        "filter by." if scoped_to_self else None,
     )
     ctls = sorted({c for r in runs for c in r.refusal_controls})
     ctl = f3.selectbox("Control", ["Any control", *ctls], key="aud_ctl")
@@ -2769,8 +2952,11 @@ def render_audit_log() -> None:
 
     if not shown:
         st.info(
-            "No runs match these filters. Clear them, or run an analysis from "
-            "the Run or Analyses screen to add a live one."
+            "You have not run anything yet, and your role reads only its own "
+            "runs. Run an analysis from the Run or Analyses screen to add one."
+            if not runs and hidden
+            else "No runs match these filters. Clear them, or run an analysis "
+            "from the Run or Analyses screen to add a live one."
         )
         return
 
@@ -3250,13 +3436,17 @@ def render_home(persona) -> None:  # noqa: ANN001
 # Layout
 # --------------------------------------------------------------------------
 # The grouped sidebar (ui-spec 2.2): Overview, then Workspace / Governance /
-# Platform groups. Buttons write st.session_state.section; the active item
-# renders as the primary variant (styled as the nav active state).
+# Platform groups, and Help last. Buttons write st.session_state.section; the
+# active item renders as the primary variant (styled as the nav active state).
+# Help sits at the bottom because it is a reference surface, not a step in any
+# workflow: nothing in the product routes through it, and putting it above
+# Platform would imply otherwise.
 _NAV_GROUPS: list[tuple[str | None, list[str]]] = [
     (None, ["Overview"]),
     ("Workspace", ["Run", "Pipeline", "Analyses"]),
     ("Governance", ["Datasets", "Registry"]),
     ("Platform", ["Platform", "Adoption", "Audit Log"]),
+    ("Help", ["User Manual"]),
 ]
 _NAV_KEYS = {
     "Overview": "nav_home",
@@ -3268,6 +3458,7 @@ _NAV_KEYS = {
     "Platform": "nav_platform",
     "Adoption": "nav_adoption",
     "Audit Log": "nav_auditlog",
+    "User Manual": "nav_manual",
 }
 # Nav icons (ui-spec 2.2, sentinel-stepper-mockup.html sidenav). Material
 # Symbols, rounded/outline style, matching the mockup's stroked SVG set:
@@ -3284,6 +3475,7 @@ _NAV_ICONS = {
     "Platform": ":material/grid_view:",
     "Adoption": ":material/bar_chart:",
     "Audit Log": ":material/gavel:",
+    "User Manual": ":material/menu_book:",
 }
 
 # Deep link. ?run=<id> lands directly on that run's evidence, so an audit-log
@@ -3366,11 +3558,17 @@ if section == "Adoption":
     st.stop()
 
 if section == "Audit Log":
-    render_audit_log()
+    render_audit_log(persona)
+    st.stop()
+
+if section == "User Manual":
+    # _nav_to is passed in rather than imported by the manual: app.py imports
+    # sentinel.ui.manual, so the manual importing back would be a cycle.
+    render_manual(_nav_to)
     st.stop()
 
 if section == _SECTION_AUDIT_RUN:
-    render_audit_run()
+    render_audit_run(persona)
     st.stop()
 
 # Fall-through: the credit-pipeline hero ("Pipeline" in the sidebar).

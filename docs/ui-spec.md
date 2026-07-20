@@ -605,6 +605,9 @@ keywords, strings, function names each their own token color per 1.4), with a
 `.viol` row highlight (tinted background + colored line number) marking the
 line a control will catch (e.g. an unsanctioned network call).
 
+On the Gate stage the block takes an optional third column, the read gutter
+(`td.rd`). See 4.13.
+
 ### 4.10 Metrics + bar charts (`.metric`, `.barchart`)
 
 Metric tile: bordered card, a big tabular-nums number (26px/700), an uppercase
@@ -643,6 +646,61 @@ A bordered, soft-tinted callout row with a small circular icon glyph, used for
 inline governance commentary ("this control fired because…", "on the roadmap,
 not yet wired…"). Variants mirror the semantic palette: `info` (accent),
 `warn`, `ok`, `danger`.
+
+### 4.13 The Gate's read (`.gateread`, `.gvd`, `.gatein`, Gate stage)
+
+Four blocks, in this order, and the order is the argument: the decision, what
+the decision was made against, what was read, and where.
+
+**`.gvd`** — the verdict, once, with the reason under it. Left border 4px in
+`--ok` or `--danger`. **Both directions carry a reason.** A refusal that names
+its control is halfway there already; an approval that says only "no violations"
+is an assertion, and this stage exists to replace assertions. The reason states
+the size of the read, and then names the checks that judged nothing, because a
+green verdict that hides those claims more than the gate established.
+
+The size of the read is **two numbers, never one**: judgements and constructs.
+One import is judged by four checks (the allowlist plus three deny lists), so
+judgements run more than double constructs. The gutter adds up to the second,
+so a reader who checks the screen against itself must find them agreeing.
+
+**`.gatein`** — four tiles: the code, the import allowlist, the column grant,
+the SQL scope. Each prints its contents, not just its size. "Every column
+inside the grant" is not a control a reader can check without the grant.
+
+**`.gateread`** — the visualization: one cell per check, `auto-fit` grid at
+148px minimum, each carrying the **count of constructs that check judged**.
+The count is the whole point. A tick mark cannot tell a check that read sixteen
+names from one that had nothing to read, which is what nine identical ticks over
+nine unequal checks was doing until 2026-07-20.
+
+Four cell states, matching the gate's four verdicts (`codegen/gate.py`), and
+they must stay four:
+
+| Class | State | Paint |
+|---|---|---|
+| `.cleared` | judged N, permitted all | `--ok-soft`, count in `--ok-ink` |
+| `.refused` | found something, said no | `--danger-soft`, count in `--danger-ink` |
+| `.none` | armed, nothing here to judge | `--surface-2`, **dashed** border, `–` |
+| `.unarmed` | could not run, no rule supplied | `--warn-soft`, `n/a` |
+
+Dashed for `.none` and amber for `.unarmed` are load-bearing. Neither is a
+verdict on the code, and painting either green is a false assurance. Amber
+specifically because an unarmed check is a gap: it caught `l3.py` shipping
+`CTL-PURP-01` with no table scope to test against.
+
+The count and its unit are **siblings**, not nested. The count is `--mono`;
+nesting the unit inside it would inherit mono and there is no sans token to
+override with.
+
+**`.codeblk td.rd`** — a gutter column between the line number and the code,
+counting the constructs the gate judged on that line. Tinting the refused line
+(4.9) shows where the gate said *no*; it does not show where the gate *looked*,
+and "I read all of it" is the claim a reviewer otherwise has to take on trust.
+A line holding nothing to judge is blank, not zero.
+
+`tests/test_app_smoke.py` pins the strip's four states, the counts, the verdict
+copy, and the gutter.
 
 ---
 

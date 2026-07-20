@@ -36,6 +36,18 @@ CTL_TIME_01 = "CTL-TIME-01"
 DEFAULT_WALL_CLOCK_S = 30.0
 DEFAULT_MEMORY_MB = 1024
 
+# What the governed routes actually pass. Both `govflow/flow.py` (L2) and
+# `govflow/l3.py` (L3) ran on a bare `wall_clock_s=15` literal, duplicated, with
+# the default above documented everywhere as though it were the operative
+# number. It is not: it is the fallback for a caller that names none, and the
+# two callers that matter both name one. Their analyses are small and bounded,
+# so they can afford a tighter cap than a generic sandbox invocation.
+#
+# Named here rather than typed twice because the User Manual and the Execute
+# panel both have to state this number, and a magic literal in two call sites
+# is a number no surface can read without guessing which one is authoritative.
+GOVFLOW_WALL_CLOCK_S = 15.0
+
 
 @dataclass
 class ExecutionResult:

@@ -28,7 +28,7 @@ from ..evidence.pack import EvidencePack, ProvenanceChain
 from ..harness.audit import LEVEL_BLOCKED, LEVEL_GATE, AuditLog
 from ..harness.identity import Persona, default_persona, policy_version
 from ..lineage import run_lineage_events
-from ..sandbox import run_sandboxed
+from ..sandbox import GOVFLOW_WALL_CLOCK_S, run_sandboxed
 from .flow import STATUS_BLOCKED, STATUS_COMPLETED, STATUS_ERROR, GovernedRunResult, StageRecord
 from .tiers import resolve_tier_for_dataset
 
@@ -220,6 +220,7 @@ def run_l3_analysis(
     audit.record(
         agent="l3",
         action="ask",
+        stage="Ask",
         actor=persona.id,
         inputs_summary=f"purpose={L3_PURPOSE}, dataset={L3_DATASET}",
         output_summary=f"tier resolved {tier}: {tier_decision.rationale}",
@@ -233,6 +234,7 @@ def run_l3_analysis(
         audit.record(
             agent="l3",
             action="tier_block",
+            stage="Ask",
             actor=persona.id,
             level=LEVEL_BLOCKED,
             output_summary=detail,
@@ -268,6 +270,7 @@ def run_l3_analysis(
     audit.record(
         agent="l3",
         action="access",
+        stage="Access",
         actor=persona.id,
         data_touched=L3_GRANT,
         output_summary=f"Public dataset; {len(L3_GRANT)} columns granted",
@@ -284,6 +287,7 @@ def run_l3_analysis(
         audit.record(
             agent="l3",
             action="repair_requested",
+            stage="Generate",
             actor=persona.id,
             output_summary=(
                 f"Fix it: repair of gate-blocked run {repair_of}; seeded repaired "
@@ -294,13 +298,25 @@ def run_l3_analysis(
 
     # Stage 5: Gate -- the broad L3 allowlist, but the same egress/fs/dyncode deny
     # lists as L2. Analytical freedom widens; the hard safety boundary does not.
-    gate = gate_code(code, granted_columns=L3_GRANT, allowed_imports=L3_ALLOWED_IMPORTS)
+    #
+    # The table scope is passed even though no L3 sample writes ctx.sql. Without
+    # it CTL-PURP-01 has no rule to test against and cannot fire at all, and the
+    # Gate screen used to paint that as a clear check. It now paints it amber,
+    # which is what surfaced the omission: a generated L3 program that reached
+    # for another table would have met nothing.
+    gate = gate_code(
+        code,
+        granted_columns=L3_GRANT,
+        allowed_tables=[L3_DATASET],
+        allowed_imports=L3_ALLOWED_IMPORTS,
+    )
     if not gate.passed:
         controls += gate.controls_fired
         for v in gate.violations:
             audit.record(
                 agent="gate",
                 action="gate_block",
+                stage="Gate",
                 level=LEVEL_BLOCKED,
                 actor=persona.id,
                 output_summary=v.message,
@@ -317,6 +333,7 @@ def run_l3_analysis(
     audit.record(
         agent="gate",
         action="gate_pass",
+        stage="Gate",
         actor=persona.id,
         level=LEVEL_GATE,
         output_summary="L3 gate passed",
@@ -329,7 +346,10 @@ def run_l3_analysis(
 
     # Stage 6: Execute in the sandbox (CTL-TIME-01 wall clock still applies).
     execution = run_sandboxed(
-        code, tables={L3_DATASET: scoped}, granted_columns=L3_GRANT, wall_clock_s=15
+        code,
+        tables={L3_DATASET: scoped},
+        granted_columns=L3_GRANT,
+        wall_clock_s=GOVFLOW_WALL_CLOCK_S,
     )
     if not execution.ok:
         ctl = [execution.control] if execution.control else []
@@ -337,6 +357,7 @@ def run_l3_analysis(
         audit.record(
             agent="sandbox",
             action="execute_error",
+            stage="Execute",
             actor=persona.id,
             level=LEVEL_BLOCKED,
             output_summary=execution.error or "execution failed",
@@ -414,6 +435,7 @@ def run_l3_analysis(
     audit.record(
         agent="attest",
         action="evidence_pack",
+        stage="Attest",
         actor=persona.id,
         output_summary=f"L3 evidence pack assembled (pending); {len(lineage)} lineage event(s)",
     )

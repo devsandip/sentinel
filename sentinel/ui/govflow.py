@@ -30,6 +30,10 @@ from ..codegen.allowlist import (
     FS_MODULES,
     L3_ALLOWED_IMPORTS,
 )
+from ..codegen.gate import CLEARED as GATE_CLEARED
+from ..codegen.gate import NO_SUBJECT as GATE_NO_SUBJECT
+from ..codegen.gate import NOT_ARMED as GATE_NOT_ARMED
+from ..codegen.gate import REFUSED as GATE_REFUSED
 from ..codegen.generate import has_scripted_repair
 from ..codegen.prompts import build_system_prompt, build_user_prompt
 from ..datasets import all_datasets
@@ -433,18 +437,19 @@ _STAGE_EXPLAINER = {
     ),
 }
 
-# The Gate's check list: one row per family of checks, mapped to control ids.
-_GATE_CHECKS = [
-    ("Parses as Python", ["CTL-CODE-00"]),
-    ("Imports on the tier's allowlist", ["CTL-CODE-01"]),
-    ("No network egress, referenced or imported", ["CTL-EGRESS-01"]),
-    ("No filesystem or process access", ["CTL-CODE-02"]),
-    ("No dynamic code or unsafe deserialization", ["CTL-CODE-03"]),
-    ("No sandbox-escape attribute access", ["CTL-CODE-04"]),
-    ("Every column inside the grant; no SELECT *", ["CTL-COL-01"]),
-    ("SQL tables inside the purpose scope", ["CTL-PURP-01"]),
-    ("Join complexity under the ceiling", ["CTL-COMPLEX-01"]),
-]
+# The Gate's check list used to be re-declared here, nine labels the screen
+# asserted the gate performed. It now comes from the gate itself: every run
+# carries what each check examined, what it was tested against, and how it
+# ruled (sentinel/codegen/gate.py). A screen keeping its own copy of what the
+# enforcement does is the drift this build keeps catching in itself.
+
+# How each of the four verdicts paints, and the word for it.
+_READ_STYLE = {
+    GATE_CLEARED: ("cleared", "cleared"),
+    GATE_REFUSED: ("refused", "refused"),
+    GATE_NO_SUBJECT: ("none", "nothing to read"),
+    GATE_NOT_ARMED: ("unarmed", "not armed"),
+}
 
 
 # --------------------------------------------------------------------------
@@ -495,11 +500,21 @@ _KW_RE = re.compile(
 _STR_RE = re.compile(r"('[^']*'|\"[^\"]*\")")
 
 
-def _code_html(code: str, viol: dict[int, str] | None = None) -> str:
+def _code_html(
+    code: str,
+    viol: dict[int, str] | None = None,
+    reads: dict[int, str] | None = None,
+) -> str:
     """The spec's code block (ui-spec 4.9): mono line numbers, light syntax
     color, and the violating line tinted with its control tag. Static string
-    processing over html-escaped text; presentation only."""
+    processing over html-escaped text; presentation only.
+
+    `reads` adds a gutter naming what the gate judged on each line. Tinting only
+    the refused lines shows where the gate said no; it does not show where the
+    gate looked, and "I read all of it" is the claim a reviewer actually has to
+    take on trust. The gutter is that claim, itemised."""
     viol = viol or {}
+    reads = reads or {}
     rows = []
     for i, line in enumerate(code.splitlines(), 1):
         esc = html.escape(line)
@@ -515,8 +530,11 @@ def _code_html(code: str, viol: dict[int, str] | None = None) -> str:
             f"  <span class='viol-tag'>&#10229; {viol[i]}</span>" if i in viol else ""
         )
         cls = " class='viol'" if i in viol else ""
+        gutter = (
+            f"<td class='rd'>{html.escape(reads.get(i, ''))}</td>" if reads else ""
+        )
         rows.append(
-            f"<tr{cls}><td class='ln'>{i}</td><td>{body}{cm}{tag}</td></tr>"
+            f"<tr{cls}><td class='ln'>{i}</td>{gutter}<td>{body}{cm}{tag}</td></tr>"
         )
     return f"<div class='codeblk'><table>{''.join(rows)}</table></div>"
 
@@ -1578,6 +1596,216 @@ def _panel_generate(pub: dict | None, cfg: dict | None, persona) -> None:  # noq
             )
 
 
+def _gate_verdict(gate: dict, checks: list[dict]) -> None:
+    """The decision, and the reason for it, in the gate's own numbers.
+
+    Both directions need a reason. A refusal that names its control is halfway
+    there already; an approval that says only "no violations" is an assertion,
+    and an assertion is what this stage exists to replace."""
+    scope = gate.get("scope") or {}
+    passed = bool(gate.get("passed"))
+    # Two numbers, deliberately: one import is judged by four checks, so the
+    # judgement count is larger than the construct count. Printing either as
+    # the other is the sloppiness this whole stage is against, and the gutter
+    # below adds up to the second one, so a reader can check it.
+    judged = sum(int(c.get("examined") or 0) for c in checks)
+    constructs = sum((scope.get("line_counts") or {}).values())
+    lines = scope.get("lines", 0)
+    quiet = [c for c in checks if c.get("verdict") == GATE_NO_SUBJECT]
+    unarmed = [c for c in checks if c.get("verdict") == GATE_NOT_ARMED]
+
+    if passed:
+        head = "Cleared for execution"
+        why = (
+            f"The nine checks made <b>{judged} judgements</b> over the "
+            f"{constructs} constructs in {lines} lines of generated code, each "
+            "against the rule below it, and refused none of them."
+        )
+    else:
+        refusing = [c for c in checks if c.get("verdict") == GATE_REFUSED]
+        head = "Refused"
+        bits = []
+        for c in refusing:
+            for o in c.get("items", []):
+                if o.get("allowed"):
+                    continue
+                bits.append(
+                    f"<code>{_esc(o.get('control') or '')}</code> on line "
+                    f"{_esc(o.get('line'))}: <code>{_esc(o.get('subject'))}</code>, "
+                    f"{_esc(o.get('reason'))}"
+                )
+        n = len(refusing)
+        why = (
+            f"{n} of the nine checks refused. " + "; ".join(bits) + ". "
+            f"The other {9 - n} made the remaining judgements over the "
+            f"{constructs} constructs in {lines} lines and cleared them."
+        )
+
+    then = (
+        "Nothing was executed, imported or evaluated to reach this verdict: two "
+        "parsers read the text. "
+    ) + (
+        "The sandbox runs it next, under the wall clock and memory caps."
+        if passed
+        else "The code did not run, and will not in this form."
+    )
+    # The caveat is the honest part of a green verdict: a check with nothing to
+    # read cleared nothing, and one that never ran cleared less than that.
+    if quiet:
+        then += (
+            f" {len(quiet)} of the nine found nothing in this code to judge "
+            f"({_esc('; '.join(c['label'].split(';')[0] for c in quiet))}), "
+            "which is not the same as clearing it."
+        )
+    if unarmed:
+        then += (
+            f" {len(unarmed)} could not run at all, because the rule was never "
+            f"supplied ({_esc('; '.join(c['label'].split(';')[0] for c in unarmed))})."
+        )
+    st.markdown(
+        f"<div class='gvd {'pass' if passed else 'block'}'>"
+        f"<div class='h'>{head}</div>"
+        f"<div class='why'>{why}</div>"
+        f"<div class='then'>{then}</div></div>",
+        unsafe_allow_html=True,
+    )
+
+
+def _gate_inputs(pub: dict, gate: dict, checks: list[dict]) -> None:
+    """What the gate was handed: the code, and the three rules it holds it to.
+
+    Without these the verdict is unreadable. "Every column inside the grant" is
+    only a control if the screen also says which columns the grant holds."""
+    scope = gate.get("scope") or {}
+    grant = scope.get("granted_columns") or []
+    tables = scope.get("allowed_tables")
+    imports = scope.get("allowed_imports") or []
+    attempts = pub.get("attempts") or 1
+    origin = "written live by the model" if pub.get("live") else "scripted sample"
+    tiles = [
+        (
+            "Code under review",
+            f"{scope.get('lines', 0)} lines",
+            f"{origin}, attempt {attempts}",
+        ),
+        (
+            "Import allowlist",
+            f"{scope.get('tier', '')} · {len(imports)} modules",
+            ", ".join(imports[:4]) + (" …" if len(imports) > 4 else ""),
+        ),
+        (
+            "Column grant",
+            f"{len(grant)} columns" if grant else "none supplied",
+            ", ".join(grant) if grant else "the column check is inert",
+        ),
+        (
+            "SQL scope",
+            f"{len(tables)} table{'' if len(tables) == 1 else 's'}"
+            if tables
+            else "none supplied",
+            (", ".join(tables) + f" · join ceiling {scope.get('join_ceiling')}")
+            if tables
+            else "the table check is inert",
+        ),
+    ]
+    st.markdown("**What the gate was given**")
+    st.markdown(
+        "<div class='gatein'>"
+        + "".join(
+            f"<div class='t'><div class='k'>{_esc(k)}</div>"
+            f"<div class='v'>{_esc(v)}</div><div class='s'>{_esc(s)}</div></div>"
+            for k, v, s in tiles
+        )
+        + "</div>",
+        unsafe_allow_html=True,
+    )
+
+
+def _gate_read_strip(checks: list[dict]) -> None:
+    """The nine checks as nine cells, sized by what each one actually read."""
+    cells = []
+    for c in checks:
+        verdict = c.get("verdict", "")
+        cls, _word = _READ_STYLE.get(verdict, ("none", verdict))
+        n = int(c.get("examined") or 0)
+        if verdict == GATE_NOT_ARMED:
+            figure, unit = "n/a", "rule not supplied"
+        elif verdict == GATE_NO_SUBJECT:
+            figure, unit = "–", "nothing to read"
+        else:
+            figure = str(n)
+            unit = "judged" if verdict == GATE_CLEARED else (
+                f"judged, {len([o for o in c.get('items', []) if not o.get('allowed')])} refused"
+            )
+        cells.append(
+            f"<div class='cell {cls}'>"
+            f"<div class='cid'><span class='d'></span>"
+            f"{_esc(', '.join(c.get('controls') or []))}</div>"
+            f"<div class='nrow'><span class='n'>{_esc(figure)}</span>"
+            f"<span class='nu'>{_esc(unit)}</span></div>"
+            f"<div class='lab'>{_esc(c.get('label', ''))}</div></div>"
+        )
+    st.markdown(f"<div class='gateread'>{''.join(cells)}</div>", unsafe_allow_html=True)
+
+
+def _evidence_chips(check: dict) -> str:
+    """The constructs a check judged, as chips. Allow-list checks show every
+    one (that list is the evidence); deny-list sweeps show only their hits,
+    because naming the rest would mean printing the file back."""
+    items = check.get("items") or []
+    # The parse check's one item is its summary restated; a chip would be noise.
+    if check.get("key") == "parse" and check.get("verdict") == GATE_CLEARED:
+        return ""
+    if not items:
+        if check.get("verdict") == GATE_CLEARED:
+            return "<span class='ev muted'>no match in the sweep</span>"
+        return ""
+    shown, rest = items[:10], max(0, len(items) - 10)
+    out = "".join(
+        f"<span class='ev{'' if o.get('allowed') else ' no'}' "
+        f"title='line {_esc(o.get('line'))}: {_esc(o.get('reason'))}'>"
+        f"{_esc(o.get('subject'))}</span>"
+        for o in shown
+    )
+    if rest:
+        out += f"<span class='ev muted'>+{rest} more</span>"
+    return out
+
+
+def _gate_check_detail(checks: list[dict], pub: dict) -> None:
+    """Per check: what it read, what it read it against, and how it ruled."""
+    rows = []
+    for c in checks:
+        verdict = c.get("verdict", "")
+        cls, word = _READ_STYLE.get(verdict, ("none", verdict))
+        mark = {
+            GATE_CLEARED: "<span class='ok'>✓ cleared</span>",
+            GATE_REFUSED: "<span class='flag'>✕ refused</span>",
+            GATE_NO_SUBJECT: "<span class='muted'>– no subject</span>",
+            GATE_NOT_ARMED: "<span class='gv-below'>! not armed</span>",
+        }.get(verdict, _esc(word))
+        chips = _evidence_chips(c)
+        rows.append(
+            f"<tr><td><b>{_esc(c.get('label', ''))}</b><br>"
+            f"<span class='evline'>{_esc(', '.join(c.get('controls') or []))}</span></td>"
+            f"<td>{mark}"
+            f"<div class='muted'>{_esc(c.get('summary', ''))}</div>"
+            + (f"<div>{chips}</div>" if chips else "")
+            + f"</td><td><span class='muted'>reads {_esc(c.get('examines', ''))}</span>"
+            f"<br><span class='muted'>against {_esc(c.get('rule', ''))}</span></td></tr>"
+        )
+    _html_table(["check", "what it read, and how it ruled", "the rule"], rows)
+
+
+def _read_gutter(gate: dict) -> dict[int, str]:
+    """Constructs judged per line, for the code block's gutter.
+
+    Counted once per construct rather than once per check that judged it, so
+    the number is things-on-this-line-the-gate-formed-a-view-about."""
+    counts = (gate.get("scope") or {}).get("line_counts") or {}
+    return {int(k): f"{v} read" for k, v in counts.items() if v}
+
+
 def _panel_gate(pub: dict | None, cfg: dict | None, persona) -> None:  # noqa: ANN001
     _stage_banner(pub, "Gate")
     if not pub:
@@ -1621,30 +1849,32 @@ def _panel_gate(pub: dict | None, cfg: dict | None, persona) -> None:  # noqa: A
             st.markdown("**After (repaired)**")
             st.markdown(_code_html(code), unsafe_allow_html=True)
 
-    st.markdown("**What the parsers checked**")
-    fired = {v["control"] for v in gate.get("violations", [])}
-    rows = []
-    for label, ids in _GATE_CHECKS:
-        hit = any(i in fired for i in ids)
-        mark = (
-            "<span class='flag'>✕ refused</span>"
-            if hit
-            else "<span class='ok'>✓ clear</span>"
-        )
-        rows.append(
-            f"<tr><td>{_esc(label)}</td><td>{mark}</td>"
-            f"<td><code>{_esc(', '.join(ids))}</code></td></tr>"
-        )
-    _html_table(["check", "verdict", "control"], rows)
+    checks = gate.get("checks") or []
+    _gate_verdict(gate, checks)
+    _gate_inputs(pub, gate, checks)
 
-    if gate["passed"]:
-        st.success("Gate passed: no violations. Cleared for execution.")
-    else:
-        st.error("Gate blocked. The code below did not run, and never will in this form.")
+    st.markdown("**What the parsers read**")
+    st.markdown(
+        "<span class='muted'>One cell per check, carrying the number of "
+        "constructs it actually judged. A tick cannot tell a check that read "
+        "sixteen names from one that had nothing to read, and only two of the "
+        "four states below are verdicts on the code at all.</span>",
+        unsafe_allow_html=True,
+    )
+    _gate_read_strip(checks)
+    _gate_check_detail(checks, pub)
 
     if not (pub.get("repaired_from") and prior):
         blocked_lines = {v["line"]: v["control"] for v in gate.get("violations", [])}
-        st.markdown(_code_html(code, blocked_lines), unsafe_allow_html=True)
+        st.markdown(
+            "**The read, on the code** <span class='muted'>(the gutter counts "
+            "the constructs the gate judged on each line)</span>",
+            unsafe_allow_html=True,
+        )
+        st.markdown(
+            _code_html(code, blocked_lines, _read_gutter(gate)),
+            unsafe_allow_html=True,
+        )
 
     if gate.get("violations"):
         st.markdown(

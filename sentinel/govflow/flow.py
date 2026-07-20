@@ -42,7 +42,7 @@ from ..platform.certification import (
     get_entry,
     plan_visible_entries,
 )
-from ..sandbox import ExecutionResult, run_sandboxed
+from ..sandbox import GOVFLOW_WALL_CLOCK_S, ExecutionResult, run_sandboxed
 from .access import (
     DATASET_ID,
     FAIR_LENDING_GRANT,
@@ -130,16 +130,7 @@ class GovernedRunResult:
             "plan_agent": self.plan_agent,
             "stages": [s.to_dict() for s in self.stages],
             "generated_code": self.generated_code,
-            "gate": {
-                "passed": self.gate.passed,
-                "controls_fired": self.gate.controls_fired,
-                "violations": [
-                    {"control": v.control, "line": v.line, "message": v.message}
-                    for v in self.gate.violations
-                ],
-            }
-            if self.gate
-            else None,
+            "gate": self.gate.to_public_dict() if self.gate else None,
             "live": self.generation.live if self.generation else False,
             "attempts": self.generation.attempt_count if self.generation else 0,
             "screen": self.screen.to_dict() if self.screen else None,
@@ -244,12 +235,14 @@ def _generate_execute_loop(
         if not outcome.gate.passed:
             break
 
+        # The grant and row filter back ctx.sql: the runtime backstop for
+        # columns, and the injected identity filter.
         execution = run_sandboxed(
             outcome.code,
             tables={DATASET_ID: scoped},
             granted_columns=FAIR_LENDING_GRANT,
             row_filter_sql=FAIR_LENDING_ROW_FILTER,
-            wall_clock_s=15,
+            wall_clock_s=GOVFLOW_WALL_CLOCK_S,
         )
         if execution.ok:
             contract = check_result(execution.emitted)
@@ -283,6 +276,7 @@ def _generate_execute_loop(
         audit.record(
             agent="sandbox",
             action=action,
+            stage="Execute",
             actor=actor,
             level=LEVEL_BLOCKED,
             output_summary=(
@@ -448,6 +442,7 @@ def run_governed_analysis(
     audit.record(
         agent="govflow",
         action="ask",
+        stage="Ask",
         actor=persona.id,
         inputs_summary=f"purpose={PURPOSE}, dataset={DATASET_ID}",
         output_summary=f"tier resolved {tier}: {tier_decision.rationale}",
@@ -459,6 +454,7 @@ def run_governed_analysis(
         audit.record(
             agent="govflow",
             action="tier_block",
+            stage="Ask",
             level=LEVEL_BLOCKED,
             actor=persona.id,
             output_summary=detail,
@@ -499,6 +495,7 @@ def run_governed_analysis(
         audit.record(
             agent="govflow",
             action="plan_block",
+            stage="Plan",
             level=LEVEL_BLOCKED,
             actor=persona.id,
             output_summary=detail,
@@ -516,6 +513,7 @@ def run_governed_analysis(
         audit.record(
             agent="govflow",
             action="plan_block",
+            stage="Plan",
             level=LEVEL_BLOCKED,
             actor=persona.id,
             output_summary=contract.detail,
@@ -532,6 +530,7 @@ def run_governed_analysis(
     audit.record(
         agent="govflow",
         action="plan",
+        stage="Plan",
         actor=persona.id,
         output_summary=f"bound {plan_agent} (certified); contract {contract.detail}",
     )
@@ -553,6 +552,7 @@ def run_governed_analysis(
         audit.record(
             agent="govflow",
             action="access_block",
+            stage="Access",
             level=LEVEL_BLOCKED,
             actor=persona.id,
             output_summary=purpose_decision.reason,
@@ -576,6 +576,7 @@ def run_governed_analysis(
         audit.record(
             agent="govflow",
             action="access_unwired",
+            stage="Access",
             level=LEVEL_BLOCKED,
             actor=persona.id,
             output_summary=detail,
@@ -597,6 +598,7 @@ def run_governed_analysis(
     audit.record(
         agent="govflow",
         action="access",
+        stage="Access",
         actor=persona.id,
         data_touched=FAIR_LENDING_GRANT,
         output_summary=(
@@ -624,6 +626,9 @@ def run_governed_analysis(
             audit.record(
                 agent="l1",
                 action="param_error",
+                # Generate, not Plan: at L1 filling typed params is what the
+                # model does *instead of* writing code, so it is that stage.
+                stage="Generate",
                 level=LEVEL_BLOCKED,
                 actor=persona.id,
                 output_summary=str(exc),
@@ -654,6 +659,7 @@ def run_governed_analysis(
         audit.record(
             agent="l1",
             action="select_and_fill",
+            stage="Generate",
             actor=persona.id,
             output_summary=f"certified analysis {L1_ANALYSIS_ID!r}, params {params}",
         )
@@ -665,6 +671,7 @@ def run_governed_analysis(
             audit.record(
                 agent="l1",
                 action="analysis_error",
+                stage="Execute",
                 actor=persona.id,
                 level=LEVEL_BLOCKED,
                 output_summary=execution.error or "L1 analysis failed",
@@ -686,6 +693,7 @@ def run_governed_analysis(
         audit.record(
             agent="l1",
             action="analysis_ok",
+            stage="Execute",
             actor=persona.id,
             output_summary=f"certified analysis produced {len(emitted)} group(s)",
         )
@@ -712,6 +720,7 @@ def run_governed_analysis(
             audit.record(
                 agent="govflow",
                 action="repair_requested",
+                stage="Generate",
                 actor=persona.id,
                 output_summary=(
                     f"Fix it: repair of gate-blocked run {repair_of or '(unknown)'}; "
@@ -760,6 +769,7 @@ def run_governed_analysis(
                 audit.record(
                     agent="gate",
                     action="gate_block",
+                    stage="Gate",
                     level=LEVEL_BLOCKED,
                     actor=persona.id,
                     output_summary=v.message,
@@ -780,6 +790,7 @@ def run_governed_analysis(
         audit.record(
             agent="gate",
             action="gate_pass",
+            stage="Gate",
             actor=persona.id,
             level=LEVEL_GATE,
             output_summary=f"gate passed on attempt {outcome.attempt_count}",
@@ -795,6 +806,7 @@ def run_governed_analysis(
             audit.record(
                 agent="sandbox",
                 action="execute_error",
+                stage="Execute",
                 actor=persona.id,
                 level=LEVEL_BLOCKED,
                 output_summary=execution.error or "execution failed",
@@ -815,6 +827,7 @@ def run_governed_analysis(
             audit.record(
                 agent="sandbox",
                 action="execute_ok_bad_shape",
+                stage="Execute",
                 actor=persona.id,
                 level=LEVEL_BLOCKED,
                 output_summary=(
@@ -851,6 +864,7 @@ def run_governed_analysis(
         audit.record(
             agent="sandbox",
             action="execute_ok",
+            stage="Execute",
             actor=persona.id,
             output_summary=f"ran in {execution.wall_clock_s:.2f}s (no network, wall-clock capped)",
         )
@@ -872,6 +886,7 @@ def run_governed_analysis(
         audit.record(
             agent="screen",
             action="cell_suppressed",
+            stage="Screen",
             actor=persona.id,
             level=LEVEL_BLOCKED,
             output_summary=f"suppressed cell {cell.label()} (n={cell.n} < {cell_floor})",
@@ -881,6 +896,7 @@ def run_governed_analysis(
         audit.record(
             agent="screen",
             action="proxy_flagged",
+            stage="Screen",
             actor=persona.id,
             level=LEVEL_BLOCKED,
             output_summary=flag.message(),
@@ -906,6 +922,7 @@ def run_governed_analysis(
     audit.record(
         agent="interpret",
         action="narration",
+        stage="Interpret",
         actor=persona.id,
         output_summary=("faithful: " if faithful else "UNFAITHFUL: ") + why,
         extra={"control": CTL_EVAL_01, "passed": faithful},
@@ -958,6 +975,7 @@ def run_governed_analysis(
     audit.record(
         agent="attest",
         action="evidence_pack",
+        stage="Attest",
         actor=persona.id,
         output_summary=(
             f"evidence pack assembled (pending signoff); "

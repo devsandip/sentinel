@@ -15,6 +15,7 @@ from sentinel.analyses.engine import STATUS_COMPLETED as ANALYSIS_COMPLETED
 from sentinel.govflow.flow import STATUS_BLOCKED as GOVFLOW_BLOCKED
 from sentinel.govflow.flow import STATUS_COMPLETED as GOVFLOW_COMPLETED
 from sentinel.govflow.flow import STATUS_ERROR as GOVFLOW_ERROR
+from sentinel.harness.identity import get_persona
 from sentinel.orchestrator import (
     STATUS_AWAITING,
     STATUS_BLOCKED,
@@ -22,6 +23,7 @@ from sentinel.orchestrator import (
     STATUS_REJECTED,
     STATUS_RUNNING,
 )
+from sentinel.platform.audit_stages import CANONICAL_STAGES
 from sentinel.platform.audit_store import (
     OUTCOME_AWAITING,
     OUTCOME_OK,
@@ -29,6 +31,7 @@ from sentinel.platform.audit_store import (
     audit_runs,
     normalize_status,
     summary,
+    visible_runs,
 )
 from sentinel.platform.run_history import load_seed_audit, load_seed_runs
 
@@ -470,3 +473,79 @@ def test_summary_totals_match_the_corpus():
     assert s["runs"] == len(runs)
     assert s["events"] == sum(len(r.events) for r in runs)
     assert s["runs_without_events"] == 0
+
+
+# -- per-stage attribution ---------------------------------------------------
+
+
+def test_nine_stage_runs_stamp_every_event_with_its_stage():
+    """The fix for the caveat the screen used to print.
+
+    An event's agent cannot identify its stage: flow.py records agent="govflow"
+    from Ask, Plan and Access alike. So the call site stamps the stage, and
+    every event a nine-stage route emits must carry one. A new audit.record in
+    flow.py or l3.py that forgets it fails here rather than quietly landing in
+    the run-level stream.
+    """
+    nine = [r for r in audit_runs() if r.run_kind in ("govflow", "l3")]
+    assert nine, "corpus needs nine-stage runs for this to mean anything"
+    for r in nine:
+        for e in r.events:
+            assert e.get("stage"), (
+                f"{r.run_id} seq {e.get('seq')} ({e.get('action')}) carries no stage"
+            )
+            assert e["stage"] in CANONICAL_STAGES, (
+                f"{r.run_id} seq {e['seq']} names stage {e['stage']!r}, "
+                "which is not one of the nine"
+            )
+
+
+def test_a_stamped_stage_agrees_with_the_run_own_stage_record():
+    """The stamp must not name a stage the run never reached.
+
+    Both the events and the StageRecord list are written by the same function
+    side by side; this asserts they still describe the same run.
+    """
+    for r in audit_runs():
+        if r.run_kind not in ("govflow", "l3"):
+            continue
+        recorded = {str(s.get("name", "")) for s in r.steps}
+        for e in r.events:
+            assert e["stage"] in recorded, (
+                f"{r.run_id}: event at {e['stage']} but the run records no such stage"
+            )
+
+
+def test_other_routes_leave_the_stage_empty_rather_than_guessing():
+    """analysis and credit_risk have no stage spine, and say so by omission."""
+    for r in audit_runs():
+        if r.run_kind in ("govflow", "l3"):
+            continue
+        for e in r.events:
+            assert not e.get("stage"), (
+                f"{r.run_id}: {e['action']} claims stage {e['stage']!r} on a "
+                "route that has no stages of its own"
+            )
+
+
+# -- who may read the ledger -------------------------------------------------
+
+
+def test_oversight_roles_read_the_whole_ledger():
+    runs = audit_runs()
+    for pid in ("auditor", "admin", "model_validator", "mrm_approver"):
+        assert len(visible_runs(runs, get_persona(pid))) == len(runs), pid
+
+
+def test_the_first_line_reads_only_its_own_runs():
+    runs = audit_runs()
+    analyst = get_persona("analyst")
+    seen = visible_runs(runs, analyst)
+    assert seen, "the analyst authored seeded runs, so this must not be empty"
+    assert len(seen) < len(runs), "the corpus needs runs by someone else too"
+    assert all(r.actor == "analyst" for r in seen)
+
+
+def test_an_unidentified_viewer_reads_nothing():
+    """Default deny. An access check that fails open is not a check."""
+    assert visible_runs(audit_runs(), None) == []
