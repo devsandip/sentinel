@@ -23,10 +23,12 @@ import pandas as pd
 from ..codegen.gate import GateResult
 from ..codegen.generate import (
     CodeGenRequest,
+    GenerationAttempt,
     GenerationOutcome,
     generate_and_gate,
     has_scripted_repair,
 )
+from ..codegen.result_contract import ContractResult, check_result, group_column
 from ..datasets.fingerprint import FingerprintError, dataset_sha, live_contract_check
 from ..disclosure import ScreenResult, screen
 from ..evidence import EvidencePack, build_evidence_pack
@@ -150,6 +152,7 @@ class GovernedRunResult:
                     "passed": a.gate.passed,
                     "controls": a.gate.controls_fired,
                     "code": a.code,
+                    "rejected_by": a.rejected_by,
                 }
                 for a in (self.generation.attempts if self.generation else [])
             ],
@@ -168,10 +171,136 @@ def _dedupe(seq: list[str]) -> list[str]:
 
 
 def _band_column(df: pd.DataFrame) -> str | None:
-    for c in df.columns:
-        if c != "n" and not pd.api.types.is_numeric_dtype(df[c]):
-            return c
-    return None
+    """Kept as the flow's name for it; the definition lives with the result
+    contract so the check, the Screen call and the narration cannot disagree
+    about which column is the band."""
+    return group_column(df)
+
+
+def _generate_execute_loop(
+    request: CodeGenRequest,
+    gateway: ModelGateway,
+    *,
+    scoped: pd.DataFrame,
+    max_attempts: int,
+    initial_feedback: str,
+    audit: AuditLog,
+    actor: str,
+) -> tuple[GenerationOutcome, ExecutionResult | None, ContractResult | None, int]:
+    """Generate, gate, run, and check the result, feeding every recoverable
+    failure back to the model until the generation budget runs out.
+
+    Three things can go wrong after the model writes code, and until v11 only the
+    first of them got a second attempt:
+
+      - the gate refuses it            -> handled inside generate_and_gate
+      - it crashes in the sandbox      -> fed back here
+      - it returns an unreadable shape -> fed back here
+
+    A gate block is not retried here on purpose. `generate_and_gate` has already
+    spent the budget arguing with the model about it, and a run that ends blocked
+    at the gate is the control working, not the run failing; it must stay visible
+    as a block rather than be ground down by retries.
+
+    `max_attempts` bounds model generations across the whole loop. Scripted mode
+    never loops: canned code is deterministic, so a second round would spend the
+    budget re-deriving the same result.
+
+    Returns the combined outcome (every attempt from every round, so the UI shows
+    the full history), the last execution, its contract verdict, and the number
+    of rounds run.
+    """
+    budget = max(1, max_attempts)
+    feedback = initial_feedback
+    attempts: list[GenerationAttempt] = []
+    tokens = 0
+    cost = 0.0
+    live = False
+    rounds = 0
+    outcome: GenerationOutcome | None = None
+    execution: ExecutionResult | None = None
+    contract: ContractResult | None = None
+
+    while budget > 0:
+        rounds += 1
+        outcome = generate_and_gate(
+            request, gateway, max_attempts=budget, initial_feedback=feedback
+        )
+        budget -= outcome.attempt_count
+        attempts.extend(outcome.attempts)
+        tokens += outcome.tokens
+        cost += outcome.cost_usd
+        live = live or outcome.live
+
+        if not outcome.gate.passed:
+            break
+
+        # The grant and row filter back ctx.sql: the runtime backstop for
+        # columns, and the injected identity filter.
+        execution = run_sandboxed(
+            outcome.code,
+            tables={DATASET_ID: scoped},
+            granted_columns=FAIR_LENDING_GRANT,
+            row_filter_sql=FAIR_LENDING_ROW_FILTER,
+            wall_clock_s=GOVFLOW_WALL_CLOCK_S,
+        )
+        if execution.ok:
+            contract = check_result(execution.emitted)
+            if contract.passed:
+                break
+            reason = contract.summary()
+            retry_feedback = contract.feedback_for_regeneration()
+            action = "execute_contract_miss"
+        else:
+            contract = None
+            # A wall-clock kill is a control firing, not a mistake to argue with:
+            # regenerating would spend the budget on code that is allowed to be
+            # slow. Let it out to be reported as the control it is.
+            if execution.control:
+                break
+            reason = execution.error or "execution failed"
+            retry_feedback = (
+                f"Your code passed the gate but failed at runtime: {reason}. "
+                "Fix the cause and regenerate."
+            )
+            action = "execute_runtime_miss"
+
+        # The attempt the gate cleared is the one that just failed downstream;
+        # mark it so the attempt history does not show "gate passed" against
+        # code the platform threw away.
+        attempts[-1].rejected_by = reason
+
+        if budget <= 0 or not outcome.live:
+            break
+
+        audit.record(
+            agent="sandbox",
+            action=action,
+            stage="Execute",
+            actor=actor,
+            level=LEVEL_BLOCKED,
+            output_summary=(
+                f"round {rounds}: {reason}; fed back to the model, "
+                f"{budget} generation(s) left"
+            ),
+        )
+        feedback = retry_feedback
+
+    assert outcome is not None  # the loop always runs at least once
+    # Renumber across rounds: generate_and_gate counts from 1 within its own
+    # loop, so a two-round run would otherwise show two "Attempt 1"s.
+    for i, a in enumerate(attempts, start=1):
+        a.attempt = i
+    combined = GenerationOutcome(
+        passed=outcome.gate.passed,
+        code=outcome.code,
+        gate=outcome.gate,
+        attempts=attempts,
+        live=live,
+        tokens=tokens,
+        cost_usd=round(cost, 6),
+    )
+    return combined, execution, contract, rounds
 
 
 def _narrate(scr: ScreenResult) -> str:
@@ -603,13 +732,33 @@ def run_governed_analysis(
                     )
                 ),
             )
-        outcome = generate_and_gate(
-            request, gateway, max_attempts=max_attempts, initial_feedback=repair_feedback
+        # The Stage-5 loop, widened past the gate. A gate refusal already fed
+        # itself back to the model and regenerated; a result the platform cannot
+        # read is the same kind of failure and now feeds back the same way, as
+        # does a runtime crash in code the gate cleared. Before v11 only the gate
+        # had a second chance: a live model that emitted a dict, a MultiIndex, or
+        # a rate column called anything but selection_rate ended the run at
+        # Execute with no recourse.
+        #
+        # `max_attempts` stays the budget for model generations across the whole
+        # loop, not per round, so widening what can be retried does not widen
+        # what it costs. When it runs out the run fails honestly, which is the
+        # same place it failed before, only after it tried.
+        outcome, execution, contract, rounds = _generate_execute_loop(
+            request,
+            gateway,
+            scoped=scoped,
+            max_attempts=max_attempts,
+            initial_feedback=repair_feedback,
+            audit=audit,
+            actor=persona.id,
         )
         gen_detail = (
             f"{'live' if outcome.live else 'scripted'}, "
             f"{outcome.attempt_count} attempt(s)"
         )
+        if rounds > 1:
+            gen_detail += f" over {rounds} generate-execute round(s)"
         if is_repair:
             gen_detail += f"; repair of blocked run {repair_of or '(unknown)'}"
         stages.append(StageRecord("Generate", "ok", detail=gen_detail))
@@ -648,16 +797,10 @@ def run_governed_analysis(
         )
         stages.append(StageRecord("Gate", "ok", detail="no violations; cleared for execution"))
 
-        # Execute in the sandbox. The grant and row filter back ctx.sql: the
-        # runtime backstop for columns, and the injected identity filter.
-        execution = run_sandboxed(
-            outcome.code,
-            tables={DATASET_ID: scoped},
-            granted_columns=FAIR_LENDING_GRANT,
-            row_filter_sql=FAIR_LENDING_ROW_FILTER,
-            wall_clock_s=GOVFLOW_WALL_CLOCK_S,
-        )
-        if not execution.ok:
+        # Execute already ran inside the loop above (it is what the loop retries
+        # on), so what is left here is reporting which way it came out.
+        if execution is None or not execution.ok:
+            execution = execution or ExecutionResult(ok=False, error="no execution attempted")
             ctl = [execution.control] if execution.control else []
             controls += ctl
             audit.record(
@@ -679,20 +822,28 @@ def run_governed_analysis(
             return finish(STATUS_ERROR)
 
         emitted = execution.emitted
-        if not isinstance(emitted, pd.DataFrame) or "n" not in emitted.columns:
+        contract = contract or check_result(emitted)
+        if not contract.passed:
             audit.record(
                 agent="sandbox",
                 action="execute_ok_bad_shape",
                 stage="Execute",
                 actor=persona.id,
                 level=LEVEL_BLOCKED,
-                output_summary="emitted result is not a grouped table with an 'n' column",
+                output_summary=(
+                    f"result contract not satisfied after {outcome.attempt_count} "
+                    f"attempt(s): {contract.summary()}"
+                ),
             )
             stages.append(
                 StageRecord(
                     "Execute",
                     "error",
-                    detail="emitted result must be a DataFrame with an 'n' count column",
+                    detail=(
+                        f"the code ran, but its result does not satisfy the result "
+                        f"contract after {outcome.attempt_count} attempt(s): "
+                        f"{contract.summary()}"
+                    ),
                 )
             )
             for s in ("Screen", "Interpret", "Attest"):
@@ -700,8 +851,15 @@ def run_governed_analysis(
             return finish(STATUS_ERROR)
 
         code_for_evidence = outcome.code
+        contract_note = (
+            "" if rounds == 1 else f" (result contract met on round {rounds})"
+        )
         stages.append(
-            StageRecord("Execute", "ok", detail=f"ran in {execution.wall_clock_s:.2f}s")
+            StageRecord(
+                "Execute",
+                "ok",
+                detail=f"ran in {execution.wall_clock_s:.2f}s{contract_note}",
+            )
         )
         audit.record(
             agent="sandbox",

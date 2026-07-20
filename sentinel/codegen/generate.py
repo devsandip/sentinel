@@ -190,6 +190,12 @@ class GenerationAttempt:
     code: str
     gate: GateResult
     codegen: CodeGen
+    # Why this attempt did not become the run's answer, for the attempt history.
+    # Empty on the attempt that stuck. The gate fills nothing in: a refused gate
+    # is already legible from `gate`. The flow sets this on an attempt the gate
+    # cleared but whose execution or result the platform then rejected, so the
+    # history cannot show "gate passed" against an attempt that was thrown away.
+    rejected_by: str = ""
 
 
 @dataclass
@@ -222,8 +228,14 @@ def generate(
     feedback: str = "",
 ) -> CodeGen:
     """Generate one code string. Live mode calls the model; scripted mode returns
-    the canned analysis for the request's intent. `feedback` from a prior gate
-    refusal is appended to the prompt so the model can fix and retry."""
+    the canned analysis for the request's intent. `feedback` from a prior failed
+    attempt is appended to the prompt so the model can fix and retry.
+
+    The preamble stays neutral about *what* failed because since v11 three things
+    can produce feedback: the gate refusing the code, the sandbox crashing on it,
+    and the result contract rejecting what it emitted. Each feedback string opens
+    by naming its own cause, so prefixing "refused by the gate" onto all three
+    would tell the model the wrong thing twice out of three times."""
     system = build_system_prompt()
     user = build_user_prompt(
         question=request.question,
@@ -233,7 +245,7 @@ def generate(
         analysis=request.analysis,
     )
     if feedback:
-        user += f"\n\nYour previous attempt was refused by the gate. {feedback}"
+        user += f"\n\nYour previous attempt was not accepted. {feedback}"
     return gateway.generate_code(system, user, _scripted_fallback(request))
 
 

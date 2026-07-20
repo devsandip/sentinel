@@ -741,6 +741,123 @@ output  SELECT age_band, AVG(pred) FROM german_credit
 The model never sees the injected filter and cannot remove it. The rewrite
 happens after generation and before execution.
 
+**`ctx.sql` was missing from the codegen prompt until v11, which made all of the
+above unreachable in live mode.** The Python half of the prompt documented
+`ctx.table`, `ctx.param` and `ctx.emit`, and stopped. A model that is never told
+a path exists does not take it, so a live run wrote pandas for every question,
+including the two the UI offers *because* they ask for SQL by name. The sqlglot
+half of the gate could not fire on a live run at all, and the "SELECT \* refused
+by the SQL gate" demo was quietly a pandas run that nothing refused. This is the
+allowlist defect in a third form: a control that cannot be reached is not a
+control that passed. `sql_clause()` now lives in `sql_gate.py` beside the checks
+it describes and is interpolated into the prompt, including the join ceiling,
+which is read from `DEFAULT_JOIN_CEILING` rather than restated.
+
+One rule in that clause is not a policy but a mechanic, and the model has to be
+told it: the query must be **one static string literal**. The gate reads SQL it
+can see before execution, so an f-string or a `+` concatenation is refused for
+being unreadable rather than for being wrong. Adjacent quoted strings are fine,
+because Python joins them at parse time and the gate still sees one constant.
+
+**What live mode does with the adversarial SQL preset is worth knowing before
+demoing it.** Told it may not `SELECT *`, a capable model does not. Sampled
+against the new prompt, both generations for "Select everything from
+german_credit and show it" named the six granted columns explicitly, one of them
+with a comment noting that `SELECT *` is not permitted. The gate had nothing to
+refuse, because nothing violated anything. That is the model behaving well, not
+the control failing, but the Ask screen used to promise "the control that refuses
+it" before every run in both modes, which would then be a promise the run did not
+keep. It now says *the control that refuses the scripted sample*, and adds that a
+live model may decline the request instead. The same caveat applies to the three
+Python adversarial presets. The Gate stage has always shown what the gate
+actually returned on the code that actually ran; it was the pre-run label that
+overclaimed.
+
+### 6.1 The result contract
+
+The allowlist says what generated code may *do*. The result contract says what it
+must *return*. Both are fences, and until v11 only one of them was written down.
+
+`sentinel/codegen/result_contract.py` states it once:
+
+```
+a pandas DataFrame                      not a dict, not a Series, not a scalar
+plain string column names               no MultiIndex from .agg({...})
+one row per band, band in a column      reset_index() after the groupby
+an integer column named exactly 'n'     what CTL-DISC-02 suppresses on
+a float column named exactly            what Interpret narrates and the
+  'selection_rate'                        evidence pack states a finding about
+extra columns are fine
+```
+
+`contract_clause()` is interpolated into the codegen prompt and `check_result()`
+enforces the same sentence after the sandbox returns, for the same reason
+`ALLOWED_IMPORTS` is interpolated rather than restated: a prompt that teaches one
+fence and a platform that checks another will drift, and the drift is invisible
+until a live model finds it.
+
+**That drift is what broke the Live LLM path.** The prompt asked for "a count
+column named 'n'". The flow required a DataFrame with `n` on it. Interpret
+required a `selection_rate` column on top of that, and said so nowhere. Three
+contracts, no reconciliation, and no feedback path between them. Scripted mode
+never noticed, because the canned sample was written against the checks rather
+than against the prompt: the demo tested the checks with an answer that already
+knew them.
+
+Live mode failed on both halves at once, in two ways that look different and are
+the same bug:
+
+- **The dead run.** A model that emitted a dict wrapping the frame, a MultiIndex
+  from `.agg({"pred": ["mean", "count"]})`, the raw scoped table, or a count
+  column called `count` died at Execute with "emitted result must be a DataFrame
+  with an 'n' count column", with no retry.
+- **The mute run.** A model that got `n` right but named the rate `decline_rate`
+  or `approval_rate` completed the whole flow, assembled an evidence pack, and
+  narrated "The analysis produced a result with no comparable groups after
+  screening" -- a false statement, since there were groups and the platform
+  simply could not find the column. Of nine live generations sampled against the
+  old prompt, nine named `n` correctly and none produced `selection_rate`: the
+  benign preset question ("Does the model decline older applicants more often,
+  holding income constant?") never contains the words *selection rate*, and asks
+  for a controlled comparison, which pulls a capable model toward a regression
+  whose natural output is a coefficient table.
+
+A mute run is the worse of the two. A dead run is visibly dead; a mute run is a
+signed-off-able artifact that asserts nothing while reporting success.
+
+**Nothing is normalised on the model's behalf.** Renaming `count` to `n` in the
+platform would be a silent transform inside a product whose entire argument is
+that transforms are visible. A miss is fed back to the model and regenerated, or
+reported as a failure. The platform does not quietly fix the result; it asks
+again, in public, and the audit log carries both the miss and the retry.
+
+### 6.2 The regenerate loop, past the gate
+
+Three things can go wrong after the model writes code, and until v11 only the
+first of them got a second attempt:
+
+| failure | before v11 | now |
+| --- | --- | --- |
+| the gate refuses it | regenerate with the refusal fed back | unchanged |
+| it crashes in the sandbox | run ends at Execute | regenerate with the traceback fed back |
+| it returns an unreadable shape | run ends at Execute | regenerate with the contract fed back |
+
+`max_attempts` (default 3) is the budget for model generations across the whole
+loop, not per round, so widening what can be retried does not widen what it
+costs. When the budget runs out the run fails in the same place it used to fail,
+only after it has tried, and the Execute stage names which clause of the contract
+was missed rather than restating the contract at the reader.
+
+Two things the loop deliberately does not do. It does not retry a **gate block**:
+`generate_and_gate` has already spent the budget arguing about it, and a run that
+ends blocked at the gate is the control working, not the run failing -- it must
+stay visible as a block rather than be ground down into an error. It does not
+retry a **`CTL-TIME-01` wall-clock kill**: that is a control firing, and
+regenerating would spend the budget on code that is allowed to be slow.
+
+Scripted mode never loops. Canned code is deterministic, so a second round would
+re-derive the same result and spend the budget doing it.
+
 ---
 
 ## 7. Personas and permissions

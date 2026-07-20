@@ -1089,11 +1089,26 @@ def _cfg_question(is_l3: bool) -> tuple[str, str, str]:
             ]
         )
         if note.control:
+            # Scoped to the scripted sample on purpose. The note describes the
+            # canned code in codegen/generate.py, which genuinely contains the
+            # violation. In Live LLM mode the model writes its own code from the
+            # question, and a well-aligned model often declines to write the bad
+            # thing: asked to SELECT *, it names the granted columns instead, and
+            # nothing is refused because nothing violated anything. Promising a
+            # refusal that then does not arrive would be the demo lying about its
+            # own controls, which is the one thing this screen cannot do.
             st.markdown(
-                "<span class='muted'>The control that refuses it:</span>",
+                "<span class='muted'>The control that refuses the scripted "
+                "sample:</span>",
                 unsafe_allow_html=True,
             )
             _control_popover(note.control, None, key=f"gv_anote_{note.control}")
+            st.caption(
+                "In Live LLM mode the model writes this code itself and may "
+                "refuse the request rather than commit the violation, in which "
+                "case the gate has nothing to refuse. What the Gate stage shows "
+                "is always what the gate actually returned on the code that ran."
+            )
     return style, intent, question
 
 
@@ -1545,8 +1560,17 @@ def _panel_generate(pub: dict | None, cfg: dict | None, persona) -> None:  # noq
     if len(attempts) > 1:
         with st.expander(f"Attempt history ({len(attempts)})"):
             for a in attempts:
-                verdict = "passed" if a["passed"] else f"refused ({', '.join(a['controls'])})"
-                st.markdown(f"**Attempt {a['attempt']}** — gate {verdict}")
+                verdict = (
+                    "gate passed" if a["passed"]
+                    else f"gate refused ({', '.join(a['controls'])})"
+                )
+                # An attempt can clear the gate and still be discarded, when what
+                # it emitted failed the result contract or crashed the sandbox.
+                # Saying only "gate passed" against such an attempt would read as
+                # if it were the run's answer.
+                if a.get("rejected_by"):
+                    verdict += f", then discarded: {a['rejected_by']}"
+                st.markdown(f"**Attempt {a['attempt']}** — {verdict}")
                 st.code(a["code"], language="python")
     with st.expander("What the model is told (the prompt)"):
         if not live:

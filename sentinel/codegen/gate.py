@@ -500,8 +500,34 @@ class _GateVisitor(ast.NodeVisitor):
         # treats an empty module as an allowlist miss.
         module = "" if node.level and not node.module else (node.module or "")
         shown = ("." * (node.level or 0)) + (node.module or "")
-        self._read_import(module, f"from {shown} import ...", node.lineno)
+        self._read_import(
+            self._bound_module(module, node), f"from {shown} import ...", node.lineno
+        )
         self.generic_visit(node)
+
+    def _bound_module(self, module: str, node: ast.ImportFrom) -> str:
+        """The module an ImportFrom should be judged as.
+
+        `from scipy import stats` binds exactly `scipy.stats`, which the grant
+        names, though bare `scipy` is not granted. Judging the parent refuses an
+        import the allowlist permits: the per-submodule rule exists to stop
+        `import scipy` handing over every submodule, not to refuse the one
+        submodule that was granted. A live model writing idiomatic Python hit
+        this and was blocked for it.
+
+        Only an allowlist miss is reconsidered, so a denied category is untouched
+        (`from os import path` stays CTL-CODE-02 whatever it binds), and every
+        bound name must resolve, so one ungranted member refuses the whole
+        statement. `import *` resolves to `module.*`, which no grant matches.
+        """
+        if node.level or not node.names:
+            return module
+        if import_verdict(module, self.allowed_imports) != CTL_CODE_01:
+            return module
+        bound = [f"{module}.{a.name}" for a in node.names]
+        if all(import_verdict(m, self.allowed_imports) is None for m in bound):
+            return bound[0]
+        return module
 
     # -- bare name references (CTL-EGRESS-01 / CTL-CODE-02/03 without import) --
     def visit_Name(self, node: ast.Name) -> None:
