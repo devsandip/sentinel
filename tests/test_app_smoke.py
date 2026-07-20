@@ -758,6 +758,33 @@ def test_user_manual_control_chapter_separates_enforced_from_declared():
     assert body.count("declared, not implemented") == len(declared)
 
 
+def test_user_manual_roles_chapter_states_every_persona_entitlement():
+    """Every boolean on Persona is an entitlement, and the manual has to show
+    all of them.
+
+    Reading personas live keeps the *count* honest for free, but says nothing
+    about a *field*: `can_view_all_runs` landed on main while this screen was
+    being written, and the roles chapter rendered six correct personas with the
+    new entitlement invisible. Counting the rendered yes/no verdicts against the
+    persona set is what makes a future field additive here instead of silent.
+    """
+    from sentinel.harness.identity import all_personas
+
+    personas = all_personas()
+    at = _boot()
+    at.session_state["section"] = "User Manual"
+    at.session_state["manual_chapter"] = "Roles & access"
+    at.run()
+    assert not at.exception
+    body = " ".join(m.value for m in at.markdown)
+    for label in ("can run", "can approve", "can toggle controls", "audit ledger scope"):
+        assert body.count(label) >= len(personas), f"{label} missing for some persona"
+    # The scoping split is real, not uniform: at least one persona each way.
+    assert any(p.can_view_all_runs for p in personas)
+    assert any(not p.can_view_all_runs for p in personas)
+    assert "every run" in body and "its own runs only" in body
+
+
 def test_user_manual_deck_links_out_to_every_nav_screen():
     at = _boot()
     at.button(key="nav_manual").click().run()

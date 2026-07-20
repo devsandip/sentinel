@@ -981,6 +981,7 @@ def _deck(nav_to) -> None:  # noqa: ANN001, C901
                     "approves" if p.can_approve else "",
                     "toggles controls" if p.can_toggle_controls else "",
                     "read-only" if p.read_only else "",
+                    "reads every run" if p.can_view_all_runs else "reads own runs",
                     ("attested " + ", ".join(p.attestations)) if p.attestations else "",
                 )
                 if x
@@ -1709,7 +1710,15 @@ def _screens_chapter(nav_to) -> None:  # noqa: ANN001
             (
                 "A run's detail",
                 "Open any row: the run replayed as the same nine stages, keeping ran, skipped and "
-                "not-in-this-route apart.",
+                "not-in-this-route apart. Events carry the stage they were emitted at, stamped at "
+                "the call site rather than guessed from the action string.",
+            ),
+            (
+                "Scoped by role",
+                "The one screen about access control obeys it. Oversight roles read the whole "
+                "ledger; the first line reads its own runs. The scope is announced rather than "
+                "silently applied, the filters can only narrow it, and the drill-down re-checks, "
+                "or a deep link would be the way around the check.",
             ),
             (
                 "Deep links",
@@ -1726,10 +1735,12 @@ def _screens_chapter(nav_to) -> None:  # noqa: ANN001
 def _roles_chapter() -> None:
     st.markdown(
         f"<span class='muted'>Six personas across three lines of defence, "
-        f"policy version {policy_version()}. Two invariants hold across all of "
+        f"policy version {policy_version()}. Three invariants hold across all of "
         "them: run authority and promotion authority are disjoint, so nobody "
-        "both runs an analysis and approves it; and only the Platform Admin can "
-        "switch a control off, which is itself an audited act.</span>",
+        "both runs an analysis and approves it; only the Platform Admin can "
+        "switch a control off, which is itself an audited act; and the audit "
+        "ledger is scoped by entitlement, so the first line reads its own runs "
+        "while the oversight roles read all of them.</span>",
         unsafe_allow_html=True,
     )
     st.write("")
@@ -1746,6 +1757,14 @@ def _roles_chapter() -> None:
                     ("can run", "yes" if p.can_run else "no"),
                     ("can approve", "yes" if p.can_approve else "no"),
                     ("can toggle controls", "yes" if p.can_toggle_controls else "no"),
+                    (
+                        "audit ledger scope",
+                        "every run"
+                        if p.can_view_all_runs
+                        else "its own runs only. The entitlement defaults to "
+                        "denied, because an access check that fails open is not "
+                        "a check.",
+                    ),
                     ("tier role", p.tier_role),
                     ("attestations", ", ".join(p.attestations) or "none"),
                 ]
