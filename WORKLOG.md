@@ -735,3 +735,28 @@ Append-only session handoff log. Newest entries at the bottom.
 - **A gate event means the control was consulted, not that it said no.** Refusal accounting first read `controls_fired`, which mixes blocked, redaction and gate levels, so a passing eval gate and an APPROVED decision counted as refusals. That distinction became the shape of the whole feature: tiles, filter and per-stage chips all split armed from fired, and stopped from withheld.
 - **CTL-TIER-01 moved out of the doc-only catalogue.** It was listed unimplemented while `flow.py` has been enforcing it, so its chip on a refused run would have read "cannot fire". The catalogue was stale, not the code.
 - **`git merge-tree <base> HEAD main` is not a merge dry run** on git 2.35. It reported zero conflicts; the real merge conflicted immediately. Use a throwaway branch instead.
+
+## 2026-07-20 (evening) — stage on the event, role scoping on the ledger
+
+**Did:**
+- Added `AuditEvent.stage`, written at the call site: 22 sites in `sentinel/govflow/flow.py`, 8 in `l3.py`. Rejected inferring it from the `action` string, which needs a second table kept in step with 30 call sites and misfiles silently. Routes with no stage spine leave it empty and a test asserts they do.
+- Rewrote `_audit_steps` in `app.py` to read the stamp first and fall back to agent matching, so analysis and credit_risk are unchanged. The caption apologising for unattributable events is gone.
+- Added `can_view_all_runs` to `personas.yaml` (default False) and `Persona`, plus `visible_runs()` in `audit_store.py`. It scopes the ledger rows, the "Ran by" options and the drill-down. The drill-down re-check is the load-bearing one: `?run=<id>` would otherwise be the way around it.
+- Taught `scripts/seed_runs.py` to keep each plan slot's existing run id, then re-seeded. 24 ids unchanged, so shared links survive.
+- 7 new tests, 494 passed. Merged as PR #25, branch deleted.
+
+**State now:**
+- `main` at `bf232a0`. No PRs open. 494 passed, 2 skipped, ruff clean.
+- **Prod does not carry PR #25.** It still serves the PR #23 bundle `sentinel-20260720-155822.zip`.
+- Verified in the browser: the Analyst sees 20 of 24 runs with the scope banner and a disabled "Ran by"; a deep link to the MRM Approver's run is refused; a completed govflow run files events under all eight stages that emitted one.
+
+**Next:**
+- Deploy PR #25 from `~/Developer/sentinel` with `AWS_PROFILE=admin ./deploy/aws/deploy.sh`.
+- Then split `app.py` (3,435 lines) into `sentinel/ui/screens/*.py`. See Decisions.
+
+**Decisions:**
+- Chose the expensive fix over the cheap one for stage attribution. On an audit surface a quiet misfiling is worse than an admitted absence, and an inference table drifts from its call sites by construction.
+- Wrote entitlement into `personas.yaml` rather than matching role names in Python, so adding a persona is a config change.
+- The scope is announced on the screen, not silently applied: a filtered ledger that does not say it is filtered turns the four KPI tiles above it into quiet understatements.
+- A withheld run says it exists and names who ran it. Hiding existence is the stronger control and correct externally; here the reader is a colleague holding a link, and "no such run" sends them chasing a bug.
+- Audited all ten worktrees before merging and found no live parallel work: nine idle, two dead branches. Reframes the `app.py` split from tidiness to the thing blocking parallelism. Sandip declined to prune the worktrees.
