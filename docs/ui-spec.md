@@ -205,6 +205,17 @@ Row: `[brand] [spacer] [ctx-chip: persona] [ctx-chip: dataset+classification] [c
   trigger clipping; that trigger now reads as the persona name behind the accent
   dot, i.e. the persona chip described above, with "Acting as" as the label of
   the selectbox inside it.
+  **As built (2026-07-20), the run-context chips are gone.** Data and Purpose
+  were removed on every screen: they restated globally what the Run flow already
+  states where it is actionable, and since v9 the Ask stage's dataset table
+  carries the classification and the permitted purposes on the row itself, which
+  is the actionable place. The identity chip stays. It was removed in the same
+  pass and put back deliberately: switching persona is how the autonomy ladder is
+  demonstrated, since the same request resolves to a different tier for a
+  different role, and it is the only in-app way to do that (otherwise
+  `?persona=<id>` or a fresh session). The topbar is now the brand lockup, the
+  UNGOVERNED warning badge when a control is off, the identity chip, and
+  Controls.
 - **Icon buttons** (`.iconbtn`): transparent bg, chrome-border outline, 8px
   radius. Three: "▦ Stack" (jumps to the Architecture stop), "▤ Controls" (opens
   the control-plane modal), and a theme toggle (◑/◐ depending on state,
@@ -232,6 +243,9 @@ Platform          Platform [5]   Adoption
   chrome-border outline, right-aligned via `margin-left:auto`. Present on
   Datasets ("8") and Registry ("3") and Platform ("5"); absent on Overview, Run,
   Adoption.
+  **As built (2026-07-20), removed.** No nav item carries a count. The rail is
+  navigation; the same numbers are the point of the command-center tiles, which
+  is where they are read. Nav items are their label alone.
 - Icons are inline SVG (17×17, `aria-hidden`), one stroke-style linework glyph
   per section: home (roof+base), play (triangle), database (stacked ellipse
   cylinder), check (rounded square + checkmark), grid (2×2 squares), bar-chart
@@ -246,6 +260,15 @@ rhythm and left the rail loose. Icons are Material Symbols at 16px rather than
 inline SVG, since the nav items are `st.button(icon=...)`. An in-app Back
 control sits above Overview, pinned (`position:sticky`) to the top of the
 scrolling rail with a 1px rule under it, so it stays reachable on a long screen.
+
+**Correction (2026-07-20).** The 6px under a group label was not what shipped.
+Streamlit sets `margin-bottom:-16px` on every `stMarkdownContainer` to cancel the
+16px a markdown `<p>` carries. `.gl` is a bare div with a 6px bottom margin, so
+that -16px over-pulled and dragged the next nav row 10px up over the label. The
+row painted its hover and active background across the group name, so selecting
+or hovering the first item in a group hid the header above it. Fixed by zeroing
+the negative margin on the containers that hold a `.gl`. The 14px/6px rhythm
+above is now as-built rather than aspirational.
 
 ### 2.3 Stepper rail (`.rail`, inside the Run view only)
 

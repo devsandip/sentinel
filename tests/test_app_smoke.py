@@ -182,71 +182,37 @@ def _popover_labels(at) -> list[str]:  # noqa: ANN001
 _MD_COLOUR = re.compile(r":(?:gray|red|orange|blue|green)(?:-background)?\[([^\]]*)\]")
 
 
-def _scope_chips(at) -> list[str]:  # noqa: ANN001
-    """The topbar Data/Purpose chips, as plain text. Their labels are markdown
-    (the muted key and the classification badge are Streamlit colour syntax,
-    since a popover label cannot carry the mockup's HTML spans), so strip the
-    colour markers and the emphasis escaping before matching."""
-    return [
-        _MD_COLOUR.sub(r"\1", x).replace("\\", "")
-        for x in _popover_labels(at)
-        # The muted-key prefix is what marks a scope chip. Matching the plain
-        # text instead would also catch the identity chip, whose label happens
-        # to start "Data Scientist / Analyst".
-        if x.startswith((":gray[Data]", ":gray[Purpose]"))
-    ]
-
-
-def test_context_chips_are_run_scoped():
-    """Data/Purpose describe a run, so they must not follow the user onto
-    screens that have no run in scope (the dashboard and the catalogs were
-    inheriting a german_credit / fair-lending default that described nothing)."""
+def test_topbar_carries_no_run_context_chips():
+    """The Data and Purpose chips were removed from every screen: they restated
+    globally what the Run flow already states where it is actionable. Identity
+    and Controls stay, so the assertion is specific to the two context chips
+    rather than to the topbar being empty. The muted-key prefix is what marks a
+    scope chip; matching plain text would also catch the identity chip, whose
+    label happens to start "Data Scientist / Analyst"."""
     at = _boot()
-    # Overview: no run, no chips.
-    assert not _scope_chips(at)
-    # Pipeline pre-run: still no run, still no chips.
-    at.button(key="nav_pipeline").click().run()
-    assert not _scope_chips(at)
-    # The Run screen is run-scoped: both chips, from the config defaults.
-    at.button(key="nav_run").click().run()
-    chips = _scope_chips(at)
-    assert len(chips) == 2
-    assert any("german_credit" in c for c in chips)
-    # Leaving the run screen drops them again, even with a draft in session.
-    at.button(key="nav_datasets").click().run()
-    assert at.session_state["govflow_draft"]["dataset"] == "german_credit"
-    assert not _scope_chips(at)
+    for screen in ("nav_run", "nav_pipeline", "nav_datasets"):
+        at.button(key=screen).click().run()
+        assert not at.exception
+        labels = _popover_labels(at)
+        assert not [
+            x for x in labels if x.startswith((":gray[Data]", ":gray[Purpose]"))
+        ]
+        # Identity and Controls are still there.
+        assert "Data Scientist / Analyst" in labels
+        assert "Controls" in labels
 
 
-def test_scope_chips_explain_the_control_that_scopes_them():
-    """The topbar chips are clickable (ui-spec 2.1), not inert spans: both open
-    CTL-PURP-01, the dataset-by-purpose rule they name the two axes of, and the
-    Data chip carries this dataset's classification and permitted purposes."""
+def test_ask_stage_classification_cell_explains_the_purpose_rule():
+    """With the topbar Data chip gone, the Ask stage's dataset table is the one
+    surface carrying the purpose line, off the real matrix and the
+    classification ceiling rather than hand-written."""
     at = _boot()
     at.button(key="nav_run").click().run()
     captions = [c.value for c in at.caption]
     scope_lines = [c for c in captions if "Purposes permitted on german_credit" in c]
-    # Two surfaces carry the line: the topbar Data chip and the classification
-    # cell in the Ask stage's dataset table. Both go through purpose_extra.
-    assert len(scope_lines) == 2
-    # Read off the real matrix and the classification ceiling, not hand-written.
-    for line in scope_lines:
-        assert "Restricted" in line
-        assert "fair lending review" in line
-
-
-def test_pipeline_chips_appear_once_a_run_is_scoped():
-    """An orchestrator run scopes the Pipeline screen: the Data chip shows the
-    run's dataset. That run declares no purpose, so no Purpose chip is faked."""
-    at = _boot(timeout=120)
-    at.button(key="nav_pipeline").click().run()
-    # The hero pipeline's Run button carries no key; the sidebar's does.
-    next(b for b in at.button if b.label == "Run" and not b.key).click().run()
-    assert not at.exception
-    assert at.session_state["run_id"]
-    chips = _scope_chips(at)
-    assert chips == [c for c in chips if c.startswith("Data ")]
-    assert any("german_credit" in c for c in chips)
+    assert len(scope_lines) == 1
+    assert "Restricted" in scope_lines[0]
+    assert "fair lending review" in scope_lines[0]
 
 
 def test_engine_bar_controls_are_clickable():

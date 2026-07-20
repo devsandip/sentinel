@@ -9,8 +9,6 @@ a real model behind a cost cap.
 
 from __future__ import annotations
 
-import re
-
 import pandas as pd
 import streamlit as st
 
@@ -447,6 +445,14 @@ st.markdown(
       section[data-testid="stSidebar"] [data-testid="stVerticalBlock"] { gap:0; }
       .gl { font-size:9.5px; font-weight:700; letter-spacing:.11em; text-transform:uppercase;
             color:var(--chrome-muted); padding:0 11px; margin:14px 0 6px 0; }
+      /* Streamlit puts margin-bottom:-16px on every stMarkdownContainer to cancel
+         the 16px that a markdown <p> carries. .gl is a bare div with a 6px bottom
+         margin, so that -16px over-pulls: it eats the 6px and 10px more, dragging
+         the next nav row up over the label. The row then paints its hover/active
+         background across the group name and hides it. Drop the negative margin on
+         the containers that hold a .gl; nothing else in the rail is markdown. */
+      section[data-testid="stSidebar"]
+        [data-testid="stMarkdownContainer"]:has(> .gl) { margin-bottom:0; }
       section[data-testid="stSidebar"] .stButton button {
         display:flex; justify-content:flex-start; width:100%; padding:9px 11px;
         border-radius:9px; border:1px solid transparent; background:transparent;
@@ -783,30 +789,6 @@ def _controls_plane(persona) -> None:  # noqa: ANN001
     )
 
 
-def _run_scope(section: str) -> tuple[str, str] | None:
-    """The (dataset, purpose) the current screen is scoped to, or None when the
-    screen has no run in scope. Data and Purpose describe a run, so they cannot
-    be read off a screen that has no run: the catalog screens and the dashboard
-    were inheriting a german_credit / fair-lending default that described
-    nothing on the page. Purpose is "" when the run carries no declared one."""
-    if section == "Run":
-        pub = st.session_state.get("govflow_result") or {}
-        draft = st.session_state.get("govflow_draft") or {}
-        # The Ask stage renders after the header, so on the very first frame the
-        # draft is still empty; fall back to the same defaults Ask will pick.
-        return (
-            pub.get("dataset") or draft.get("dataset") or "german_credit",
-            pub.get("purpose") or draft.get("purpose") or "fair_lending",
-        )
-    if section == "Pipeline":
-        run_id = st.session_state.get("run_id")
-        state = orch.get_run(run_id) if run_id else None
-        # Pre-run, the Pipeline screen is an empty stage: nothing to scope to.
-        # An orchestrator run carries a dataset but no declared purpose.
-        return (state.dataset_id, "") if state is not None else None
-    return None
-
-
 # --------------------------------------------------------------------------
 # Catalog tables (ui-spec 4.4)
 # --------------------------------------------------------------------------
@@ -819,11 +801,6 @@ def _run_scope(section: str) -> tuple[str, str] | None:
 # table; the skin below is keyed off the container names they use.
 
 
-def _md_lit(text: str) -> str:
-    """Escape markdown emphasis so a dataset id renders literally in a label."""
-    return re.sub(r"([_*`\[\]])", r"\\\1", text)
-
-
 def _classification_of(dataset: str) -> str:
     from sentinel.govflow import matrix_rows
 
@@ -832,45 +809,16 @@ def _classification_of(dataset: str) -> str:
     )
 
 
-def _scope_chips(dataset: str, purpose: str) -> None:
-    """The topbar Data/Purpose chips, as control popovers (ui-spec 2.1).
-
-    Both open CTL-PURP-01: the purpose matrix is dataset-by-purpose, and these
-    two chips name its two axes, so one control explains both. The explanation
-    body comes from the ControlInfo catalogue like everywhere else; the only
-    chip-specific text is one factual line about this dataset, read off the
-    matrix and the classification ceiling rather than written by hand.
-    """
-    from sentinel.govflow.purpose_matrix import PURPOSE_LABEL
-
-    pub = st.session_state.get("govflow_result") or {}
-    classification = _classification_of(dataset)
-    # Keeping the classification badge inside the pill (rather than as a span
-    # beside it) is what keeps the topbar on one row at the 1120px content cap.
-    label = f":gray[Data] {_md_lit(dataset)}"
-    if classification:
-        label += f" {cls_label(classification)}"
-    control_popover(
-        "CTL-PURP-01", pub, label=label, key="ctx_data", extra=purpose_extra(dataset)
-    )
-    if purpose:
-        control_popover(
-            "CTL-PURP-01",
-            pub,
-            label=f":gray[Purpose] {_md_lit(PURPOSE_LABEL.get(purpose, purpose))}",
-            key="ctx_purpose",
-        )
-
-
-def header(persona, section: str) -> None:  # noqa: ANN001
-    """The topbar command frame (ui-spec 2.1): brand lockup, run-context chips,
-    the identity switcher, and the Controls popover. Identity lives here only
-    (the sidebar block was removed). The resolved tier is run-scope, so it lives
-    in the Run flow rather than on this global bar, and the governed badge shows
-    only as a warning when a control is toggled off. The Data/Purpose chips are
-    run-scope too, so they render only on a screen that has a run in scope, and
-    they are clickable: see _scope_chips."""
-    scope = _run_scope(section)
+def header(persona) -> None:  # noqa: ANN001
+    """The topbar command frame (ui-spec 2.1): brand lockup, the identity
+    switcher, and the Controls popover. Identity lives here only (the sidebar
+    block was removed), and it stays because switching persona is how the
+    autonomy ladder is shown: the same request resolves to a different tier for
+    a different role. The run-context chips (Data, Purpose) were removed: they
+    restated globally what the Run flow already states where it is actionable.
+    The resolved tier is run-scope too, so it lives in the Run flow rather than
+    on this global bar, and the governed badge shows only as a warning when a
+    control is toggled off."""
     # The governed badge earns its place only as a warning: shown when a control
     # is disabled for the next run, and nothing (not a decorative green) when on.
     # It is global state, not run scope, so it shows on every screen.
@@ -879,15 +827,8 @@ def header(persona, section: str) -> None:  # noqa: ANN001
         if _control_settings(persona).any_disabled
         else ""
     )
-    # The scope chips are popover triggers, not spans: ui-spec 2.1 and
-    # demo-stepper-ux both specified "clickable to the relevant control" and the
-    # build never wired it. Both chips open CTL-PURP-01, because purpose
-    # limitation is exactly the dataset-by-purpose rule these two chips name the
-    # two halves of. That forces the topbar out of a single markdown blob into a
-    # horizontal container carrying the topbar skin. It also drops the old
-    # 9:3 st.columns split for the mockup's actual structure (2.1): one flex row,
-    # brand left, everything else right, each item sized to its content. The
-    # split had been squeezing the identity popover's label into an ellipsis.
+    # One flex row (ui-spec 2.1): brand left, everything else right, each item
+    # sized to its content.
     bar = st.container(
         horizontal=True,
         horizontal_alignment="distribute",
@@ -908,8 +849,6 @@ def header(persona, section: str) -> None:  # noqa: ANN001
             horizontal=True, vertical_alignment="center", key="topbarctx"
         )
         with ctx:
-            if scope:
-                _scope_chips(*scope)
             if gov_badge:
                 st.markdown(gov_badge, unsafe_allow_html=True)
             _persona_switcher(persona)
@@ -2267,22 +2206,15 @@ if st.sidebar.button(
 ):
     _nav_back()
 
-_nav_counts = {
-    "Datasets": len(all_datasets()),
-    "Registry": len(cert_entries()),
-    "Platform": reuse_metrics()["templates_total"],
-}
 for _glabel, _items in _NAV_GROUPS:
     if _glabel:
         st.sidebar.markdown(f"<div class='gl'>{_glabel}</div>", unsafe_allow_html=True)
     for _item in _items:
-        _n = _nav_counts.get(_item)
-        _label = f"{_item} · {_n}" if _n is not None else _item
         # _nav_to no-ops when _item == section, so re-clicking the active item
         # does not push a duplicate onto the history or trigger a truncating
         # rerun that would cull the visible section's widgets.
         if st.sidebar.button(
-            _label,
+            _item,
             key=_NAV_KEYS[_item],
             type="primary" if _item == section else "secondary",
             icon=_NAV_ICONS.get(_item),
@@ -2292,7 +2224,7 @@ for _glabel, _items in _NAV_GROUPS:
 
 persona = get_persona(st.session_state.persona_id)
 
-header(persona, section)
+header(persona)
 st.divider()
 
 if section == "Overview":
