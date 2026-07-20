@@ -684,3 +684,27 @@ Append-only session handoff log. Newest entries at the bottom.
 - **Left `eda`'s tools column alone.** It shows the `data_analysis` template's allow-list including `profile_dataset`, which eda never calls. Honest as a scope, misleading as a description; the fix is a per-agent scope or a renamed column, and neither was this session's question.
 - **Left `AGENT_LINEAGE` duplicating each class's `template`.** Deduping it means importing agent classes into `templates.py`, which `agents/runtime.py` imports from, closing an import cycle. The registry imports the classes inside the function instead, so the platform package stays importable without the ML stack.
 - Wrote the journal entry and this handoff on a docs branch cut from `origin/main` inside the worktree, since `main` is checked out in the primary folder.
+## 2026-07-20 — closed all five audit findings: four fixed, one dissolved
+
+**Did:**
+- Fixed the allowlist/environment split (#1). The L2 allowlist advertised statsmodels, lifelines, shap, dowhy and econml and none were installed anywhere, including locally, so the morning's note that statsmodels was present as a transitive dep was wrong. Reproduced at the seam: `GATE passed: True | controls fired: []` then `EXEC ok: False | ModuleNotFoundError`. Dropped the four unused ones first; Sandip reversed it to install all five. `tests/test_allowlist_env.py` now reconciles the grant against `requirements.txt` and fails on drift.
+- Added `sentinel/sandbox/warmup.py` and moved the wall clock 10s -> 30s, because installing shap charged 4.2-4.6s warm (15.5s cold) to every sandbox run against a 10s cap.
+- Fixed the adoption bars (#2): the value label was a flex sibling stealing 16.8px from a 56px column, so the bar absorbed the deficit and all four rendered at 17.2px. Followed ui-spec 4.10, which had specified the fix all along.
+- Fixed the stale L0 caption (#3) and split `/static/*` onto its own compressed, cached CloudFront behavior (#4).
+- Closed #5 by decision, not code.
+
+**State now:**
+- PR #17, four commits, merged to main. 423 passed, 2 skipped; ruff clean.
+- **Nothing is deployed. Prod still runs v10 with the broken Live LLM path.** The deploy needs `deploy.sh` *and* `enable-https.sh`, because the CloudFront behavior is part of the fix.
+- The CloudFront change is unverified by construction: cfn-lint passes, but compression can only be confirmed after `enable-https.sh` runs.
+
+**Next:**
+- Deploy, from `~/Developer/sentinel` (it holds the gitignored `.env` with the live-LLM key). Run both scripts.
+- Verify after: a Live LLM run completes end to end (this is the fix that matters), `curl -sI -H 'Accept-Encoding: gzip' https://sentinel.sandip.dev/static/js/<hash>.js` returns `content-encoding: gzip`, and the first sandbox run on the fresh instance does not trip CTL-TIME-01 while the warm-up is still running.
+- Demo package shape for the hiring manager is still undecided and still unbuilt.
+
+**Decisions:**
+- **Install the four aspirational packages rather than trim the allowlist.** Sandip's call, and the right one: the defect was that the two lists disagreed, not which one moved. Cost recorded in the journal: econml and numba pin pandas to 2.3.3, sklearn 1.6.1, numpy 2.4.6, scipy 1.15.3. An allowlist entry is a package plus its constraints on everything else.
+- **Wall clock 10s -> 30s.** The control exists to stop runaway generated code; an infinite loop dies at 30s as it dies at 10s. What changed is that it stopped firing on the imports the allowlist itself grants. An import grant is also a time budget.
+- **#5 needs no code.** The gate is right to clear a benign request (blocking it is a false positive, which this build treats as costing as much as a missed block), and the adversarial requests are already wired and genuine. The finding reduced to which option is selected by default. Sandip drives two demos, happy path then adversarial. Recorded in `_cfg_question`'s docstring so it is not reopened as a bug.
+- **Corrected two of my own claims mid-session rather than leaving them.** I attributed shap's 48s cold import to numba bytecode compilation; purging `__pycache__` only took it to 6.4s, so the real cost is cold disk. And three tests that flaked during a full run were my own dev server and browser competing for CPU, not a regression: a clean run is 102s versus 416-495s while competing.

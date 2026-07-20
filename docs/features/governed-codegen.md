@@ -624,6 +624,57 @@ sklearn.metrics, sklearn.linear_model, sklearn.model_selection,
 fairlearn.metrics, fairlearn.reductions, lifelines, shap, dowhy, econml
 ```
 
+**Every name on that list must be installed in the environment that runs the
+code.** The list is interpolated into the codegen system prompt verbatim, so a
+name on it is an instruction to the model to use that package. If the sandbox
+cannot import it, the gate stamps "imports on the tier's allowlist, clear" and
+Execute dies with `ModuleNotFoundError`: the control approved something the
+environment refuses. That is exactly what this list did from v1 to v10, for
+`statsmodels`, `lifelines`, `shap`, `dowhy` and `econml` at once, until a
+cold-visit audit on 2026-07-20 found the Live LLM path dying on every run. All
+five are dependencies now. Reconciled by `tests/test_allowlist_env.py` against
+`requirements.txt`, which is what the instance pip-installs, rather than against
+a local virtualenv, which hides this defect precisely when it matters. Widening
+the list is therefore a two-part change: the grant here and the dependency that
+honours it.
+
+**Two costs that came with those five, worth knowing before widening again.**
+
+First, `econml` and `numba` pin the numerical stack down a major version: taking
+them moved pandas 3.0.3 to 2.3.3, scikit-learn 1.9 to 1.6.1, numpy 2.5.1 to
+2.4.6, scipy 1.18 to 1.15.3. An allowlist entry is not only a package, it is
+that package's constraints on everything else. The suite passes on the older
+stack, so this was accepted rather than fought, but the next widening should
+check the resolver's answer before the packages are wanted.
+
+Second, the sandbox is a fresh subprocess per run, so import cost is charged to
+every analysis. `shap` pulls numba and llvmlite, and measured on a 2026 MacBook
+it imports in 48s worst case (five freshly-synced packages at once), 15.5s after
+a clean install of shap alone, 4.8s on the second import, 1.2s fully warm. Left
+alone, the first generated analysis reaching for shap on a fresh instance trips
+`CTL-TIME-01`, which is a control firing on a fact about the disk rather than
+about the code it was reading. `sentinel/sandbox/warmup.py` pays that cost once
+at boot instead, in a background subprocess so the memory is not held: the
+caches it fills are on disk, not in the process, which is why warming in a
+throwaway child speeds up every later sandbox child. The warmed set is derived
+from `ALLOWED_IMPORTS`, so it cannot drift from the grant.
+
+**And the wall clock moved from 10s to 30s, which is the same finding.** Even
+fully warm, the sandbox costs 0.66s of bare subprocess overhead, 1.0s with
+pandas, and 4.2-4.6s with shap, before the analysis runs at all; a t3.small is
+slower again. A 10s budget was close to firing on the imports rather than on
+the code. The control exists to stop runaway generated code, and an infinite
+loop dies at 30s exactly as it dies at 10s, so nothing about its real purpose is
+weakened. The general point is the one worth keeping: **an import grant is also
+a time budget.** Widening the allowlist widened what every run has to pay before
+it begins, and the cap has to be read in that light rather than treated as a
+constant.
+
+The Architecture stop's mechanics caption now reads that number from
+`DEFAULT_WALL_CLOCK_S` rather than restating it. It had claimed 15s since v6
+while the code enforced 10, which is the allowlist defect in miniature: a number
+a visitor reads should come from the thing that enforces it.
+
 **Denied, always:**
 
 ```

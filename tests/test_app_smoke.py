@@ -7,6 +7,8 @@ every top-level section.
 
 from __future__ import annotations
 
+import ast
+import itertools
 import os
 import re
 
@@ -15,11 +17,36 @@ import pytest
 pytest.importorskip("streamlit.testing.v1")
 from streamlit.testing.v1 import AppTest  # noqa: E402
 
+from sentinel.sandbox.execute import DEFAULT_WALL_CLOCK_S  # noqa: E402
+
 # pyarrow's mimalloc allocator segfaults on macOS when Streamlit serializes a
 # DataFrame; route to the system allocator before anything imports pyarrow.
 os.environ.setdefault("ARROW_DEFAULT_MEMORY_POOL", "system")
 
 APP = os.path.join(os.path.dirname(os.path.dirname(__file__)), "app.py")
+
+
+def _assert_run_completed(at) -> None:  # noqa: ANN001
+    """Assert a governed run finished, and say which stage did not if it didn't.
+
+    A bare `assert status == "completed"` reports 'error' != 'completed' and
+    nothing else, which is useless for the intermittent failures these run-a-
+    real-analysis tests produce under a loaded full-suite run: the interesting
+    part is always which stage failed and on what control.
+    """
+    # Streamlit's session-state proxy has no .get(); it reads "get" as a key.
+    result = at.session_state["govflow_result"] if "govflow_result" in at.session_state else {}
+    if result.get("status") == "completed":
+        return
+    bad = [
+        f"{s.get('stage')}={s.get('status')}: {str(s.get('detail'))[:200]}"
+        for s in result.get("stages", [])
+        if s.get("status") not in ("ok", "skipped")
+    ]
+    raise AssertionError(
+        f"governed run status={result.get('status')!r}, expected 'completed'. "
+        f"Failing stages: {bad or 'none recorded'}"
+    )
 
 
 def _boot(persona_id: str = "analyst", timeout: int = 60) -> AppTest:
@@ -213,6 +240,112 @@ def test_model_status_chips_explain_the_eval_gate():
         assert f"Here: {m.version}" in captions, m.version
 
 
+def test_no_copy_sends_a_visitor_to_the_sidebar_for_identity():
+    """Identity moved from the sidebar to the topbar chip in v7, and the L0
+    "you cannot run analyses" caption went on telling people to switch persona
+    in the sidebar until 2026-07-20, three versions later.
+
+    Checked against the source rather than one rendered screen, because the
+    failure is a class (copy naming a control that has moved) rather than one
+    string, and the caption only renders for personas that cannot run.
+    """
+    ui_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "sentinel", "ui")
+    files = [APP] + [
+        os.path.join(ui_dir, n) for n in os.listdir(ui_dir) if n.endswith(".py")
+    ]
+    for path in files:
+        for text in _display_strings(path):
+            for line in text.splitlines():
+                if "stSidebar" in line:  # a CSS selector, not prose
+                    continue
+                assert not re.search(r"(persona|identity|acting as)[^.]*sidebar", line, re.I), (
+                    f"{os.path.basename(path)} points a visitor at the sidebar for "
+                    f"identity, which has lived in the topbar since v7: {line.strip()}"
+                )
+
+
+def _display_strings(path: str) -> list[str]:
+    """Every string literal in a module except docstrings.
+
+    Docstrings are excluded deliberately: several of them describe the v7 move
+    of identity out of the sidebar and are correct to say so. What must not say
+    it is copy a visitor reads.
+    """
+    with open(path) as f:
+        tree = ast.parse(f.read())
+    docstrings = set()
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+            body = getattr(node, "body", [])
+            if body and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant):
+                docstrings.add(id(body[0].value))
+    return [
+        n.value
+        for n in ast.walk(tree)
+        if isinstance(n, ast.Constant)
+        and isinstance(n.value, str)
+        and id(n) not in docstrings
+    ]
+
+
+def test_landing_adoption_bars_are_proportional_and_do_not_shrink():
+    """The Adoption tile's weekly bars encode the data in their height, and the
+    audit on 2026-07-20 found all four rendering at an identical 17.2px.
+
+    The cause was layout, not data: the value label was a flex sibling of the
+    bar, so it took 16.8px out of a 56px column, and the bar - the only child
+    with no intrinsic height - absorbed the whole deficit. Identical text in
+    every column meant an identical leftover in every column, so four different
+    weeks drew four identical rectangles while carrying correct inline heights.
+
+    Both halves are pinned here, because the inline heights alone were never
+    wrong and a test that only checked them would have passed throughout.
+    """
+    at = _boot()
+    assert not at.exception
+    body = " ".join(m.value for m in at.markdown)
+
+    n_cols = body.count("<div class='bcol'>")
+    assert n_cols >= 3, "the weekly bar chart is not on the landing tile"
+    heights = [int(h) for h in re.findall(r"class='bar' style='height:(\d+)px'", body)]
+    values = [int(v) for v in re.findall(r"class='v'>(\d+)</span>", body)]
+    assert len(heights) == len(values) == n_cols
+
+    # Height tracks value: equal values give equal bars, and the largest value
+    # gives the tallest bar. This is what "four identical rectangles" violated.
+    assert len(set(heights)) > 1, "every bar is the same height; the series is flat"
+    assert heights[values.index(max(values))] == max(heights)
+    for i, j in itertools.combinations(range(len(values)), 2):
+        if values[i] == values[j]:
+            assert heights[i] == heights[j]
+        elif values[i] < values[j]:
+            assert heights[i] < heights[j]
+
+    # And the label sits inside the bar rather than above it as a sibling, which
+    # is what stopped it consuming the column's height. ui-spec 4.10.
+    assert re.search(r"<div class='bar'[^>]*><span class='v'>", body), (
+        "the value label is a sibling of the bar again; it will steal the "
+        "column height and squash every bar to the same size"
+    )
+
+
+def test_barchart_css_keeps_the_bar_out_of_the_flex_shrink_pool():
+    """The CSS half of the same bug. A bar whose height is data must not be a
+    shrink candidate, and the value label must not occupy column height."""
+    with open(APP) as f:
+        css = f.read()
+    bar_rule = re.search(r"\.barchart \.bar \{(.*?)\}", css, re.S)
+    assert bar_rule and "flex:none" in bar_rule.group(1)
+    v_rule = re.search(r"\.barchart \.v \{(.*?)\}", css, re.S)
+    assert v_rule and "position:absolute" in v_rule.group(1)
+    # A fixed height on the chart plus height:100% on the column is the exact
+    # geometry that left the bar 17px to live in.
+    chart_rule = re.search(r"\.barchart \{(.*?)\}", css, re.S)
+    assert chart_rule and "min-height" in chart_rule.group(1)
+    col_rule = re.search(r"\.barchart \.bcol \{(.*?)\}", css, re.S)
+    assert col_rule and "height:100%" not in col_rule.group(1)
+
+
 def test_adoption_section_renders_seeded_history():
     at = _boot()
     at.button(key="nav_adoption").click().run()
@@ -297,6 +430,38 @@ def test_architecture_stop_wires_its_controls_and_import_rows():
     # One popover per deny/allow row: allowlist, egress, filesystem, dyncode.
     for cid in ("CTL-CODE-01", "CTL-EGRESS-01", "CTL-CODE-02", "CTL-CODE-03"):
         assert cid in labels, cid
+    # The permitted column is the real allowlist, so it may only name libraries
+    # the sandbox can import. Until 2026-07-20 it advertised five that were
+    # installed nowhere; this screen is where a visitor reads the claim. That
+    # the names appear here is only half the check, and the weaker half:
+    # test_allowlist_env.py is what holds them to being installed.
+    # Word-bounded because the page's CSS carries 'shape', which naive substring
+    # matching reads as 'shap'.
+    body = " ".join(m.value for m in at.markdown)
+    for lib in ("statsmodels", "lifelines", "shap", "dowhy", "econml"):
+        assert re.search(rf"\b{lib}\b", body), f"{lib} is granted at L2 but not shown here"
+
+
+def test_no_screen_hardcodes_the_wall_clock():
+    """The Execute panel's mechanics caption claimed a 15s wall clock from v6
+    while the sandbox enforced 10s, and now 30s. It reads DEFAULT_WALL_CLOCK_S
+    instead of restating it, which is the allowlist lesson applied to a number:
+    what a visitor reads should come from the thing that enforces it.
+
+    Checked against the source rather than a rendered page because the caption
+    only renders once a run is published, and the regression to catch is someone
+    retyping the number, which is visible here and cheap to see.
+    """
+    ui = os.path.join(os.path.dirname(os.path.dirname(__file__)), "sentinel", "ui")
+    for name in os.listdir(ui):
+        if not name.endswith(".py"):
+            continue
+        with open(os.path.join(ui, name)) as f:
+            src = f.read()
+        hits = re.findall(r"\d+\s*s(?:ec|econds)? wall clock", src)
+        assert not hits, f"{name} states a wall clock literally: {hits}"
+    # And the constant is what the caption interpolates.
+    assert DEFAULT_WALL_CLOCK_S > 0
 
 
 def test_certification_gates_explain_their_control():
@@ -319,7 +484,7 @@ def test_reclicking_active_nav_item_is_a_noop():
     at.button(key="gv_ds_confirm").click().run()
     at.radio(key="govflow_stage").set_value("Plan").run()
     at.button(key="gv_run").click().run()
-    assert at.session_state["govflow_result"]["status"] == "completed"
+    _assert_run_completed(at)
     assert at.radio(key="govflow_stage").value == "Access"
     # Re-click the active "Run" nav item: the stepper must hold its position.
     at.button(key="nav_run").click().run()
