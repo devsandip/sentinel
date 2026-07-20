@@ -172,6 +172,59 @@ def test_dataset_classification_chips_are_clickable():
         assert f"Purposes permitted on {d.id}" in captions, d.id
 
 
+def test_dataset_contract_publishes_the_schema_without_values():
+    """The Contract button opens the catalogue view for a dataset: schema,
+    dictionary, roles, foreign keys. It is metadata only, and the negative
+    assertion is the one that matters -- no cell value reaches the page."""
+    import pandas as pd
+
+    from sentinel.datasets.loaders import local_path
+
+    at = _boot(timeout=120)
+    at.button(key="nav_datasets").click().run()
+    at.button(key="dsopen_german_credit").click().run()
+    assert not at.exception
+    assert any("Data contract" in s.value for s in at.subheader)
+
+    body = " ".join(m.value for m in at.markdown)
+    # The dictionary is published: every column, its role, its description.
+    assert "Column dictionary" in body
+    assert "applicant_ssn" in body and "role pii" in body
+    assert "Metadata only." in body
+    # ...and no row of the file is on the page. Sampled over the string columns,
+    # whose values would be recognisable if a value column ever crept in.
+    head = pd.read_csv(local_path("german_credit"), nrows=40)
+    codes = {str(v) for v in head["checking_status"]} | {
+        str(v) for v in head["credit_history"]
+    }
+    for value in codes:
+        assert f">{value}<" not in body, f"a cell value reached the page: {value}"
+
+
+def test_dataset_contract_shows_berka_relationships():
+    """The relationship map is metadata an analyst should see before requesting
+    either side of a join, so the relational dataset publishes its keys."""
+    at = _boot(timeout=120)
+    at.button(key="nav_datasets").click().run()
+    at.button(key="dsopen_berka").click().run()
+    assert not at.exception
+    body = " ".join(m.value for m in at.markdown)
+    assert "Relationships" in body
+    assert "disp.client_id" in body and "client.client_id" in body
+    # One expander per table in the dictionary.
+    assert len(at.expander) == 8
+
+
+def test_dataset_contract_returns_to_the_registry():
+    at = _boot(timeout=120)
+    at.button(key="nav_datasets").click().run()
+    at.button(key="dsopen_german_credit").click().run()
+    at.button(key="ds_contract_back").click().run()
+    assert not at.exception
+    assert any(s.value == "Dataset registry" for s in at.subheader)
+    assert at.session_state["section"] == "Datasets"
+
+
 def test_model_status_chips_explain_the_eval_gate():
     """A model's status is the eval gate's verdict plus the human decision, so
     the status chip opens the eval gate and states that model's own numbers."""

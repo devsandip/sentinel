@@ -14,6 +14,10 @@ class ModelerAgent(Agent):
     id = "modeler"
     title = "Modeler"
     template = "modeling"
+    does = (
+        "Trains the baseline model on permitted features and proposes it, then "
+        "stops: the run pauses at the human approval gate until a person decides."
+    )
 
     def run(self, state) -> None:  # noqa: ANN001
         ds = self.deps.dataset

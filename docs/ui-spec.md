@@ -455,6 +455,20 @@ replacing the static `.ctrl-chip` span.
 Platform: 4 metric tiles + template cards + a playbooks table + a pattern-badge
 row. Adoption: 4 metric tiles + two `.barchart` cards side by side.
 
+**Datasets drill-down: the data contract (2026-07-20).** Each Datasets row ends
+in a `Contract` button that replaces the list with a per-dataset catalogue view
+on the same screen (the sidebar item stays lit; the app Back stack is not spent
+on it, and a `Dataset registry` button returns). The view is: an accent notice
+band naming the controls that make it metadata-only, five metric tiles (rows at
+source / tables / columns / documented / sensitive columns), a coverage bar, the
+`.pgrid` purpose chips for that dataset, a tables table and a foreign-key edge
+list for relational sets, then the column dictionary — one plain `<table class=
+"dict">` per table, preceded by a role legend. Roles carry a `.role` chip whose
+colour means something: red for never-granted (pii), amber for
+justify-by-purpose (protected), accent for target/treatment, neutral for the
+rest. See `docs/features/data-contract-catalog.md` for why this is a contract
+view and not an EDA view.
+
 ---
 
 ## 4. Shared components (used across stages and surfaces)
