@@ -7,6 +7,14 @@
 # an approver can never be the author of the run it signs off (CTL-SOD-01). The
 # Auditor is read-only; only the Admin may toggle controls in demo mode.
 #
+# can_view_all_runs governs the Audit Log's own scope. Oversight roles read the
+# whole ledger because reading other people's work is the job: the third line
+# (Auditor) audits it, the second line (Validator, MRM Approver) reviews and
+# signs it, and the Platform Admin operates the platform. The first line reads
+# its own runs only. That is least privilege applied to the evidence itself: a
+# first-line analyst has no business reading a colleague's run, and an audit
+# surface that ignores its own access rules argues against the product.
+#
 # tier_role + attestations feed autonomy tier resolution (governed-codegen 4.6):
 # tier = min(ceiling(data classification), ceiling(role, attestations)). Only a
 # data_scientist rises above L0, and only by earning attestations. The Analyst is
@@ -24,6 +32,7 @@ personas:
     can_approve: false
     can_toggle_controls: false
     read_only: false
+    can_view_all_runs: false
     tier_role: data_scientist
     attestations: [certified_analyst]
     description: >
@@ -38,6 +47,7 @@ personas:
     can_approve: false
     can_toggle_controls: false
     read_only: false
+    can_view_all_runs: false
     tier_role: data_scientist
     attestations: []
     description: >
@@ -52,6 +62,7 @@ personas:
     can_approve: false
     can_toggle_controls: false
     read_only: false
+    can_view_all_runs: true
     tier_role: model_validator
     attestations: []
     description: >
@@ -66,6 +77,7 @@ personas:
     can_approve: true
     can_toggle_controls: false
     read_only: false
+    can_view_all_runs: true
     tier_role: model_validator
     attestations: []
     description: >
@@ -80,6 +92,7 @@ personas:
     can_approve: false
     can_toggle_controls: false
     read_only: true
+    can_view_all_runs: true
     tier_role: compliance_officer
     attestations: []
     description: >
@@ -93,6 +106,7 @@ personas:
     can_approve: false
     can_toggle_controls: true
     read_only: false
+    can_view_all_runs: true
     tier_role: data_scientist
     attestations: [certified_analyst, sandbox_waiver]
     description: >

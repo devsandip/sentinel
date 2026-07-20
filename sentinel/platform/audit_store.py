@@ -33,6 +33,7 @@ from pathlib import Path
 from typing import Any
 
 from ..harness.audit import LEVEL_BLOCKED, LEVEL_REDACTION, RUNTIME_DIR
+from ..harness.identity import Persona
 from .run_history import (
     KIND_CREDIT_RISK,
     SeedRun,
@@ -270,6 +271,30 @@ def audit_runs(
             AuditRun(**{**r.__dict__, "events": events, "origin": ORIGIN_LIVE})
         )
     return sorted(runs, key=lambda r: r.when, reverse=True)
+
+
+def visible_runs(runs: list[AuditRun], persona: Persona | None) -> list[AuditRun]:
+    """The runs one persona is entitled to read.
+
+    Oversight roles (second line, third line, platform) read everything; the
+    first line reads its own runs only. The entitlement is declared per persona
+    in config/personas.yaml, not decided here by role-name matching, so adding
+    a persona is a config change and not a code change.
+
+    Default deny: an unidentified viewer sees nothing. That is the awkward
+    answer rather than the convenient one, and it is the right one for an
+    access check. The caller always has a persona, because the app resolves it
+    before it renders anything.
+
+    Scoping the ledger by identity necessarily scopes the KPI tiles computed
+    over it, so the screen must say which set it is counting. A first line
+    analyst reading "3 runs logged" while 24 exist is misled unless told.
+    """
+    if persona is None:
+        return []
+    if persona.can_view_all_runs:
+        return list(runs)
+    return [r for r in runs if r.actor == persona.id]
 
 
 def summary(runs: list[AuditRun]) -> dict[str, Any]:
