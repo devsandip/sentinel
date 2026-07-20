@@ -15,6 +15,10 @@ class ProfilerAgent(Agent):
     id = "profiler"
     title = "Data Profiler"
     template = "data_analysis"
+    does = (
+        "Runs first: profiles the dataset and flags class imbalance. Its column "
+        "read is scoped, so asking for the sex proxy is denied and logged."
+    )
 
     def run(self, state) -> None:  # noqa: ANN001
         ds = self.deps.dataset

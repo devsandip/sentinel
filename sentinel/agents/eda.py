@@ -15,6 +15,10 @@ class EDAAgent(Agent):
     id = "eda"
     title = "EDA / Feature"
     template = "data_analysis"
+    does = (
+        "Reviews the feature distributions and confirms the protected attribute "
+        "stays out of model inputs. PII is redacted before any text is narrated."
+    )
 
     def run(self, state) -> None:  # noqa: ANN001
         ds = self.deps.dataset
