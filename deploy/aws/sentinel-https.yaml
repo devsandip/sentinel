@@ -38,9 +38,42 @@ Resources:
               HTTPPort: 80
               OriginReadTimeout: 60
               OriginKeepaliveTimeout: 60
+        CacheBehaviors:
+          # Streamlit's front-end bundle: 61 files, 2.5MB, served from the
+          # instance uncompressed and uncached because the default behavior below
+          # is CachingDisabled with Compress:false. That is the six seconds of
+          # blank white a cold visitor sees; TTFB is under a second, so it was
+          # never an EB cold start. Measured 2026-07-20 against prod: the main
+          # chunk alone is 908KB and gzips 3.4x (262KB), brotli 3.7x (243KB).
+          #
+          # These files are content-hashed and immutable, and Streamlit already
+          # serves them with `cache-control: public, immutable, max-age=31536000`
+          # which CachingDisabled was throwing away. So they get their own
+          # behavior: compress at the edge, cache at the edge, and stop asking a
+          # t3.small to re-serve 2.5MB to every visitor.
+          #
+          # Compression needs both halves. Compress:true alone does nothing under
+          # the CachingDisabled policy, because CloudFront compresses what it
+          # caches and that policy also drops Accept-Encoding from the cache key.
+          # CachingOptimized (658327ea) enables gzip and brotli in the cache key
+          # and honours the origin's cache-control.
+          - PathPattern: /static/*
+            TargetOriginId: eb-origin
+            ViewerProtocolPolicy: redirect-to-https
+            Compress: true
+            AllowedMethods: [GET, HEAD]
+            CachedMethods: [GET, HEAD]
+            # Managed CachingOptimized. No origin request policy: these assets
+            # vary on nothing, and forwarding cookies or query strings would
+            # fragment the cache for no gain.
+            CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6
         DefaultCacheBehavior:
           TargetOriginId: eb-origin
           ViewerProtocolPolicy: redirect-to-https
+          # Stays false. The default behavior carries the WebSocket
+          # (/_stcore/stream) and the dynamic HTML, and compressing a long-lived
+          # upgraded connection is not something to switch on casually. The
+          # payload that mattered is /static/*, handled above.
           Compress: false
           AllowedMethods: [GET, HEAD, OPTIONS, PUT, POST, PATCH, DELETE]
           CachedMethods: [GET, HEAD]

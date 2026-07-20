@@ -36,6 +36,9 @@ class Agent:
     id: str = "base"
     title: str = "Agent"
     template: str | None = None  # the platform template this agent realizes
+    # One line, in the agent's own words, of what it does in a run. The registry
+    # reads this off the class so the inventory cannot drift from the code.
+    does: str = ""
 
     def __init__(self, deps: AgentDeps) -> None:
         self.deps = deps

@@ -31,6 +31,10 @@ class ValidatorAgent(Agent):
     id = "validator"
     title = "Validator"
     template = "validation"
+    does = (
+        "Runs only after approval: independent fairness review, model card, and "
+        "the eval gate. It can block a promotion; it cannot train the model."
+    )
 
     def run(self, state) -> None:  # noqa: ANN001
         ds = self.deps.dataset

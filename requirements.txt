@@ -18,6 +18,12 @@ attrs==26.1.0
     #   jsonschema
     #   openlineage-python
     #   referencing
+autograd==1.9.1
+    # via
+    #   autograd-gamma
+    #   lifelines
+autograd-gamma==0.5.0
+    # via lifelines
 blinker==1.9.0
     # via streamlit
 boto3==1.43.46
@@ -28,19 +34,37 @@ botocore==1.43.46
     #   s3transfer
 cachetools==7.1.4
     # via streamlit
+causal-learn==0.1.4.8
+    # via dowhy
 certifi==2026.6.17
     # via
     #   httpcore
     #   httpx
     #   requests
+cffi==2.1.0
+    # via clarabel
 charset-normalizer==3.4.9
     # via requests
+clarabel==0.11.1
+    # via cvxpy
 click==8.4.2
     # via
     #   streamlit
     #   uvicorn
+cloudpickle==3.1.2
+    # via shap
 colorama==0.4.6 ; sys_platform == 'win32'
-    # via click
+    # via
+    #   click
+    #   tqdm
+contourpy==1.3.3
+    # via matplotlib
+cvxpy==1.9.2
+    # via dowhy
+cycler==0.12.1
+    # via matplotlib
+cython==3.2.8
+    # via dowhy
 defusedxml==0.7.1
     # via fpdf2
 distro==1.9.0
@@ -49,22 +73,34 @@ distro==1.9.0
     #   langsmith
 docstring-parser==0.18.0
     # via anthropic
+dowhy==0.14
+    # via sentinel
 duckdb==1.5.4
+    # via sentinel
+econml==0.16.0
     # via sentinel
 fairlearn==0.14.0
     # via sentinel
 fonttools==4.63.0
-    # via fpdf2
+    # via
+    #   fpdf2
+    #   matplotlib
+formulaic==1.2.2
+    # via lifelines
 fpdf2==2.8.7
     # via sentinel
 gitdb==4.0.12
     # via gitpython
 gitpython==3.1.50
     # via streamlit
+graphviz==0.21
+    # via causal-learn
 h11==0.16.0
     # via
     #   httpcore
     #   uvicorn
+highspy==1.15.1
+    # via cvxpy
 httpcore==1.0.9
     # via httpx
 httptools==0.8.0
@@ -80,11 +116,14 @@ idna==3.18
     #   anyio
     #   httpx
     #   requests
+interface-meta==2.0.1
+    # via formulaic
 itsdangerous==2.2.0
     # via streamlit
 jinja2==3.1.6
     # via
     #   altair
+    #   osqp
     #   pydeck
 jiter==0.14.0
     # via anthropic
@@ -93,7 +132,12 @@ jmespath==1.1.0
     #   boto3
     #   botocore
 joblib==1.5.3
-    # via scikit-learn
+    # via
+    #   causal-learn
+    #   dowhy
+    #   econml
+    #   osqp
+    #   scikit-learn
 jsonpatch==1.33
     # via langchain-core
 jsonpointer==3.1.1
@@ -102,6 +146,8 @@ jsonschema==4.26.0
     # via altair
 jsonschema-specifications==2025.9.1
     # via jsonschema
+kiwisolver==1.5.0
+    # via matplotlib
 langchain-core==1.4.9
     # via
     #   langgraph
@@ -124,30 +170,67 @@ langgraph-sdk==0.4.2
     # via langgraph
 langsmith==0.10.2
     # via langchain-core
+lifelines==0.30.3
+    # via sentinel
+lightgbm==4.7.0
+    # via econml
+llvmlite==0.48.0
+    # via numba
 markupsafe==3.0.3
     # via jinja2
+matplotlib==3.11.1
+    # via
+    #   causal-learn
+    #   lifelines
+momentchi2==0.1.8
+    # via causal-learn
+mpmath==1.3.0
+    # via sympy
 narwhals==2.23.0
     # via
     #   altair
     #   fairlearn
-    #   scikit-learn
-numpy==2.4.6 ; python_full_version < '3.12'
+    #   formulaic
+    #   lightgbm
+networkx==3.6.1
     # via
+    #   causal-learn
+    #   dowhy
+numba==0.66.0
+    # via
+    #   dowhy
+    #   shap
+    #   sparse
+numpy==2.4.6
+    # via
+    #   autograd
+    #   causal-learn
+    #   clarabel
+    #   contourpy
+    #   cvxpy
+    #   dowhy
+    #   econml
     #   fairlearn
+    #   formulaic
+    #   highspy
+    #   lifelines
+    #   lightgbm
+    #   matplotlib
+    #   momentchi2
+    #   numba
+    #   osqp
     #   pandas
+    #   patsy
     #   pydeck
+    #   qdldl
     #   scikit-learn
     #   scipy
+    #   scs
     #   sentinel
-    #   streamlit
-numpy==2.5.1 ; python_full_version >= '3.12'
-    # via
-    #   fairlearn
-    #   pandas
-    #   pydeck
-    #   scikit-learn
-    #   scipy
-    #   sentinel
+    #   shap
+    #   sparse
+    #   sparsediffpy
+    #   statsmodels
     #   streamlit
 openlineage-python==1.51.0
     # via sentinel
@@ -165,21 +248,37 @@ orjson==3.11.9
     #   langsmith
 ormsgpack==1.12.2
     # via langgraph-checkpoint
+osqp==1.1.3
+    # via cvxpy
 packaging==26.2
     # via
     #   altair
+    #   econml
     #   langchain-core
     #   langsmith
+    #   matplotlib
     #   openlineage-python
+    #   shap
+    #   statsmodels
     #   streamlit
-pandas==3.0.3
+pandas==2.3.3
     # via
+    #   causal-learn
+    #   dowhy
+    #   econml
     #   fairlearn
+    #   formulaic
+    #   lifelines
     #   sentinel
+    #   shap
+    #   statsmodels
     #   streamlit
+patsy==1.0.2
+    # via statsmodels
 pillow==12.3.0
     # via
     #   fpdf2
+    #   matplotlib
     #   streamlit
 protobuf==7.35.1
     # via streamlit
@@ -189,6 +288,8 @@ psycopg-binary==3.3.4 ; implementation_name != 'pypy'
     # via psycopg
 pyarrow==25.0.0
     # via streamlit
+pycparser==3.0 ; implementation_name != 'PyPy'
+    # via cffi
 pydantic==2.13.4
     # via
     #   anthropic
@@ -199,18 +300,29 @@ pydantic-core==2.46.4
     # via pydantic
 pydeck==0.9.3
     # via streamlit
+pydot==4.0.1
+    # via causal-learn
+pyparsing==3.3.2
+    # via
+    #   matplotlib
+    #   pydot
 python-dateutil==2.9.0.post0
     # via
     #   botocore
+    #   matplotlib
     #   openlineage-python
     #   pandas
 python-multipart==0.0.32
     # via streamlit
+pytz==2026.2
+    # via pandas
 pyyaml==6.0.3
     # via
     #   langchain-core
     #   openlineage-python
     #   sentinel
+qdldl==0.1.9.post1
+    # via cvxpy
 referencing==0.37.0
     # via
     #   jsonschema
@@ -229,32 +341,88 @@ rpds-py==2026.6.3
     #   referencing
 s3transfer==0.19.1
     # via boto3
-scikit-learn==1.9.0
+scikit-learn==1.6.1
     # via
+    #   causal-learn
+    #   dowhy
+    #   econml
     #   fairlearn
     #   sentinel
-scipy==1.17.1 ; python_full_version < '3.12'
+    #   shap
+scipy==1.15.3 ; python_full_version < '3.13'
     # via
+    #   autograd-gamma
+    #   causal-learn
+    #   clarabel
+    #   cvxpy
+    #   dowhy
+    #   econml
     #   fairlearn
+    #   formulaic
+    #   lifelines
+    #   lightgbm
+    #   momentchi2
+    #   osqp
+    #   qdldl
     #   scikit-learn
-scipy==1.18.0 ; python_full_version >= '3.12'
+    #   scs
+    #   shap
+    #   statsmodels
+scipy==1.18.0 ; python_full_version >= '3.13'
     # via
+    #   autograd-gamma
+    #   causal-learn
+    #   clarabel
+    #   cvxpy
+    #   dowhy
+    #   econml
     #   fairlearn
+    #   formulaic
+    #   lifelines
+    #   lightgbm
+    #   momentchi2
+    #   osqp
+    #   qdldl
     #   scikit-learn
+    #   scs
+    #   shap
+    #   statsmodels
+scs==3.2.11
+    # via cvxpy
+setuptools==83.0.0
+    # via osqp
+shap==0.48.0
+    # via
+    #   econml
+    #   sentinel
 six==1.17.0
     # via python-dateutil
+slicer==0.0.8
+    # via shap
 smmap==5.0.3
     # via gitdb
 sniffio==1.3.1
     # via
     #   anthropic
     #   langsmith
+sparse==0.19.0
+    # via econml
+sparsediffpy==0.3.0
+    # via cvxpy
 sqlglot==30.12.0
     # via sentinel
 starlette==1.3.1
     # via streamlit
+statsmodels==0.14.6
+    # via
+    #   causal-learn
+    #   dowhy
+    #   econml
+    #   sentinel
 streamlit==1.59.1
     # via sentinel
+sympy==1.14.0
+    # via dowhy
 tenacity==9.1.4
     # via
     #   langchain-core
@@ -263,11 +431,17 @@ threadpoolctl==3.6.0
     # via scikit-learn
 toml==0.10.2
     # via streamlit
+tqdm==4.68.4
+    # via
+    #   causal-learn
+    #   dowhy
+    #   shap
 typing-extensions==4.16.0
     # via
     #   altair
     #   anthropic
     #   anyio
+    #   formulaic
     #   langchain-core
     #   langchain-protocol
     #   langsmith
@@ -278,12 +452,13 @@ typing-extensions==4.16.0
     #   pydantic
     #   pydantic-core
     #   referencing
+    #   shap
     #   starlette
     #   streamlit
     #   typing-inspection
 typing-inspection==0.4.2
     # via pydantic
-tzdata==2026.3 ; sys_platform == 'emscripten' or sys_platform == 'win32'
+tzdata==2026.3
     # via
     #   pandas
     #   psycopg
@@ -304,6 +479,8 @@ websockets==15.0.1
     #   langgraph-sdk
     #   langsmith
     #   streamlit
+wrapt==2.2.2
+    # via formulaic
 xxhash==3.8.1
     # via
     #   langgraph

@@ -34,6 +34,22 @@ CTL_COMPLEX_01 = "CTL-COMPLEX-01"  # Cartesian join, or join count over the ceil
 # (e.g. "sklearn.metrics.pairwise" under "sklearn.metrics"). A bare parent whose
 # only allowed children are listed (e.g. `import scipy`, `import sklearn`) is NOT
 # allowed: the grant is per-submodule on purpose.
+#
+# Every name here must be installed in the environment that has to honour it.
+# This list is fed verbatim to the model in the codegen system prompt, so a name
+# on it is an instruction to use that package; if the sandbox cannot import it,
+# the gate stamps "imports on the tier's allowlist, clear" and Execute then dies
+# with ModuleNotFoundError. That is not a control that held, it is a control
+# that guessed. `tests/test_allowlist_env.py` reconciles this list against
+# `requirements.txt` (the artifact prod installs) and fails on any drift.
+#
+# All six of statsmodels, lifelines, shap, dowhy and econml were advertised here
+# and installed nowhere from v1 until 2026-07-20, when a cold-visit audit found
+# the Live LLM path dying on every run. They are dependencies now. Nothing in
+# the platform imports the last four; the model reaches for them in generated
+# code, which is what an allowlist is for. Note the cost that bought: econml and
+# numba pin the numerical stack down a major version (pandas 3 -> 2.3), so
+# widening this list is not free even when the packages install cleanly.
 ALLOWED_IMPORTS: frozenset[str] = frozenset(
     {
         "pandas",

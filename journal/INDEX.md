@@ -1,16 +1,144 @@
 # Sentinel — Journal Index
 
-Last refreshed: 2026-07-20 11:21
+Last refreshed: 2026-07-20 14:10
 
-Latest entry: [2026-07-20-1121-chrome-recedes-and-an-audit-finds-the-landmine.md](entries/2026-07-20-1121-chrome-recedes-and-an-audit-finds-the-landmine.md)
+Latest entry: [2026-07-20-1410-a-list-that-granted-what-nothing-installed.md](entries/2026-07-20-1410-a-list-that-granted-what-nothing-installed.md)
 
 ## Where we are now
+
+**Three sessions' work now sits on main undeployed: the five audit findings
+(PR #17), the data-contract catalogue (v11), and the registry rewrite (v12).
+Prod is still v10, so the Live LLM path in production still fails 100% of the
+time. The next deploy carries all three and needs both scripts, because one of
+the audit fixes is a CloudFront change.**
+
+**All five audit findings are closed: four fixed, one closed by a decision.**
+
+The Live LLM path failed 100% of the time because the L2 allowlist advertised
+statsmodels, lifelines, shap, dowhy and econml and none were installed anywhere.
+The allowlist goes verbatim into the codegen system prompt, so each name is an
+instruction to the model to use that package: the gate stamped "imports on the
+tier's allowlist, clear" and the sandbox died with ModuleNotFoundError. All five
+are dependencies now, and `tests/test_allowlist_env.py` reconciles the grant
+against `requirements.txt` (what the instance pip-installs, not a local venv,
+which hides the fault precisely when it matters). Installing them cost a major
+version of the numerical stack: econml and numba cap pandas at 2.3.3,
+scikit-learn at 1.6.1, numpy at 2.4.6, scipy at 1.15.3. **An allowlist entry is
+not only a package, it is that package's constraints on everything else.** And
+it cost time: shap imports in 4.2-4.6s warm and 15.5s cold, against a 10s wall
+clock, so there is now a boot-time warm-up (`sentinel/sandbox/warmup.py`, a
+throwaway subprocess, since the caches are on disk not in the process) and the
+wall clock moved to 30s. An infinite loop dies at 30s as it dies at 10s; what
+changed is that the control stopped firing on the imports. **An import grant is
+also a time budget.**
+
+The adoption bars rendered as four identical 17.2px rectangles for four
+different weeks, with the inline heights correct throughout. The value label was
+a flex sibling, so it took 16.8px out of a 56px column and the bar, the only
+child with no intrinsic height, absorbed the whole deficit. ui-spec 4.10 had
+already specified the fix ("value printed above each bar"), and following it
+fixes the cause rather than making room for it. **An element whose size encodes
+data must be out of the flex-shrink pool, and anything decorating it must be out
+of flow.**
+
+The six seconds of blank white was never an EB cold start; TTFB is 1.8s. It was
+61 files and 2.5MB of Streamlit front end served uncompressed and uncached,
+because the single CloudFront behavior is CachingDisabled with Compress:false,
+which is right for the WebSocket and wrong for the bundle. `/static/*` has its
+own behavior now. Compress:true alone would have done nothing: CloudFront
+compresses what it caches, and CachingDisabled also drops Accept-Encoding from
+the cache key.
+
+**The fifth finding dissolved.** It was written up as the largest hole: the gate
+clears nine checks on the default path and never refuses, so its best capability
+is asserted rather than shown. Both halves of that were wrong. The gate is right
+to clear a benign request, since blocking it would be a false positive, which
+this build treats as costing as much as a missed block. And the refusal is not
+missing: three adversarial requests are wired into the L2 analysis dropdown and
+three at L3, each real code with a real violation, nothing seeded. The finding
+reduces to "the default selection is the benign one". Sandip's call: drive two
+demos, happy path then adversarial. Nothing to build.
+
+**The thread through all five: this build states claims in prose that nothing
+holds it to.** The allowlist named packages nothing installed. The Execute panel
+claimed a 15s wall clock while the code enforced 10. The stepper doc listed
+DoWhy, lifelines and SHAP as permitted directly under its own rule to claim only
+libraries that actually run. The fix in each case was to make the claim read
+from the thing that enforces it.
+
+Everything below is the prior state: v10 in prod, audit findings open.
+
+---
+
+**v12 is merged to main but NOT deployed. The Registry screen now says what
+each agent does and what the three registries on it are. Note that the v12
+entry below, and the v10 block under it, both say the cold-visit audit is
+untouched. That was true when each was written and is not now: all five findings
+are fixed or closed, in the section above.**
+
+v12 (PR #18, `a924ffe`) started from Sandip asking what the agents on the
+Registry screen actually do, and what the difference is between Models, Agents,
+and Analysis-agents. The second question is the finding: he commissioned the
+build and could not tell three registries apart on one page, because one
+subtitle covered all three and described two of them. They are not variations
+of one idea. **A model is what a run produces. An agent is a worker inside a
+run. An analysis-agent is what a run is allowed to be**, the certified unit the
+Plan stage binds, which the four agents then execute. The analysis-agent
+section opens by saying it is not the four agents above, since that collision
+is what caused the question.
+
+Each agent's one-line description lives on the agent class as a `does`
+attribute and the registry reads it off the class, rather than a dict of
+descriptions in `registry.py` that would drift from the code it describes. The
+agents table gained a "what it does" column and shows the human title under the
+agent id. Left alone deliberately: eda's tools column shows the template's
+allow-list including `profile_dataset`, which eda never calls (honest as a
+scope, misleading as a description), and `AGENT_LINEAGE` still duplicates each
+agent class's `template` attribute, because deduping it would close an import
+cycle through `agents/runtime.py`. 391 tests.
+
+**v11 is merged to main but NOT deployed. The Datasets surface gained a data
+contract view: a catalogue that publishes schema, roles, foreign keys and
+descriptions, and deliberately publishes no values.**
+
+v11 (PR #19, `4e106ec`) answers a question Sandip asked while proposing an
+"Explore this dataset" button: would an EDA view violate the governance we have
+built. It would, in four places. Purpose limitation gates Access on *why* and an
+Explore button carries no purpose (six of eight datasets are Restricted or
+Confidential). The autonomy ceiling caps Confidential data at L1, so free-form
+exploration of Berka is above the ceiling by construction. The column grant
+builds a scoped table so a withheld column does not exist on the object the code
+receives, and a view rendering every column puts back exactly what minimisation
+removed (`applicant_email`, `applicant_ssn`, `sex`, raw `age_years`). The
+disclosure screen suppresses grouped cells under the k-anonymity floor, and a
+value-counts panel is a grouped count.
+
+So the drill-down is the **catalogue layer** instead, which is the thing banks
+actually run and the thing this platform was missing. Metadata is published far
+more widely than data: you read the contract to decide what to request, then
+declare a purpose to get values. Each registry row ends in a Contract button
+opening provenance, license, classification and the tier ceiling it sets; the
+permitted and refused purposes read off the same `PURPOSE_MATRIX` CTL-PURP-01
+enforces; rows at source vs rows onboarded; tables with row counts; foreign keys
+with cardinality; and the column dictionary (name, logical type, role,
+description, `derived` tag) under a legend saying what each role costs at Access.
+No values, no samples, no distributions, no missingness, no cardinality.
+
+Missingness and cardinality look like metadata but are computed from values, so
+they stay with the governed `data_profiling` analysis. The catalogue knows the
+shape; the profile knows the contents; only the profile is data access. Type
+inference reads a bounded 200-row head, and a test checks every published string
+against the file's real first rows so that stays true. 406 tests, ruff clean.
+
+
+---
 
 **v10 is merged and LIVE in prod: a small chrome pass. The bigger news is not
 in it. A cold-visit audit of the live site found that the Live LLM path fails
 100% of the time and prints a Python traceback on screen, because the codegen
 allowlist advertises packages that are not installed. Nothing from the audit is
-fixed yet.**
+fixed yet.** *(Superseded 2026-07-20 13:10: all five closed on PR #17, not yet
+deployed.)*
 
 v10 (PR #14, `58e51dd`, bundle `sentinel-20260720-111254.zip`) is three things.
 The sidebar group headers were being painted over by the first nav row in each
@@ -461,6 +589,9 @@ out).
 
 ## Recent entries
 
+- [2026-07-20-1410-a-list-that-granted-what-nothing-installed.md](entries/2026-07-20-1410-a-list-that-granted-what-nothing-installed.md) : all five audit findings closed in one session, four fixed and one dissolved. **The allowlist granted five packages nothing installed** (statsmodels, lifelines, shap, dowhy, econml), and since the list goes verbatim into the codegen prompt, the model took the instruction, the gate stamped the imports clear and the sandbox died with `ModuleNotFoundError`: a control that approved what the environment refuses. Reproduced at the seam before touching it. I fixed it by dropping the four unused ones; Sandip reversed it to install them, correctly, since the defect was never which side moved. That cost a major version of the numerical stack (econml/numba cap pandas at 2.3.3, sklearn 1.6.1, numpy 2.4.6, scipy 1.15.3) and it cost time: shap is 4.2-4.6s warm and 15.5s cold against a 10s wall clock, hence `sentinel/sandbox/warmup.py` and a 30s cap. **An import grant is also a time budget.** The adoption bars: correct inline heights thrown away by a flex-shrink squash, fixed by following ui-spec 4.10, which had specified the fix all along. **An element whose size encodes data must be out of the flex-shrink pool.** The six-second blank was 2.5MB of Streamlit bundle served uncompressed and uncached by a CloudFront behavior built for the WebSocket; `/static/*` split out, and `Compress:true` alone would have done nothing under CachingDisabled. **The fifth finding dissolved under Sandip's question**: the gate is right to clear a benign request, the adversarial requests are already wired and genuine, and the whole thing reduced to which option is selected by default. He drives two demos instead. The thread through all five: claims stated in prose that nothing holds to them, including a caption claiming a 15s wall clock while the code enforced 10. 423 tests. PR #17, not yet deployed.
+- [2026-07-20-1345-three-registries-under-one-heading.md](entries/2026-07-20-1345-three-registries-under-one-heading.md) : Sandip asked what the agents on the Registry screen do, and what the difference is between Models, Agents, and Analysis-agents. **The second question is the finding:** the person who commissioned the build could not tell three registries apart on one page, because one subtitle covered all three and described two. Rewritten around what each thing is in a run: a model is what a run produces, an agent is a worker inside a run, an analysis-agent is what a run is *allowed to be* (the certified unit Plan binds, which the four agents execute). The analysis-agent section now opens by saying it is not the four agents above. Each agent's description lives on the agent class as `does` and the registry reads it off the class, because a dict of descriptions in `registry.py` is a copy of a fact and copies drift; same rule the model-status popover already follows. Left alone: eda's tools column shows the template allow-list including a tool eda never calls, and `AGENT_LINEAGE` duplicates each class's `template` (deduping closes an import cycle through `agents/runtime.py`). Two verification traps: `--server.fileWatcherType none` means Streamlit never recompiles the script, so a browser reload re-runs the *old* source and a real edit looks inert until the server restarts; and the full suite run alongside the live app failed 6 tests in 651s that all passed in 116s once the server stopped, so read the runtime before reading the failures. PR #18, `a924ffe`, 391 tests. **Not deployed; prod is still v10.**
+- [2026-07-20-1338-the-catalogue-is-not-a-data-browser.md](entries/2026-07-20-1338-the-catalogue-is-not-a-data-browser.md) : Sandip proposed an "Explore this dataset" button on the Datasets surface and asked, in the same message, whether it would violate the governance we have built. It would, in four places: purpose limitation (Access gates on *why*, and Explore carries no purpose; six of eight datasets are Restricted or Confidential), the autonomy ceiling (Confidential caps at L1, so free-form exploration of Berka is above the ceiling by construction), the column grant (Access builds a scoped table so a withheld column does not exist; a full-column view puts back `applicant_email`, `applicant_ssn`, `sex`, raw `age_years`), and the disclosure screen (a value-counts panel is a grouped count, and cells under the floor get suppressed). Built the **catalogue layer** instead, which banks actually run and this platform lacked: a Contract button per row opening provenance, license, classification + tier ceiling, permitted/refused purposes off the real `PURPOSE_MATRIX`, rows at source vs onboarded, tables, foreign keys with cardinality, and the column dictionary (name, type, role, description, `derived` tag) under a role legend. **No values, no samples, no distributions, no missingness, no cardinality:** those are computed from values, so they stay with the governed `data_profiling` analysis. The catalogue knows the shape; the profile knows the contents; only the profile is data access. Types come from a bounded 200-row head and a test checks every published string against the file's real first rows. Synthetic PII is published, marked `pii` + `derived`, rather than hidden. Documentation coverage is reported not smoothed: german_credit 100%, lendingclub 40 of 152. PR #19, `4e106ec`, 406 tests. **Not deployed; prod is still v10 with the Live LLM path broken.**
 - [2026-07-20-1121-chrome-recedes-and-an-audit-finds-the-landmine.md](entries/2026-07-20-1121-chrome-recedes-and-an-audit-finds-the-landmine.md) : demo prep for the hiring manager, which turned into a chrome pass plus a cold-visit audit of the live site. The chrome (PR #14, `58e51dd`, v10): sidebar group headers were being painted over by the first nav row in each group, because Streamlit's `margin-bottom:-16px` on `stMarkdownContainer` exists to cancel a markdown `<p>`'s 16px and `.gl` is a bare div with 6px, so it over-pulled 10px; six other divs are over-pulled the same way and none are occluded, since a nav row is the only thing that paints over the element above it. Topbar Data/Purpose chips removed everywhere (duplication after v9 put both on the Ask row); the identity chip was removed too and **put back**, because switching persona is the only in-app way to show the ladder. Sidebar counts removed. Merged against a v9 that landed mid-session by resetting onto main and re-applying, rather than resolving markers. Deployed and verified live. 386 passed, 3 skipped. **The audit is the real output and nothing from it is fixed:** the codegen allowlist advertises statsmodels/lifelines/shap/dowhy/econml at L2 and none are in `requirements.txt`, so the Live LLM path fails 100% in prod with a visible `ModuleNotFoundError` while the Gate stamps the imports clear; the Adoption chart renders four flat bars from a flex-shrink squash; an L0 persona is pointed at a sidebar that has not held identity since v7; and on the default path the gate never refuses anything, so the headline claim is asserted rather than shown. prod is v10.
 - [2026-07-20-1055-the-row-becomes-the-control-v9.md](entries/2026-07-20-1055-the-row-becomes-the-control-v9.md) : the Ask stage stopped showing information beside a control that ignored it. Step 1's dataset table is now the control: a one-option radio per row labelled with the dataset id, exclusivity enforced in a callback (and tested, since Streamlit has no radio group spanning containers), the `.row-sel` tint and `.rowgood` bar built for the first time, and the mockup's `.pmatrix` showing all six purposes for the picked dataset off the real matrix. **Confirm Dataset gates steps 2 and 3** and changing the pick clears the drafted question, because a purpose and an analysis are declared against a dataset. Step 2 sentence-cased with a covers/excludes block from a new `PURPOSE_SCOPE` in the policy module; step 3 renamed "Select the Analysis" and stating method + libraries that genuinely run, with the refusing control named. Those ids are re-derived from the real gate by test rather than asserted. Rejected: `st.dataframe` single-row selection, which is a real row click but would have cost the classification popover 4.3 requires. Table helpers extracted to `sentinel/ui/tables.py`; `govflow_mode` deleted (the L3 route is now the synthetic_its row). PR #13, bundle `sentinel-20260720-104529.zip`, EB Green, verified live by run `e168559a3501`. 392 tests. Found: the deploy folder was 3 days stale, and the permission classifier now blocks `gh pr merge` outright. prod is v9.
 - [2026-07-19-1522-chips-that-explain-themselves-v8.md](entries/2026-07-19-1522-chips-that-explain-themselves-v8.md) : closed the control-chip gap and got a decision on OPA. The rule, now in ui-spec 4.3: a chip is clickable when it names a governance decision, inert when it names a fact. `_control_popover` was already the right mechanism and already proven at three sites while the engine bar built dead spans thirty lines below it. Wired: engine bar (all nine stages), Architecture stop, import allowlist (grouped by the control that denies each row, four popovers not thirty-six), topbar Data/Purpose chips (both onto CTL-PURP-01, whose two axes they name), certification gate rows, the Screen PII finding. Not wired, deliberately: the chips inside the Controls popover, since popovers should not nest. Datasets and both Registry tables rebuilt off `st.dataframe` into hand-laid tables so cells can carry chips; cost is lost sorting. Found on the way: the dataset registry had no classification column at all, and CTL-CODE-00 / CTL-DISC-03 were missing from their engine lists. PR #11, bundle `sentinel-20260719-151623.zip`, EB Green, verified live. 382 tests. **OPA externalisation ruled out by Sandip: not in scope for the foreseeable future.** prod is v8.
@@ -498,8 +629,23 @@ out).
 
 ## Working hypotheses
 
+- **A claim stated in prose is not a control; it drifts the moment nothing enforces it.** Found three times in one session (2026-07-20): the L2 allowlist named five packages that were installed nowhere, the Execute panel's caption claimed a 15s wall clock while the code enforced 10, and the stepper doc listed DoWhy/lifelines/SHAP as permitted directly beneath its own rule to claim only libraries that actually run. Each was written once and true once. The fix in each case was the same shape: make the claim read from the thing that enforces it, and add a test that fails when the two diverge. The allowlist reconciles against `requirements.txt`, the caption interpolates `DEFAULT_WALL_CLOCK_S`, the permitted column renders from `ALLOWED_IMPORTS`. Worth applying to any number or list this build shows a visitor.
+- **An import grant is also a time budget, and a version ceiling.** Adding shap/dowhy/econml to the allowlist (2026-07-20) pinned the whole numerical stack down a major version, because econml and numba cap it, and charged 4.2-4.6s of warm import to every sandbox run against what was a 10s wall clock. Widening an allowlist is never only a policy change.
+- **A UI copy of a fact drifts from the fact.** Extended 2026-07-20 from the model-status popover (computed off the row) to agent descriptions (read off the agent class). If a surface describes what the code does, derive the text from the code; a hand-written dict next to the registry is a document about the code, not an inventory of it.
+- **Two things that look like a change doing nothing.** Found 2026-07-20. The launch config runs Streamlit with `--server.fileWatcherType none`, so it never recompiles the script: a browser reload starts a new session that re-runs the *old* source, and a real edit looks inert until the server restarts. And a full test run alongside the live app took 651s and failed 6 tests that all passed in 116s once the server stopped. Check the wall clock before reading failures, and restart the server before concluding an edit had no effect.
 - Health 200 is necessary but not sufficient to call a deploy verified: Streamlit's health endpoint answers before app.py runs, so an import crash returns 200 while every page is broken (this happened 2026-07-18). Verify a deploy by loading a page and running a flow, not by probing health. And requirements.txt is a second dependency list that drifts from pyproject/uv.lock unless something regenerates it; the fix is to generate it at deploy time or diff it in CI.
 - **A control that approves something the environment then refuses is not a control that held, it is a control that guessed.** Found 2026-07-20: the codegen allowlist is a *third* dependency list, and nothing reconciles it with `requirements.txt`. The Gate stamps "imports on the tier's allowlist, clear" for `statsmodels`, and Execute throws `ModuleNotFoundError` because it was never installed. `requirements.txt` and `uv.lock` agree perfectly here, so the existing deploy guard cannot see it: they are both simply missing what the allowlist promises. Any list that grants permission must be checked against the thing that has to honour it, not just against the list next to it. Local environments hide this precisely when it matters, since `statsmodels` is installed here transitively and absent in prod.
+- **Metadata access and data access are two different grants, and a governance
+  demo has to act like it.** Recorded 2026-07-20 while turning down an "Explore
+  this dataset" button. A catalogue publishes schema, roles, relationships and
+  descriptions to a far wider audience than the data itself; that is how a real
+  bank works and it is why an analyst can discover a table they cannot read. The
+  practical test for whether something belongs on a catalogue page: is it
+  computed from values? Missingness and cardinality feel like metadata and fail
+  that test, which puts them with the governed profiling analysis rather than in
+  the catalogue. The corollary is that adding a surface to a governance product
+  means checking it against the product's own controls first, because the one
+  place that must never leak ungoverned data is the Governance section.
 - A naturally-flagging fairness result is more convincing than a staged one. Keep it real. This now extends to the gate: if the demo shows generated code being blocked, the block must be genuine, never seeded.
 - The evidence pack with its "what this does not say" block is now built (v3) and is the showpiece the model card PDF pointed toward. The negative statement is assembled from what the run did (the suppressed band, the flagged proxy), not from boilerplate, which is what makes it more than a dashboard. The model card PDF survives as prior art.
 - A control is only credible if it can be seen firing. Force RBAC and PII to fire every run.
@@ -516,7 +662,7 @@ out).
 - Retrieval ranking: the SR 11-7 query ranks the internal modeling standard above the SR 11-7 document itself (SR 11-7 chunks still return at ranks 2-3). Worth a later look at chunking or reranking.
 - Should `deploy.sh` refuse when `HEAD` is not an ancestor of `origin/main`? Opened 2026-07-20: the primary checkout had been parked on `docs/v6-deploy-record` since Sunday, 16 commits behind, and a deploy from it would have shipped v6 while reporting success. Nothing keeps that folder current, and it is the only place the gitignored live-LLM key exists, so it cannot simply be abandoned for a worktree. A one-line guard in the script would have caught it. The related structural question is whether the primary checkout should hold `main` at all, given another worktree currently does and git refuses the same branch twice.
 - How should concurrent sessions on this repo be handled? Opened 2026-07-20: a second session pushed `claude/demo-prep-hiring-manager-5c0866` (a real nav-bar paint fix) mid-conversation, while I was reporting the branch list as settled. Sandip chose to deploy without it. There is no convention yet for noticing another live session, and the branch list is not a reliable signal because it changes underneath you. **Update the same day:** that branch shipped four hours later as v10, after Sandip looked at it, and the merge needed a reset-onto-main-and-reapply because v9 had restructured the same regions underneath it. The question stands; the specific instance resolved the ordinary way, by a human looking. The practical lesson is narrower: when main moves under a branch, re-applying a small diff onto the new main beats resolving conflict markers in a file that has been restructured.
-- Should the demo's default path include a refusal? Opened 2026-07-20 by the cold-visit audit. Today the happy path runs nine checks and clears all nine, so a visitor never sees the gate refuse anything, and the gate refusing generated code by name is the most compelling thing in the build. Making the default path include one genuine block would show the claim instead of asserting it. The constraint is the standing rule that a block must be real and never seeded, so this is a question about which genuine request to put on the default path, not about staging one.
+- ~~Should the demo's default path include a refusal?~~ Resolved 2026-07-20, and the question was malformed. The gate is right to clear a benign request: blocking it would be a false positive, which this build treats as costing as much as a missed block. And the refusal was never missing, only unselected: three adversarial requests are wired into the L2 analysis dropdown and three at L3, each real code with a real violation the gate genuinely catches. The finding reduced to "the default selection is the benign one". Sandip drives two demos, happy path then adversarial, so nothing was built. Worth remembering as a case where a finding written up as the largest product hole was a note about a default value.
 - ~~`synthetic_its` is registered but has no onboarder~~ Resolved: onboarded in v4 (generated with a known +12 effect), and in v6 (2026-07-19) it gained CAP_TABULAR so profiling is legal on it too. It is the Public-class L3 home.
 - Demo GIF/Loom for the README: dropped for now per Sandip (2026-07-14).
 

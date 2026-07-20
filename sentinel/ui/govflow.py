@@ -59,6 +59,7 @@ from ..govflow.tiers import (
     ROLE_EXECUTIVE,
     ROLE_MODEL_VALIDATOR,
 )
+from ..sandbox.execute import DEFAULT_WALL_CLOCK_S
 from .tables import table_head, table_row, td
 
 STAGES = [
@@ -1022,7 +1023,25 @@ def _purpose_scope(purpose: str) -> None:
 
 
 def _cfg_question(is_l3: bool) -> tuple[str, str, str]:
-    """Step 3: select a prebuilt analysis. Returns (style, intent, question)."""
+    """Step 3: select a prebuilt analysis. Returns (style, intent, question).
+
+    The default is deliberately the benign analysis, and deliberately stays that
+    way. A cold-visit audit on 2026-07-20 noted that a visitor clicking the
+    obvious path never sees the gate refuse anything: nine checks, nine clears.
+    That is true, and it is not a defect in the gate. The benign request
+    generates benign code and a gate that blocked it would be a false positive,
+    which this build treats as costing as much as a missed block (section 16:
+    governance that blocks legitimate work gets routed around).
+
+    The refusal is not missing either. Three adversarial requests sit in this
+    dropdown at L2 and three more at L3, each one real code with a real
+    violation the gate genuinely catches; nothing is seeded. Resolved by Sandip
+    on 2026-07-20: the demo is driven as two runs, the happy path first and an
+    adversarial one second, rather than by making the default path refuse or by
+    automating both. So this stays an opt-in second run, and the honest framing
+    of the finding is that the gate's refusal is demonstrated, not that it is
+    absent.
+    """
     draft = _draft()
     st.markdown("**Step 3 of 3 · Select the Analysis**")
     styles = _L3_STYLES if is_l3 else _GOVFLOW_STYLES
@@ -1360,14 +1379,21 @@ def _panel_plan(pub: dict | None, cfg: dict | None, persona) -> None:  # noqa: A
                 draft["l1_params"] = _l1_param_editor()
 
     can_run = persona.can_run and (not is_l3 or tier == "L3")
+    # Both of these tell a stuck visitor how to get unstuck, so they have to
+    # name a control that exists. The first said "in the sidebar" until
+    # 2026-07-20; identity moved out of the sidebar into the topbar chip in v7,
+    # so for three versions the only in-app instruction an L0 persona got was to
+    # look somewhere the control had left.
     if not persona.can_run:
         st.caption(
-            f"Your role ({persona.name}) cannot run analyses. Switch persona in the sidebar."
+            f"Your role ({persona.name}) cannot run analyses. Switch persona from the "
+            f"{persona.name} chip in the top bar."
         )
     elif is_l3 and tier != "L3":
         st.caption(
             f"{persona.name} does not resolve to L3 on Public data. Switch to "
-            "Platform Admin (certified analyst + sandbox waiver) to run the L3 sandbox."
+            "Platform Admin (certified analyst + sandbox waiver) from the chip in the "
+            "top bar to run the L3 sandbox."
         )
     # Stage the frozen config for the queued run.
     draft["cfg_staged"] = {
@@ -1715,8 +1741,12 @@ def _panel_execute(pub: dict | None, cfg: dict | None, persona) -> None:  # noqa
             unsafe_allow_html=True,
         )
     st.caption(
-        "Mechanics: gated code runs in a subprocess with a 15s wall clock "
-        "(CTL-TIME-01), best-effort memory and CPU rlimits, and a single "
+        # Read from the constant, not retyped: this line claimed 15s while the
+        # code enforced 10s, which is the same defect as the allowlist naming
+        # packages that were never installed. A number a visitor reads should
+        # come from the thing that enforces it.
+        f"Mechanics: gated code runs in a subprocess with a {DEFAULT_WALL_CLOCK_S:.0f}s "
+        "wall clock (CTL-TIME-01), best-effort memory and CPU rlimits, and a single "
         "ctx.emit() channel for the result. The gate is the import fence; the "
         "sandbox isolates and caps. An honest boundary against a model doing "
         "something dumb, not against a determined attacker."
