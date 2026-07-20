@@ -245,7 +245,8 @@ blocks:
   this run" and "no event trail was persisted for this run" is explicit and in
   danger ink. They are not the same statement and conflating them is the exact
   failure this product exists to avoid.
-- **C. Steps.** One entry per step **in the run's own vocabulary**, no
+- **C. Stages.** One entry per governance stage. **Superseded 2026-07-20**, see
+  below. Originally: one entry per step in the run's own vocabulary, no
   invented normalization: analysis renders its spec steps, credit_risk renders
   profiler → eda → modeler → human gate → validator, govflow and L3 render the
   nine stages. Each row carries a status glyph, the acting agent, the event
@@ -308,6 +309,43 @@ would file events under the wrong stage. Those stages carry a false
 stay in the run-level stream under a caption saying why. Making that honest
 would mean stamping the stage onto the event, which is a follow-up: ~30 call
 sites in `flow.py` and `l3.py`.
+
+### The nine-stage shape (2026-07-20, supersedes "the run's own vocabulary")
+
+The original design rendered each run in its own step vocabulary and argued
+against normalizing, on the grounds that mapping credit_risk's
+profiler/eda/modeler onto Ask..Attest is an interpretation. That was the wrong
+call. The nine stages **are** the product's governance spine, the Run screen
+teaches them, and an auditor should learn one vocabulary rather than four.
+
+Every run now renders as Ask, Plan, Access, Generate, Gate, Execute, Screen,
+Interpret, Attest. The mapping lives in `sentinel/platform/audit_stages.py` and
+three rules keep it from lying:
+
+1. **A stage a route does not have is `not in this route`** — never `ok`, never
+   `skipped`. Three different facts: `ok` ran, `skipped` was reached and
+   declined, `not in this route` means no such stage exists on that path. A
+   linear analysis generates no code, so its Generate stage is absent, not
+   skipped. Stages a route performs without recording a discrete step (RBAC at
+   Access on the credit pipeline) are marked as such in italics.
+2. **Native step names stay visible** inside each stage. Execute on a credit
+   run lists Data Profiler, EDA / Feature and Modeler by name with their own
+   narrations and events. The mapping is additive.
+3. **A stage folding several steps takes the worst outcome.** Two of three
+   steps passing does not make a stage green.
+
+**Frameworks and governance per stage.** The nine-stage routes read
+`sentinel/ui/govflow.py:_ENGINE` directly — the same table the Run screen's
+engine bar renders — so the two surfaces cannot drift, and a test asserts it.
+The other two routes declare their own, grounded in what those modules actually
+import: printing govflow's duckdb sandbox against a credit-risk run that trains
+a scikit-learn model would be a plain falsehood.
+
+Each stage shows the controls it **armed** and how many **fired** on this run,
+with the fired ones dot-marked. The Gate arming eight code checks and tripping
+none is the normal case; reading those eight as eight refusals would be the
+same over-count the KPI tiles already avoid, and a test asserts fired is always
+a subset of armed.
 
 Not gated to the Auditor persona. It is the auditor's natural home, but gating
 it would hide the platform's best argument from a panelist logged in as the

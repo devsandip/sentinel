@@ -53,6 +53,7 @@ from sentinel.platform import (
     model_versions,
     reuse_metrics,
 )
+from sentinel.platform.audit_stages import NOT_IN_ROUTE, canonical_steps
 from sentinel.platform.audit_store import (
     OUTCOME_AWAITING,
     OUTCOME_OK,
@@ -521,6 +522,8 @@ st.markdown(
         padding-left:10px; border-left:2px solid var(--border); }
       .stepmeta { font-size:11.5px; color:var(--faint); margin:0 0 6px 18px;
         padding-left:10px; }
+      .stepmeta .fired { color:var(--warn-ink); font-weight:700; }
+      .stepdetail b { color:var(--ink); }
       .stepmeta code, .stepdetail code { font-family:var(--mono); font-size:11px;
         background:var(--surface-2); padding:1px 4px; border-radius:4px; }
       .gv-table { border-collapse:collapse; font-size:13px; width:100%; }
@@ -2281,12 +2284,21 @@ _OUTCOME_BADGE = {
 }
 
 
-def _audit_ctl_chip(cid: str, col, key: str) -> None:  # noqa: ANN001
-    """One fired control, explained through the catalogue where it can be."""
+def _audit_ctl_chip(cid: str, col, key: str, fired: bool | None = None) -> None:  # noqa: ANN001
+    """One control, explained through the catalogue where it can be.
+
+    `fired` distinguishes a control that was *armed* at a stage from one that
+    actually fired on this run. A stage arming eight code checks and tripping
+    none of them is the normal case, and reading those eight as eight refusals
+    would be the same over-count the KPI tiles already avoid.
+    """
     target = _AUDIT_CTL_ALIAS.get(cid, cid)
     info = control_info(target)
+    # A leading dot marks the ones that actually fired, so an eight-chip
+    # Gate row reads at a glance as "eight armed, none tripped".
+    label = f"● {cid}" if fired else cid
     if info.implemented:
-        control_popover(target, label=cid, key=key, container=col)
+        control_popover(target, label=label, key=key, container=col)
     else:
         col.markdown(
             f"<span class='ctlchip'><span class='st'></span>{html.escape(cid)}</span>",
@@ -2332,102 +2344,123 @@ def _audit_second_signature(r, col) -> None:  # noqa: ANN001
 
 _STEP_MARK = {
     "blocked": "✕", "error": "✕", "rejected": "✕",
-    "skipped": "—", "awaiting_approval": "●",
+    "skipped": "—", "awaiting_approval": "●", NOT_IN_ROUTE: "·",
+}
+_STEP_BADGE = {
+    "ok": ("ok", "ok"), "blocked": ("danger", "blocked"), "error": ("danger", "error"),
+    "rejected": ("danger", "rejected"), "skipped": ("neutral", "skipped"),
+    "awaiting_approval": ("warn", "awaiting"),
+    NOT_IN_ROUTE: ("neutral", "not in this route"),
 }
 
 
 def _audit_steps(r) -> None:  # noqa: ANN001
-    """Every step of the run, with what actually happened at each one.
+    """The run, read as the nine governance stages the Run screen teaches.
 
-    A status word alone ("ok") is not an audit record; it is a claim with the
-    evidence removed. Each step carries its own account (the analysis step's
-    summary, the agent's narration, the stage's detail), the controls that
-    fired there, and, where events can honestly be attributed to a step, the
-    events themselves.
+    Every run kind renders in one vocabulary, so an auditor learns the spine
+    once instead of learning four. The native step names stay visible inside
+    each stage, so nothing is renamed away.
 
-    Attribution is per run kind and is never guessed. analysis and credit_risk
-    name one agent per step, so an event's agent identifies its step exactly.
-    govflow and L3 do not: flow.py records agent="govflow" from Ask, Plan and
-    Access alike, so grouping by agent would file events under the wrong
-    stage. Those stages show their own detail and controls, and their events
-    stay in the run-level stream rather than being placed wrongly.
+    Three statuses are kept apart on purpose, because collapsing them is how a
+    normalization starts lying: `ok` ran, `skipped` was reached and declined,
+    and `not in this route` means the route has no such stage at all. A linear
+    analysis generates no code, so its Generate stage is not a skipped step, it
+    is an absent one.
+
+    Frameworks and governance come from the same table the Run screen renders
+    (`_ENGINE`) for the nine-stage routes, so the two surfaces cannot drift.
+    The other two routes declare their own, grounded in what those modules
+    actually import: printing govflow's duckdb sandbox against a credit-risk
+    run that trains a scikit-learn model would be a plain falsehood.
     """
-    st.markdown("**Steps**")
-    if not r.steps:
-        st.info("No step records for this run in the seeded store.")
-        return
+    st.markdown("**Stages**")
+    st.caption(
+        "The nine governance stages, the same spine the Run screen walks. "
+        "Every run kind is read in this shape; each stage names the steps it "
+        "actually ran, what it was built with, and what governed it."
+    )
 
     by_agent: dict[str, list[dict]] = {}
     for e in r.events:
         by_agent.setdefault(e["agent"], []).append(e)
 
-    for i, s in enumerate(r.steps):
-        status = str(s.get("status", ""))
-        name = str(s.get("name", ""))
-        agent = str(s.get("agent", ""))
-        mark = _STEP_MARK.get(status, "✓")
-        # Skipped stages are struck, not hidden: the run reached them and
-        # declined to execute (ui-spec 4.4, suppressed not deleted).
-        label = f"~~{name}~~" if status == "skipped" else f"**{name}**"
-        events = by_agent.get(agent, []) if s.get("attributable") and agent else []
-
+    for i, c in enumerate(canonical_steps(r)):
+        status = c["status"]
+        badge_cls, badge_txt = _STEP_BADGE.get(status, ("neutral", status))
+        absent = status == NOT_IN_ROUTE
+        name = f"~~{c['stage']}~~" if status == "skipped" else f"**{c['stage']}**"
         st.markdown(
-            f"{mark} {label} &nbsp;<span class='muted' style='font-size:12px'>"
-            + (f"{html.escape(agent)} &middot; " if agent else "")
-            + f"{html.escape(status)}"
-            + (f" &middot; {len(events)} events" if events else "")
-            + "</span>",
+            f"{_STEP_MARK.get(status, '✓')} {name} &nbsp;"
+            f"<span class='badge {badge_cls}'>{badge_txt}</span> &nbsp;"
+            f"<span class='muted' style='font-size:12px'>{html.escape(c['purpose'])}</span>",
             unsafe_allow_html=True,
         )
-        detail = str(s.get("detail") or "").strip()
-        if detail:
+        if absent:
+            continue
+
+        if c["note"]:
             st.markdown(
-                f"<div class='stepdetail'>{html.escape(detail)}</div>",
+                f"<div class='stepdetail'><i>{html.escape(c['note'])}</i></div>",
                 unsafe_allow_html=True,
             )
-        tool = str(s.get("tool") or "")
-        produced = list(s.get("produced") or [])
-        if tool or produced:
-            bits = []
-            if tool:
-                bits.append(f"tool <code>{html.escape(tool)}</code>")
-            if produced:
-                bits.append(
-                    "produced "
-                    + ", ".join(f"<code>{html.escape(x)}</code>" for x in produced)
+
+        for s in c["native"]:
+            detail = str(s.get("detail") or "").strip()
+            agent = str(s.get("agent", ""))
+            events = by_agent.get(agent, []) if s.get("attributable") and agent else []
+            st.markdown(
+                f"<div class='stepdetail'><b>{html.escape(str(s.get('name', '')))}</b>"
+                + (f" <span class='muted'>({html.escape(agent)})</span>" if agent else "")
+                + (f"<br>{html.escape(detail)}" if detail else "")
+                + "</div>",
+                unsafe_allow_html=True,
+            )
+            if events:
+                with st.expander(f"{len(events)} events at {s.get('name', 'this step')}"):
+                    st.dataframe(
+                        pd.DataFrame(
+                            [
+                                {
+                                    "seq": e["seq"], "ts": e["ts"][11:19],
+                                    "action": e["action"], "level": e["level"],
+                                    "data touched": ", ".join(e.get("data_touched") or []),
+                                    "summary": e["output_summary"],
+                                }
+                                for e in events
+                            ]
+                        ).style.apply(_audit_level_style, axis=1),
+                        hide_index=True,
+                        width="stretch",
+                    )
+
+        if c["libraries"]:
+            st.markdown(
+                "<div class='stepmeta'><b>Framework &amp; tools</b> "
+                + " ".join(f"<code>{html.escape(x)}</code>" for x in c["libraries"])
+                + "</div>",
+                unsafe_allow_html=True,
+            )
+        if c["controls"]:
+            st.markdown(
+                "<div class='stepmeta'><b>Governance armed</b>"
+                + (
+                    f" &middot; <span class='fired'>{len(c['fired'])} fired on this run</span>"
+                    if c["fired"]
+                    else " &middot; none fired on this run"
                 )
-            st.markdown(
-                f"<div class='stepmeta'>{' &middot; '.join(bits)}</div>",
+                + "</div>",
                 unsafe_allow_html=True,
             )
-        ctls = list(s.get("controls") or [])
-        if ctls:
-            cc = st.columns(min(len(ctls), 4))
-            for j, c in enumerate(ctls):
-                _audit_ctl_chip(c, cc[j % len(cc)], f"audsc_{r.run_id}_{i}_{j}")
-        if events:
-            with st.expander(f"{len(events)} events at this step"):
-                st.dataframe(
-                    pd.DataFrame(
-                        [
-                            {
-                                "seq": e["seq"], "ts": e["ts"][11:19],
-                                "action": e["action"], "level": e["level"],
-                                "data touched": ", ".join(e.get("data_touched") or []),
-                                "summary": e["output_summary"],
-                            }
-                            for e in events
-                        ]
-                    ).style.apply(_audit_level_style, axis=1),
-                    hide_index=True,
-                    width="stretch",
+            cc = st.columns(min(len(c["controls"]), 6))
+            for j, ctl in enumerate(c["controls"]):
+                _audit_ctl_chip(
+                    ctl, cc[j % len(cc)], f"audsc_{r.run_id}_{i}_{j}",
+                    fired=ctl in c["fired"],
                 )
 
     placed = {s.get("agent") for s in r.steps if s.get("attributable")}
     unplaced = [e for e in r.events if e["agent"] not in placed]
     if unplaced:
-        # Two different reasons, and saying the wrong one would be its own
-        # small dishonesty on an audit screen.
         why = (
             "the emitting agent does not identify which stage it came from "
             "(flow.py records agent=\"govflow\" from Ask, Plan and Access "
@@ -2438,7 +2471,7 @@ def _audit_steps(r) -> None:  # noqa: ANN001
         )
         st.caption(
             f"{len(unplaced)} of {len(r.events)} events are not shown under a "
-            f"step, because {why}. All of them are in the stream below."
+            f"stage, because {why}. All of them are in the stream below."
         )
 
 

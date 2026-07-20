@@ -141,6 +141,96 @@ def test_govflow_stages_carry_the_controls_that_fired_there():
         assert "CTL-DISC-01" in screen["controls"]
 
 
+# -- the nine-stage shape ---------------------------------------------------
+
+
+def test_every_run_reads_as_the_nine_stages_in_order():
+    """One vocabulary for every run kind, matching the Run screen's spine."""
+    from sentinel.govflow.flow import STAGES
+    from sentinel.platform.audit_stages import CANONICAL_STAGES, canonical_steps
+
+    # The canonical list must BE the flow's list, or the Audit Log and the Run
+    # screen teach two different spines.
+    assert CANONICAL_STAGES == STAGES
+
+    for r in audit_runs():
+        got = [c["stage"] for c in canonical_steps(r)]
+        assert got == CANONICAL_STAGES, f"{r.run_id} rendered {got}"
+
+
+def test_absent_stages_are_not_reported_as_skipped_or_ok():
+    """Three different facts, and collapsing them is how normalization lies.
+
+    ok ran. skipped was reached and declined. not_in_route means the route has
+    no such stage: a linear analysis generates no code, so its Generate stage
+    is absent, not skipped.
+    """
+    from sentinel.platform.audit_stages import NOT_IN_ROUTE, canonical_steps
+
+    analysis = next(r for r in audit_runs() if r.run_kind == "analysis")
+    by_stage = {c["stage"]: c for c in canonical_steps(analysis)}
+    assert by_stage["Generate"]["status"] == NOT_IN_ROUTE
+    assert by_stage["Gate"]["status"] == NOT_IN_ROUTE
+    # And a real govflow stage that was reached and declined stays 'skipped'.
+    blocked = next(
+        r for r in audit_runs() if r.run_kind in ("govflow", "l3") and r.stopped_run
+    )
+    stages = {c["stage"]: c["status"] for c in canonical_steps(blocked)}
+    assert "skipped" in stages.values()
+    assert NOT_IN_ROUTE not in stages.values(), "the nine-stage route has all nine"
+
+
+def test_a_stage_folding_several_steps_takes_the_worst_outcome():
+    """Two of three steps passing does not make a stage green."""
+    from sentinel.platform.audit_stages import _fold_status
+
+    assert _fold_status(["ok", "ok", "blocked"]) == "blocked"
+    assert _fold_status(["ok", "awaiting_approval"]) == "awaiting_approval"
+    assert _fold_status(["skipped", "skipped"]) == "skipped"
+    assert _fold_status(["ok", "done"]) == "ok"
+
+
+def test_native_step_names_survive_the_normalization():
+    """The mapping is additive: nothing is renamed away."""
+    from sentinel.platform.audit_stages import canonical_steps
+
+    cr = next(r for r in audit_runs() if r.run_kind == "credit_risk" and not r.stopped_run)
+    execute = next(c for c in canonical_steps(cr) if c["stage"] == "Execute")
+    names = {s["name"] for s in execute["native"]}
+    assert {"Data Profiler", "EDA / Feature", "Modeler"} <= names
+
+
+def test_nine_stage_routes_take_their_engine_from_the_run_screen():
+    """Audit Log and Run screen must not drift on what a stage is built with."""
+    from sentinel.platform.audit_stages import stage_engine
+    from sentinel.ui.govflow import _ENGINE
+
+    for stage, (libs, ctls) in _ENGINE.items():
+        assert stage_engine("govflow", stage) == (list(libs), list(ctls))
+        assert stage_engine("l3", stage) == (list(libs), list(ctls))
+
+
+def test_other_routes_do_not_borrow_govflow_libraries():
+    """credit_risk trains a scikit-learn model; it does not run duckdb."""
+    from sentinel.platform.audit_stages import stage_engine
+
+    libs, _ = stage_engine("credit_risk", "Execute")
+    assert "scikit-learn" in libs
+    assert "duckdb" not in libs and "subprocess" not in libs
+
+
+def test_fired_controls_at_a_stage_are_a_subset_of_those_armed():
+    """A control cannot fire at a stage that never armed it."""
+    from sentinel.platform.audit_stages import canonical_steps
+
+    for r in audit_runs():
+        if r.run_kind not in ("govflow", "l3"):
+            continue
+        for c in canonical_steps(r):
+            unarmed = set(c["fired"]) - set(c["controls"])
+            assert not unarmed, f"{r.run_id} {c['stage']}: fired but not armed: {unarmed}"
+
+
 # -- status normalization ---------------------------------------------------
 
 
