@@ -515,6 +515,14 @@ st.markdown(
 
       /* ---------- spec tables ---------- */
       .gv-scroll { overflow-x:auto; border:1px solid var(--border); border-radius:var(--r-md); }
+      /* Audit Log step detail: the step's own account of what happened,
+         indented under its name so the status line stays scannable. */
+      .stepdetail { font-size:12.5px; color:var(--muted); margin:2px 0 4px 18px;
+        padding-left:10px; border-left:2px solid var(--border); }
+      .stepmeta { font-size:11.5px; color:var(--faint); margin:0 0 6px 18px;
+        padding-left:10px; }
+      .stepmeta code, .stepdetail code { font-family:var(--mono); font-size:11px;
+        background:var(--surface-2); padding:1px 4px; border-radius:4px; }
       .gv-table { border-collapse:collapse; font-size:13px; width:100%; }
       .gv-table th { text-align:left; font-size:11px; letter-spacing:.06em;
                      text-transform:uppercase; color:var(--muted); font-weight:700;
@@ -2322,6 +2330,118 @@ def _audit_second_signature(r, col) -> None:  # noqa: ANN001
         col.markdown("<span class='badge neutral'>not required</span>", unsafe_allow_html=True)
 
 
+_STEP_MARK = {
+    "blocked": "✕", "error": "✕", "rejected": "✕",
+    "skipped": "—", "awaiting_approval": "●",
+}
+
+
+def _audit_steps(r) -> None:  # noqa: ANN001
+    """Every step of the run, with what actually happened at each one.
+
+    A status word alone ("ok") is not an audit record; it is a claim with the
+    evidence removed. Each step carries its own account (the analysis step's
+    summary, the agent's narration, the stage's detail), the controls that
+    fired there, and, where events can honestly be attributed to a step, the
+    events themselves.
+
+    Attribution is per run kind and is never guessed. analysis and credit_risk
+    name one agent per step, so an event's agent identifies its step exactly.
+    govflow and L3 do not: flow.py records agent="govflow" from Ask, Plan and
+    Access alike, so grouping by agent would file events under the wrong
+    stage. Those stages show their own detail and controls, and their events
+    stay in the run-level stream rather than being placed wrongly.
+    """
+    st.markdown("**Steps**")
+    if not r.steps:
+        st.info("No step records for this run in the seeded store.")
+        return
+
+    by_agent: dict[str, list[dict]] = {}
+    for e in r.events:
+        by_agent.setdefault(e["agent"], []).append(e)
+
+    for i, s in enumerate(r.steps):
+        status = str(s.get("status", ""))
+        name = str(s.get("name", ""))
+        agent = str(s.get("agent", ""))
+        mark = _STEP_MARK.get(status, "✓")
+        # Skipped stages are struck, not hidden: the run reached them and
+        # declined to execute (ui-spec 4.4, suppressed not deleted).
+        label = f"~~{name}~~" if status == "skipped" else f"**{name}**"
+        events = by_agent.get(agent, []) if s.get("attributable") and agent else []
+
+        st.markdown(
+            f"{mark} {label} &nbsp;<span class='muted' style='font-size:12px'>"
+            + (f"{html.escape(agent)} &middot; " if agent else "")
+            + f"{html.escape(status)}"
+            + (f" &middot; {len(events)} events" if events else "")
+            + "</span>",
+            unsafe_allow_html=True,
+        )
+        detail = str(s.get("detail") or "").strip()
+        if detail:
+            st.markdown(
+                f"<div class='stepdetail'>{html.escape(detail)}</div>",
+                unsafe_allow_html=True,
+            )
+        tool = str(s.get("tool") or "")
+        produced = list(s.get("produced") or [])
+        if tool or produced:
+            bits = []
+            if tool:
+                bits.append(f"tool <code>{html.escape(tool)}</code>")
+            if produced:
+                bits.append(
+                    "produced "
+                    + ", ".join(f"<code>{html.escape(x)}</code>" for x in produced)
+                )
+            st.markdown(
+                f"<div class='stepmeta'>{' &middot; '.join(bits)}</div>",
+                unsafe_allow_html=True,
+            )
+        ctls = list(s.get("controls") or [])
+        if ctls:
+            cc = st.columns(min(len(ctls), 4))
+            for j, c in enumerate(ctls):
+                _audit_ctl_chip(c, cc[j % len(cc)], f"audsc_{r.run_id}_{i}_{j}")
+        if events:
+            with st.expander(f"{len(events)} events at this step"):
+                st.dataframe(
+                    pd.DataFrame(
+                        [
+                            {
+                                "seq": e["seq"], "ts": e["ts"][11:19],
+                                "action": e["action"], "level": e["level"],
+                                "data touched": ", ".join(e.get("data_touched") or []),
+                                "summary": e["output_summary"],
+                            }
+                            for e in events
+                        ]
+                    ).style.apply(_audit_level_style, axis=1),
+                    hide_index=True,
+                    width="stretch",
+                )
+
+    placed = {s.get("agent") for s in r.steps if s.get("attributable")}
+    unplaced = [e for e in r.events if e["agent"] not in placed]
+    if unplaced:
+        # Two different reasons, and saying the wrong one would be its own
+        # small dishonesty on an audit screen.
+        why = (
+            "the emitting agent does not identify which stage it came from "
+            "(flow.py records agent=\"govflow\" from Ask, Plan and Access "
+            "alike), so filing them under a stage would place them wrongly"
+            if not placed
+            else "they are run-level: the run starting and ending, and the "
+            "model being registered"
+        )
+        st.caption(
+            f"{len(unplaced)} of {len(r.events)} events are not shown under a "
+            f"step, because {why}. All of them are in the stream below."
+        )
+
+
 def _audit_detail(r) -> None:  # noqa: ANN001
     """One run opened: what it was allowed, what was caught, who signed."""
     st.markdown(f"#### Run `{r.run_id}`")
@@ -2375,23 +2495,7 @@ def _audit_detail(r) -> None:  # noqa: ANN001
         "is not the author, and that is all it means."
     )
 
-    st.markdown("**Steps**")
-    if r.steps:
-        for s in r.steps:
-            mark = {"blocked": "✕", "error": "✕", "rejected": "✕",
-                    "skipped": "—", "awaiting_approval": "●"}.get(s.get("status"), "✓")
-            name = s.get("name", "")
-            # Skipped stages are struck, not hidden: the run reached them and
-            # declined to execute (ui-spec 4.4, suppressed not deleted).
-            label = f"~~{name}~~" if s.get("status") == "skipped" else f"**{name}**"
-            st.markdown(
-                f"{mark} {label} &nbsp;<span class='muted' style='font-size:12px'>"
-                f"{html.escape(str(s.get('agent', '')))} &middot; "
-                f"{html.escape(str(s.get('status', '')))}</span>",
-                unsafe_allow_html=True,
-            )
-    else:
-        st.info("No step records for this run in the seeded store.")
+    _audit_steps(r)
 
     st.markdown("**Event stream**")
     if r.events:
@@ -3126,8 +3230,15 @@ _NAV_ICONS = {
 # URL opened in a new tab or pasted to a colleague resolves to the run rather
 # than the landing screen. Honoured once per session: after that the nav stack
 # owns where you are, or the param would drag you back on every rerun.
-if "run" in st.query_params and not st.session_state.get("aud_deeplinked"):
-    st.session_state["aud_deeplinked"] = True
+# Honoured once per distinct id, not once per session: keying on a bare flag
+# meant a second link pasted into the same tab was silently ignored and you
+# landed on the ledger. Re-honour whenever the id in the URL changes; after
+# that the nav stack owns where you are, or the param would drag you back on
+# every rerun.
+if "run" in st.query_params and (
+    st.session_state.get("aud_deeplinked") != st.query_params["run"]
+):
+    st.session_state["aud_deeplinked"] = st.query_params["run"]
     st.session_state["aud_sel"] = st.query_params["run"]
     st.session_state["section"] = _SECTION_AUDIT_RUN
     st.session_state.setdefault("nav_stack", []).append("Audit Log")

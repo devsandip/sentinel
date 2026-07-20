@@ -107,28 +107,64 @@ def _controls_from_audit(events: list[dict]) -> list[str]:
     return sorted(set(fired))
 
 
+# Each run kind records the substance of a step somewhere different, and the
+# first cut of this store kept only name/status/agent, which is why the screen
+# could say "ok" and nothing else. `detail` is the field that actually says
+# what happened; it is StepRun.summary, StepRecord.narration, StageRecord.detail
+# respectively. `attributable` records whether the step's agent identifies its
+# events uniquely, so the screen knows when it may group events under a step
+# and when it must not pretend to.
+
+
 def _steps_from_analysis(run) -> list[dict]:  # noqa: ANN001
     return [
-        {"name": s.title or s.id, "status": s.status, "agent": s.agent, "controls": []}
+        {
+            "name": s.title or s.id,
+            "status": s.status,
+            "agent": s.agent,
+            "controls": [],
+            "detail": s.summary,
+            "tool": s.tool,
+            "produced": list(s.produced),
+            "attributable": True,
+        }
         for s in run.steps
     ]
 
 
 def _steps_from_orchestrator(pub: dict) -> list[dict]:
     return [
-        {"name": s["title"], "status": s["status"], "agent": s["agent"], "controls": []}
+        {
+            "name": s["title"],
+            "status": s["status"],
+            "agent": s["agent"],
+            "controls": [],
+            # The agent's own account of what it did on this run. Scripted by
+            # default and labeled as such in the UI; real either way.
+            "detail": s.get("narration", ""),
+            "attributable": True,
+        }
         for s in pub.get("steps", [])
     ]
 
 
 def _steps_from_stages(result) -> list[dict]:  # noqa: ANN001
-    """govflow / L3 StageRecords already carry the controls that fired there."""
+    """govflow / L3 stages: the StageRecord already carries detail + controls.
+
+    attributable is False because the emitting agent does not identify the
+    stage: flow.py records agent="govflow" from Ask, Plan and Access alike, so
+    grouping events by agent here would file them under the wrong stage. The
+    stage's own detail and control list are exact; the events stay in the
+    run-level stream until an event carries its stage.
+    """
     return [
         {
             "name": s.stage,
             "status": s.status,
-            "agent": s.stage.lower(),
+            "agent": "",
             "controls": list(s.controls),
+            "detail": s.detail,
+            "attributable": False,
         }
         for s in result.stages
     ]

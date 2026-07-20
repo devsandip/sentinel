@@ -245,7 +245,7 @@ blocks:
   this run" and "no event trail was persisted for this run" is explicit and in
   danger ink. They are not the same statement and conflating them is the exact
   failure this product exists to avoid.
-- **C. Step timeline.** One row per step **in the run's own vocabulary**, no
+- **C. Steps.** One entry per step **in the run's own vocabulary**, no
   invented normalization: analysis renders its spec steps, credit_risk renders
   profiler → eda → modeler → human gate → validator, govflow and L3 render the
   nine stages. Each row carries a status glyph, the acting agent, the event
@@ -290,6 +290,24 @@ which id failed rather than rendering blank.
 Drilling in unmounts the filter widgets, and Streamlit discards the state of a
 widget it did not render, so Back originally returned you to an unfiltered
 ledger. Durable `_`-prefixed copies re-seed them.
+
+*A step showed a status word and nothing else.* "ok" is a claim with the
+evidence removed. Each run kind records the substance of a step somewhere
+different and the first store kept none of it: `StepRun.summary` for an
+analysis, `StepRecord.narration` for a credit-risk agent, `StageRecord.detail`
+for a govflow stage. All three now land in `detail`, and each step also shows
+its tool and produced artifacts (analysis), the controls that fired at that
+step (govflow/L3), and its own events.
+
+Per-step event attribution is **declared, not guessed**. analysis and
+credit_risk name one agent per step, so an event's `agent` identifies its step
+exactly and those events group under it. govflow and L3 do not: `flow.py`
+records `agent="govflow"` from Ask, Plan and Access alike, so grouping by agent
+would file events under the wrong stage. Those stages carry a false
+`attributable` flag, show their own exact detail and controls, and their events
+stay in the run-level stream under a caption saying why. Making that honest
+would mean stamping the stage onto the event, which is a follow-up: ~30 call
+sites in `flow.py` and `l3.py`.
 
 Not gated to the Auditor persona. It is the auditor's natural home, but gating
 it would hide the platform's best argument from a panelist logged in as the

@@ -81,6 +81,66 @@ def test_seeded_audit_lines_carry_the_full_event_shape():
             assert set(ev) == expected, f"{run_id} seq {ev.get('seq')} shape drifted"
 
 
+def test_every_step_carries_what_actually_happened():
+    """A status word alone is a claim with the evidence removed.
+
+    The first cut of the store kept only name/status/agent, so the screen could
+    say "ok" and nothing else. Each run kind records the substance somewhere
+    different (StepRun.summary, StepRecord.narration, StageRecord.detail) and
+    all three land in `detail`.
+    """
+    thin = []
+    for r in load_seed_runs():
+        for s in r.steps:
+            # A skipped stage legitimately has little to say, but every step
+            # the run actually reached must account for itself.
+            if s.get("status") not in ("skipped",) and not (s.get("detail") or "").strip():
+                thin.append((r.run_id, s.get("name")))
+    assert not thin, f"steps with no detail: {thin[:5]}"
+
+
+def test_step_event_attribution_is_declared_not_guessed():
+    """`attributable` must be true only where the agent identifies the step.
+
+    analysis and credit_risk name one agent per step. govflow and L3 do not:
+    flow.py records agent="govflow" from Ask, Plan and Access alike, so
+    grouping by agent there would file events under the wrong stage.
+    """
+    for r in load_seed_runs():
+        for s in r.steps:
+            if s.get("attributable"):
+                assert s.get("agent"), f"{r.run_id}: attributable step with no agent"
+        if r.run_kind in ("govflow", "l3"):
+            assert not any(s.get("attributable") for s in r.steps), (
+                f"{r.run_id}: nine-stage runs cannot attribute events by agent"
+            )
+
+
+def test_attributable_steps_actually_match_events():
+    """The claim has to hold on the real corpus, not just in principle."""
+    for r in audit_runs():
+        agents = {e["agent"] for e in r.events}
+        for s in r.steps:
+            if s.get("attributable") and s.get("status") != "skipped":
+                assert s["agent"] in agents, (
+                    f"{r.run_id}: step {s['name']} claims agent {s['agent']}, "
+                    f"which emitted no events"
+                )
+
+
+def test_govflow_stages_carry_the_controls_that_fired_there():
+    """The stage's own control list is exact even though its events are not."""
+    gov = [
+        r
+        for r in load_seed_runs()
+        if r.run_kind == "govflow" and "CTL-DISC-01" in r.controls_fired
+    ]
+    assert gov, "expected a seeded govflow run with suppression"
+    for r in gov:
+        screen = next(s for s in r.steps if s["name"] == "Screen")
+        assert "CTL-DISC-01" in screen["controls"]
+
+
 # -- status normalization ---------------------------------------------------
 
 
