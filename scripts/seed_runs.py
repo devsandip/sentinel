@@ -7,13 +7,15 @@ metrics, and controls are the run's real outputs; nothing is invented. Each
 record stores executed_at (real wall clock) plus demo_date (its assigned spot
 on the demo timeline the UI renders); see run_history.py for the convention.
 
-Idempotent: re-running replaces the store. ~19 runs, a couple of minutes.
+Idempotent: re-running replaces the store, keeping each slot's existing run id
+so shared ?run=<id> links survive. ~24 runs, a couple of minutes.
 
 Run: uv run python scripts/seed_runs.py
 """
 
 from __future__ import annotations
 
+import json
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
@@ -101,6 +103,30 @@ PLAN: list[tuple[str, str, str, dict, str]] = [
 _ORCH_STATUS = {"completed": "promoted", "blocked": "blocked", "rejected": "rejected"}
 
 
+def _existing_ids() -> dict[tuple[str, str, str, str], str]:
+    """Run ids already on file, keyed by their slot in the plan.
+
+    Every run mints a fresh uuid, so a re-seed would otherwise renumber the
+    whole store: 24 new ids, every committed event line rewritten, and every
+    ?run=<id> link an auditor has shared turned into a 404. The plan tuple
+    (kind, ref_id, dataset, demo_date) identifies a slot uniquely and does not
+    change when a run's behaviour does, so a re-seed can keep the id and let
+    the diff show only what actually changed about the run.
+
+    Nothing is carried over except the id. Status, metrics, controls and events
+    are always the new execution's own.
+    """
+    if not SEED_RUNS_PATH.exists():
+        return {}
+    out: dict[tuple[str, str, str, str], str] = {}
+    for line in SEED_RUNS_PATH.read_text().splitlines():
+        if not line.strip():
+            continue
+        r = json.loads(line)
+        out[(r["run_kind"], r["ref_id"], r["dataset_id"], r["demo_date"])] = r["run_id"]
+    return out
+
+
 def _controls_from_audit(events: list[dict]) -> list[str]:
     """Actions of control-level audit events (blocked / redaction / gate)."""
     fired = [e["action"] for e in events if e.get("level") in ("blocked", "redaction", "gate")]
@@ -151,11 +177,12 @@ def _steps_from_orchestrator(pub: dict) -> list[dict]:
 def _steps_from_stages(result) -> list[dict]:  # noqa: ANN001
     """govflow / L3 stages: the StageRecord already carries detail + controls.
 
-    attributable is False because the emitting agent does not identify the
-    stage: flow.py records agent="govflow" from Ask, Plan and Access alike, so
-    grouping events by agent here would file them under the wrong stage. The
-    stage's own detail and control list are exact; the events stay in the
-    run-level stream until an event carries its stage.
+    attributable stays False because the emitting agent still does not identify
+    the stage: flow.py records agent="govflow" from Ask, Plan and Access alike.
+    Grouping by agent here would file events under the wrong stage. It no longer
+    matters, because these routes stamp the stage on the event itself and the
+    screen reads that instead; agent attribution is the fallback for the routes
+    that have no stage spine.
     """
     return [
         {
@@ -321,6 +348,7 @@ def _run_l3(params: dict) -> tuple[SeedRun, list[dict]]:
 def main() -> None:
     analyst = get_persona("analyst")
     orch = Orchestrator()
+    known = _existing_ids()
     records: list[SeedRun] = []
     events_by_run: dict[str, list[dict]] = {}
     for kind, ref_id, dataset_id, params, demo_date in PLAN:
@@ -333,9 +361,15 @@ def main() -> None:
             rec, events = _run_govflow(params)
         else:
             rec, events = _run_l3(params)
+        # Keep the id this slot already had, so shared links survive a re-seed.
+        # The events carry the run id too and must be rewritten with it, or the
+        # event store and the run store stop agreeing on what a run is.
+        run_id = known.get((kind, rec.ref_id, rec.dataset_id, demo_date), rec.run_id)
+        events = [{**e, "run_id": run_id} for e in events]
         rec = SeedRun(
             **{
                 **rec.to_dict(),
+                "run_id": run_id,
                 "executed_at": datetime.now(UTC).isoformat(),
                 "demo_date": demo_date,
             }

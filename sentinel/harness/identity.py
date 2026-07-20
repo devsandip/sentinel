@@ -27,6 +27,10 @@ class Persona:
     can_toggle_controls: bool
     read_only: bool
     description: str
+    # Whether this persona reads the whole audit ledger or only its own runs.
+    # Defaults to False: a persona whose entitlement is unstated gets the
+    # narrow one, because an access check that fails open is not a check.
+    can_view_all_runs: bool = False
     # Autonomy tier inputs (governed-codegen 4.6). tier_role maps the display
     # persona to a resolution role (data_scientist, model_validator, ...) and
     # attestations are the credentials that lift a data scientist above L1.
@@ -53,6 +57,7 @@ def all_personas() -> list[Persona]:
             can_toggle_controls=bool(p.get("can_toggle_controls", False)),
             read_only=bool(p.get("read_only", False)),
             description=str(p.get("description", "")).strip(),
+            can_view_all_runs=bool(p.get("can_view_all_runs", False)),
             tier_role=str(p.get("tier_role", "")),
             attestations=tuple(p.get("attestations", []) or []),
         )

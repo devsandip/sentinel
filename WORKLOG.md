@@ -735,3 +735,44 @@ Append-only session handoff log. Newest entries at the bottom.
 - **A gate event means the control was consulted, not that it said no.** Refusal accounting first read `controls_fired`, which mixes blocked, redaction and gate levels, so a passing eval gate and an APPROVED decision counted as refusals. That distinction became the shape of the whole feature: tiles, filter and per-stage chips all split armed from fired, and stopped from withheld.
 - **CTL-TIER-01 moved out of the doc-only catalogue.** It was listed unimplemented while `flow.py` has been enforcing it, so its chip on a refused run would have read "cannot fire". The catalogue was stale, not the code.
 - **`git merge-tree <base> HEAD main` is not a merge dry run** on git 2.35. It reported zero conflicts; the real merge conflicted immediately. Use a throwaway branch instead.
+
+## 2026-07-20 (evening) — stage on the event, role scoping on the ledger
+
+**Did:**
+- Added `AuditEvent.stage`, written at the call site: 22 sites in `sentinel/govflow/flow.py`, 8 in `l3.py`. Rejected inferring it from the `action` string, which needs a second table kept in step with 30 call sites and misfiles silently. Routes with no stage spine leave it empty and a test asserts they do.
+- Rewrote `_audit_steps` in `app.py` to read the stamp first and fall back to agent matching, so analysis and credit_risk are unchanged. The caption apologising for unattributable events is gone.
+- Added `can_view_all_runs` to `personas.yaml` (default False) and `Persona`, plus `visible_runs()` in `audit_store.py`. It scopes the ledger rows, the "Ran by" options and the drill-down. The drill-down re-check is the load-bearing one: `?run=<id>` would otherwise be the way around it.
+- Taught `scripts/seed_runs.py` to keep each plan slot's existing run id, then re-seeded. 24 ids unchanged, so shared links survive.
+- 7 new tests, 494 passed. Merged as PR #25, branch deleted.
+
+**State now:**
+- `main` at `bf232a0`. No PRs open. 494 passed, 2 skipped, ruff clean.
+- **Prod does not carry PR #25.** It still serves the PR #23 bundle `sentinel-20260720-155822.zip`.
+- Verified in the browser: the Analyst sees 20 of 24 runs with the scope banner and a disabled "Ran by"; a deep link to the MRM Approver's run is refused; a completed govflow run files events under all eight stages that emitted one.
+
+**Next:**
+- Deploy PR #25 from `~/Developer/sentinel` with `AWS_PROFILE=admin ./deploy/aws/deploy.sh`.
+- Then split `app.py` (3,435 lines) into `sentinel/ui/screens/*.py`. See Decisions.
+
+**Decisions:**
+- Chose the expensive fix over the cheap one for stage attribution. On an audit surface a quiet misfiling is worse than an admitted absence, and an inference table drifts from its call sites by construction.
+- Wrote entitlement into `personas.yaml` rather than matching role names in Python, so adding a persona is a config change.
+- The scope is announced on the screen, not silently applied: a filtered ledger that does not say it is filtered turns the four KPI tiles above it into quiet understatements.
+- A withheld run says it exists and names who ran it. Hiding existence is the stronger control and correct externally; here the reader is a colleague holding a link, and "no such run" sends them chasing a bug.
+- Audited all ten worktrees before merging and found no live parallel work: nine idle, two dead branches. Reframes the `app.py` split from tidiness to the thing blocking parallelism. Sandip declined to prune the worktrees.
+
+## 2026-07-20 (evening, cont.) — deployed PR #25
+
+**Did:**
+- Deployed `main` at `174df5e`. Bundle `sentinel-20260720-180457.zip`, stack `sentinel-eb` updated, EB Health Green. `requirements.txt` passed the `uv.lock` guard before anything touched AWS.
+- Verified on the live instance by the behaviour that only exists in this build, not by health: the Data Scientist sees 20 of 24 runs with the "Scoped to your runs" banner, KPI tiles scoped with it, "Ran by" disabled while Kind and Control stay live; the completed govflow run files events under all eight stages that emitted one, with no apology caption.
+- Transport: health 200, root 200 in 0.66s, WebSocket `/_stcore/stream` 101, live-LLM key present.
+
+**State now:**
+- Prod is in sync with `main`. No PRs open. 494 passed, 2 skipped.
+
+**Next:**
+- Split `app.py` (3,435 lines) into `sentinel/ui/screens/*.py`. Leave `st.navigation` as a separate later change.
+
+**Decisions:**
+- Deploy on merge rather than batching against the worktrees. The deploy is not incremental (the script zips the repo root and ships a fresh bundle), so batching is free in effort and costs bisection. The previous deploy carried four changes after three stale sessions; this one carried one tested change. The argument holds only while merges stay small, which is another reason to split `app.py`.

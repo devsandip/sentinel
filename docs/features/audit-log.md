@@ -305,11 +305,10 @@ Per-step event attribution is **declared, not guessed**. analysis and
 credit_risk name one agent per step, so an event's `agent` identifies its step
 exactly and those events group under it. govflow and L3 do not: `flow.py`
 records `agent="govflow"` from Ask, Plan and Access alike, so grouping by agent
-would file events under the wrong stage. Those stages carry a false
-`attributable` flag, show their own exact detail and controls, and their events
-stay in the run-level stream under a caption saying why. Making that honest
-would mean stamping the stage onto the event, which is a follow-up: ~30 call
-sites in `flow.py` and `l3.py`.
+would file events under the wrong stage.
+
+That was left as a caption apologising for the gap, and then fixed properly on
+2026-07-20 (see "Stamping the stage on the event" below).
 
 ### The nine-stage shape (2026-07-20, supersedes "the run's own vocabulary")
 
@@ -500,3 +499,77 @@ gap, not a reporting one, and the screen names it rather than papering over it.
 
 The Audit Log renders what is true. It does not print a column that implies a
 control the platform does not have.
+
+### Stamping the stage on the event (2026-07-20)
+
+The screen used to print a caption on every govflow and L3 run saying its
+events could not be filed under a stage, because the emitting agent does not
+identify one. The caption was honest and the behaviour was not good enough: the
+governance-heaviest route was the one whose evidence read as an undifferentiated
+stream.
+
+The cheap fix would have been to infer the stage from the `action` string. That
+was rejected. It creates a second mapping table that has to stay in step with
+30 call sites, and the failure mode is silent: a new action nobody adds to the
+table gets filed under whatever the table's default is, and an audit surface
+that misfiles quietly is worse than one that admits a gap.
+
+So `AuditEvent` carries a `stage`, and the call site writes it, because the call
+site is the only place that knows. `AuditLog.record` takes `stage=""` and the
+field defaults to empty, so events recorded before it existed still parse.
+All 22 sites in `flow.py` and 8 in `l3.py` now stamp one, and three tests hold
+the line: every nine-stage event has a stage, the stage is one of the nine, and
+it names a stage the run's own `StageRecord` list also records. Routes with no
+stage spine (analysis, credit_risk) leave it empty, and a test asserts they do
+rather than guessing.
+
+The screen reads the stamp first and falls back to agent matching, so the two
+older routes are unchanged. What is left over is genuinely run-level - the run
+starting and ending, the model being registered - and the caption now says that
+instead of apologising.
+
+Re-seeding was the awkward part. Every run mints a fresh uuid, so a re-seed
+would have renumbered all 24 runs and turned every shared `?run=<id>` link into
+a 404. `scripts/seed_runs.py` now reads the ids already on file, keyed by the
+plan slot (kind, ref_id, dataset, demo_date), and keeps them. Nothing else is
+carried over: status, metrics, controls and events are always the new
+execution's own.
+
+### Who may read the ledger (2026-07-20)
+
+The Audit Log was the one screen that ignored the access control the rest of
+the product is about: any persona read every run, and the "Ran by" filter
+offered every actor to everyone.
+
+Entitlement is now declared per persona in `config/personas.yaml` as
+`can_view_all_runs`, not decided in code by matching role names. Oversight roles
+read the whole ledger, because reading other people's work is the job: the third
+line (Internal Auditor) audits it, the second line (Model Validator, MRM
+Approver) reviews and signs it, and the Platform Admin operates the platform.
+The first line reads its own runs only. The field defaults to `False`, so a
+persona whose entitlement is unstated gets the narrow one.
+
+`visible_runs(runs, persona)` in `audit_store.py` is the single predicate, and
+three surfaces go through it:
+
+- the ledger rows, scoped before anything is counted, so the four KPI tiles
+  describe the reader's view and not the platform;
+- the "Ran by" options, built from the scoped set, so the filter can only ever
+  narrow a view and never widen one. For a role scoped to itself that leaves one
+  option, and the control is disabled and says why rather than posing as a
+  choice;
+- the drill-down screen, which re-checks. `?run=<id>` is a real address, so
+  checking only on the ledger would make the deep link the way around the check.
+
+Two calls worth naming. **The scope is announced, not silently applied**: a
+filtered ledger that does not say it is filtered reads as the whole record, and
+every tile under it is then a quiet understatement. And **a withheld run says it
+exists**. Hiding existence is the stronger control and the right one on an
+external surface; here the reader is an employee holding a link a colleague sent
+them, and "no such run" would send them chasing a bug instead of asking for
+access.
+
+What this is not: authentication. The identity chip is a demo sign-in with no
+credential behind it, so any reader can switch to the Auditor and see
+everything. The screen says so where it announces the scope. This demonstrates
+the policy, it does not enforce it.
