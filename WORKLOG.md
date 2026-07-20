@@ -801,3 +801,25 @@ Append-only session handoff log. Newest entries at the bottom.
 - Deny-list sweeps report the size of the sweep and name only their hits; allow-list checks name every construct. Naming all of the former means printing the file back.
 - The check catalogue lives in `gate.py`, not the screen. A screen holding its own list of what the enforcement does is a claim nothing holds the code to, which is the fourth instance of that fault in this build.
 - Stated judgements and constructs as two numbers. The verdict said "judged 61 constructs" while the gutter under it summed to 27; on the one screen whose argument is that its numbers can be checked, that would have been the feature undone by its own headline.
+
+## 2026-07-20 (evening, cont.) — deployed the Gate read, and nearly shipped the wrong build
+
+**Did:**
+- Deployed `main` at `29ad22b`, carrying PR #29 (the Gate read), #30 (the Live LLM path) and #32 (the session record). Bundle `sentinel-20260720-191009.zip`, application version `sentinel-eb-applicationversion-up7yzgu3eukn`, EB Ready and Green.
+- Caught the primary checkout staged to revert all three merges before building the bundle. On `main` at exactly `origin/main`, so the ancestor check passed; the index held 2,699 deletions. Stashed as `stash@{0}` rather than reset.
+- Verified prod on two runs, not one: benign L2 draws 7 green and 2 dashed grey with 11 gutter rows; the SQL wildcard draws 1 red, 7 green, 1 dashed, `SELECT *` as the refused chip. Transport: health 200, root 200 in 0.74s, static gzipped, WebSocket 101, no console errors.
+
+**State now:**
+- `main` at `9a43587`. Prod carries it apart from the two docs merges after the bundle was cut.
+- PR #33 (`claude/help-faq-ask-me-f03cd3`, an FAQ and grounded Ask-me chat) is open and not mine.
+- `stash@{0}` on the primary checkout holds the stale revert. Drop it once it is clearly junk.
+
+**Next:**
+- Put the two-clause guard in `deploy/aws/deploy.sh`: refuse unless `HEAD` is an ancestor of `origin/main` AND `git status --porcelain` is empty. The second clause is the one that would have fired today.
+- One live-LLM run to demonstrate PR #30, which is shipped but only exercised through the scripted path.
+- Split `app.py` into `sentinel/ui/screens/*.py`. Still deferred.
+
+**Decisions:**
+- Verified with two requests rather than one. The Gate panel's claim is that it reads rather than badges, and only a second run with a different shape tests that claim; a single green run is indistinguishable from a badge.
+- Stashed rather than hard-reset. "Nothing here is new" was a conclusion from reading a diff, and a hard reset would have made it true by force. Nothing untracked was present, so the stash cost nothing and kept the conclusion falsifiable.
+- Did not spend a live model call to verify someone else's PR. Reported it as shipped, not demonstrated.
