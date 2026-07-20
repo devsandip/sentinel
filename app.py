@@ -9,6 +9,8 @@ a real model behind a cost cap.
 
 from __future__ import annotations
 
+import html
+
 import pandas as pd
 import streamlit as st
 
@@ -21,9 +23,11 @@ from sentinel.analyses.spec import (
     P_INT,
     ParamError,
 )
-from sentinel.datasets import all_datasets
+from sentinel.datasets import all_datasets, get_dataset, role_note, schema
 from sentinel.datasets import available as dataset_available
 from sentinel.govflow.controls_info import control_info
+from sentinel.govflow.purpose_matrix import PURPOSE_LABEL, PURPOSES, matrix_rows
+from sentinel.govflow.tiers import CLASSIFICATION_CEILING
 from sentinel.harness.controls import CONTROL_CATALOG, ControlSettings, from_disabled
 from sentinel.harness.identity import all_personas, default_persona, get_persona
 from sentinel.harness.model_card import ModelCard, render_markdown, render_pdf
@@ -238,6 +242,13 @@ st.markdown(
       div[class*="st-key-tblhead_"] button[data-testid="stPopoverButton"] p {
         font-family:inherit; font-size:10.5px; font-weight:700;
         letter-spacing:.07em; text-transform:uppercase; }
+      /* A push button living in a table cell (the dataset registry's Contract
+         drill-down): compact, and never wrapping its label mid-word, which is
+         what a narrow cell does to a two-syllable button by default. */
+      div[class*="st-key-tblrow_"] div[data-testid="stButton"] button {
+        padding:2px 8px; min-height:1.5rem; white-space:nowrap; font-size:11.5px; }
+      div[class*="st-key-tblrow_"] div[data-testid="stButton"] button p {
+        font-size:11.5px; white-space:nowrap; }
       /* A selectable row: the mockup's .row-sel accent tint plus the .rowgood
          left bar, on the row the user has picked. The key carries the state
          because CSS cannot reach a Streamlit container any other way. */
@@ -273,6 +284,66 @@ st.markdown(
       .scope .k { font-size:9.5px; font-weight:700; letter-spacing:.09em;
         text-transform:uppercase; color:var(--faint); }
       .scope .v { font-size:12.5px; color:var(--ink); }
+
+      /* ---------- the data contract (dataset catalogue detail) ---------- */
+      /* The contract view publishes metadata only, so the one thing it must
+         never look like is a data grid. The notice band says so in the page,
+         and the column table carries no value column at all. */
+      .cnotice { border:1px solid var(--accent-soft-border); border-left:3px solid
+        var(--accent); background:var(--accent-soft); border-radius:var(--r-md);
+        padding:10px 14px; margin:6px 0 14px; font-size:12.5px; color:var(--ink); }
+      .cnotice b { font-weight:650; }
+      .cnotice .ids { font-family:var(--mono); font-size:11.5px; color:var(--accent); }
+      /* Role chips. Colour carries meaning: red for what is never granted,
+         amber for what a purpose must justify, neutral for ordinary inputs. */
+      .role { font-size:10px; font-weight:700; padding:2px 7px; border-radius:5px;
+        letter-spacing:.02em; white-space:nowrap; border:1px solid var(--border);
+        background:var(--surface-2); color:var(--muted); }
+      .role.pii { background:var(--danger-soft); color:var(--danger-ink);
+        border-color:var(--danger-border); }
+      .role.protected { background:var(--warn-soft); color:var(--warn-ink);
+        border-color:var(--warn-border); }
+      .role.target, .role.treatment { background:var(--accent-soft); color:var(--accent);
+        border-color:var(--accent-soft-border); }
+      .role.outcome, .role.entity_id, .role.timestamp { background:var(--surface-2);
+        color:var(--faint); }
+      /* The role legend: what each role in this dataset costs a requester at
+         Access, stated once rather than on every row it applies to. */
+      .rleg { border:1px solid var(--border); border-radius:var(--r-md);
+        background:var(--surface-2); padding:8px 12px; margin:4px 0 10px; }
+      .rleg .r { display:grid; grid-template-columns:88px 1fr; gap:10px;
+        align-items:baseline; padding:2px 0; }
+      .rleg .v { font-size:12px; color:var(--muted); }
+      /* The column dictionary. One HTML table rather than per-row Streamlit
+         containers: lendingclub is 152 columns wide and a widget per row would
+         crawl. Nothing here needs a popover, so nothing here needs a widget. */
+      .dict { width:100%; border-collapse:collapse; margin:2px 0 6px; }
+      .dict th { font-size:10.5px; font-weight:700; letter-spacing:.07em;
+        text-transform:uppercase; color:var(--faint); text-align:left;
+        padding:7px 10px; border-bottom:1px solid var(--border-strong); }
+      .dict td { font-size:12.5px; color:var(--ink); padding:7px 10px;
+        border-bottom:1px solid var(--border); vertical-align:top; }
+      .dict tr:hover td { background:var(--surface-2); }
+      .dict .cn { font-family:var(--mono); font-size:12px; white-space:nowrap; }
+      .dict .ty { font-family:var(--mono); font-size:11.5px; color:var(--muted); }
+      .dict .undoc { color:var(--faint); font-style:italic; }
+      .dict .drv { font-size:9.5px; font-weight:700; letter-spacing:.05em;
+        color:var(--faint); border:1px solid var(--border); border-radius:4px;
+        padding:1px 5px; margin-left:6px; }
+      /* Foreign keys, as the catalogue publishes them: an edge list, not an
+         ERD. The relationships are the fact; a diagram would be decoration. */
+      .fk { display:grid; grid-template-columns:1fr auto; gap:10px;
+        align-items:baseline; padding:7px 12px; border:1px solid var(--border);
+        border-radius:var(--r-sm); background:var(--surface); margin-bottom:6px; }
+      .fk .e { font-family:var(--mono); font-size:12px; color:var(--ink); }
+      .fk .e .ar { color:var(--accent); font-weight:700; padding:0 4px; }
+      .fk .c { font-size:11px; color:var(--faint); white-space:nowrap; }
+      .fk .n { grid-column:1 / -1; font-size:11.5px; color:var(--muted); }
+      /* Documentation coverage: a bar, because the number is a governance
+         metric and a bar is how a governance office reads one. */
+      .cov { height:6px; border-radius:3px; background:var(--surface-2);
+        border:1px solid var(--border); overflow:hidden; margin-top:6px; }
+      .cov > i { display:block; height:100%; background:var(--accent); }
 
       /* ---------- cards ---------- */
       div[data-testid="stVerticalBlockBorderWrapper"] {
@@ -1651,7 +1722,7 @@ def _assign_validator_action(entry, decision) -> None:  # noqa: ANN001
         st.rerun()
 
 
-_DS_COLS = (2.5, 3.4, 2.3, 1.2, 1.0, 2.1, 1.5, 1.5)
+_DS_COLS = (2.0, 2.8, 1.9, 1.0, 0.8, 1.8, 1.2, 1.2, 1.6)
 _DS_HEAD = (
     "id",
     "name",
@@ -1661,10 +1732,21 @@ _DS_HEAD = (
     "license",
     "commercial",
     "onboarded",
+    "",
 )
 
 
+def _open_contract(ds_id: str) -> None:
+    st.session_state.ds_contract = ds_id
+
+
 def render_datasets() -> None:
+    # The registry is the list; the contract is the detail. Same screen, so the
+    # sidebar nav item stays lit and the app's Back stack is not spent on a
+    # drill-down that belongs to this page.
+    if st.session_state.get("ds_contract"):
+        render_dataset_contract(st.session_state.ds_contract)
+        return
     st.subheader("Dataset registry")
     st.markdown(
         "<span class='muted'>The onboarded-dataset inventory. Each dataset carries "
@@ -1720,12 +1802,291 @@ def render_datasets() -> None:
             else "<span class='badge neutral'>registered</span>",
             unsafe_allow_html=True,
         )
+        cols[8].button(
+            "Contract",
+            key=f"dsopen_{d.id}",
+            use_container_width=True,
+            on_click=_open_contract,
+            args=(d.id,),
+            help="Schema, column dictionary, roles and relationships. Metadata "
+            "only: no values.",
+        )
     st.caption(
         "All 8 registered datasets ship onboarded (scripts/onboard_datasets.py "
         "produces their local files). 'flagged' commercial status means the "
         "license restricts commercial use and the platform blocks it; no control "
         "id is claimed for it, because the enforcement lives in the dataset "
         "registry rather than in the control catalogue."
+    )
+
+
+_UNDOC = "<span class='undoc'>not documented</span>"
+
+
+def _compact(n: int) -> str:
+    """A row count that fits a metric tile. 2,260,000 truncates to '2,260,...'
+    at this tile width, which reads as broken rather than as a big number."""
+    if n >= 1_000_000:
+        return f"{n / 1_000_000:.2f}M".replace(".00M", "M")
+    return f"{n:,}"
+
+
+def _role_chip(role: str) -> str:
+    return f"<span class='role {html.escape(role)}'>{html.escape(role)}</span>"
+
+
+def _role_legend(sch) -> str:  # noqa: ANN001
+    """What each role in this dataset costs a requester at Access, once.
+
+    The consequence belongs next to the chip that carries it, but repeating it
+    on every protected column turns a dictionary into a lecture. One legend,
+    listing only the roles this dataset actually uses.
+    """
+    seen: list[str] = []
+    for table in sch.tables:
+        for col in table.columns:
+            if col.role not in seen:
+                seen.append(col.role)
+    return "<div class='rleg'>" + "".join(
+        f"<div class='r'>{_role_chip(r)}"
+        f"<span class='v'>{html.escape(role_note(r))}</span></div>"
+        for r in seen
+    ) + "</div>"
+
+
+def _dict_table(table) -> str:  # noqa: ANN001
+    """The column dictionary for one table, as one HTML table.
+
+    There is deliberately no value column, no example, and no distribution. A
+    reader learns what a column *is* and what requesting it will cost them at
+    Access; what it *contains* is data, and data needs a purpose.
+    """
+    rows = []
+    for c in table.columns:
+        drv = "<span class='drv'>derived</span>" if c.derived else ""
+        desc = html.escape(c.description) if c.documented else _UNDOC
+        rows.append(
+            f"<tr><td class='cn'>{html.escape(c.name)}{drv}</td>"
+            f"<td class='ty'>{html.escape(c.dtype)}</td>"
+            f"<td>{_role_chip(c.role)}</td>"
+            f"<td>{desc}</td></tr>"
+        )
+    return (
+        "<table class='dict'><thead><tr><th>column</th><th>type</th><th>role</th>"
+        "<th>description</th></tr></thead><tbody>"
+        + "".join(rows)
+        + "</tbody></table>"
+    )
+
+
+def _close_contract() -> None:
+    st.session_state.ds_contract = ""
+
+
+def render_dataset_contract(ds_id: str) -> None:
+    """The data contract for one dataset: schema, dictionary, roles, foreign
+    keys, and the purposes the matrix permits on it.
+
+    This is a catalogue, not a data browser, and the distinction is the whole
+    point. A bank publishes metadata far more widely than data: you read the
+    catalogue to decide what to ask for, then declare a purpose to get values.
+    An "explore the data" button on this page would hand out values with no
+    declared purpose, no resolved tier, no column grant and no disclosure
+    screen, quietly undoing four controls the rest of the app spends its time
+    proving. So the page shows the contract, and the route to values is the Run
+    flow, where those controls are.
+    """
+    spec = get_dataset(ds_id)
+    if spec is None:
+        st.error(f"Unknown dataset {ds_id!r}.")
+        st.button("Back to registry", on_click=_close_contract)
+        return
+
+    sch = schema(ds_id)
+    classification = _classification_of(ds_id)
+    ceiling = CLASSIFICATION_CEILING.get(classification, "n/a")
+
+    st.button(
+        "Dataset registry",
+        key="ds_contract_back",
+        icon=":material/arrow_back:",
+        on_click=_close_contract,
+    )
+    st.subheader(f"Data contract · {spec.name}")
+    st.markdown(
+        f"<span class='muted'><code>{html.escape(ds_id)}</code> · "
+        f"{html.escape(spec.license)} · "
+        f"<a href='{html.escape(spec.source_url)}'>provenance</a></span>",
+        unsafe_allow_html=True,
+    )
+    if spec.notes:
+        st.markdown(
+            f"<span class='muted'>{html.escape(spec.notes)}</span>",
+            unsafe_allow_html=True,
+        )
+
+    st.markdown(
+        "<div class='cnotice'><b>Metadata only.</b> This page publishes the "
+        "schema, the column dictionary, roles and foreign keys. It shows no cell "
+        "values, no distributions and no samples, because reading values is data "
+        "access and data access needs a declared purpose "
+        "(<span class='ids'>CTL-PURP-01</span>), a resolved autonomy tier, a "
+        "column grant (<span class='ids'>CTL-COL-01</span>) and a disclosure "
+        "screen (<span class='ids'>CTL-DISC-02</span>). Read the contract here; "
+        "request the values in Run.</div>",
+        unsafe_allow_html=True,
+    )
+
+    if not sch.onboarded:
+        st.warning(
+            "Registered but not onboarded: the local file is not present, so the "
+            "schema cannot be published yet. Run "
+            f"`uv run python scripts/onboard_datasets.py {ds_id}`."
+        )
+        return
+
+    local_rows = sum(t.rows for t in sch.tables)
+    m = st.columns(5)
+    m[0].metric("Rows at source", _compact(spec.rows))
+    m[1].metric("Tables", len(sch.tables))
+    m[2].metric("Columns", sch.n_columns)
+    m[3].metric("Documented", f"{sch.coverage:.0%}")
+    m[4].metric("Sensitive columns", len(sch.sensitive_columns()))
+    if local_rows != spec.rows:
+        # The registry counts the source; the file on disk is a sample for the
+        # big sets. Publishing both is the honest option, and a row count is a
+        # shape fact, not a value.
+        st.caption(
+            f"Onboarded as a sample: {local_rows:,} rows locally against "
+            f"{spec.rows:,} at source. Analyses run on the sample."
+        )
+    st.markdown(
+        f"<div class='cov'><i style='width:{sch.coverage * 100:.0f}%'></i></div>"
+        f"<span class='muted'>{sch.n_documented} of {sch.n_columns} columns carry a "
+        "description. Coverage is reported rather than smoothed over: an "
+        "undocumented column is one nobody can request responsibly, so the gap is "
+        "a governance metric, not a cosmetic one.</span>",
+        unsafe_allow_html=True,
+    )
+
+    st.markdown("**What this dataset may be used for**")
+    row = next((r for r in matrix_rows() if r["dataset"] == ds_id), {})
+    st.markdown(
+        "<div class='pgrid'>"
+        + "".join(
+            f"<span class='pcell {'allow' if row.get(p) else 'deny'}'>"
+            f"<span class='mk'>{'✓' if row.get(p) else '✕'}</span>"
+            f"{html.escape(PURPOSE_LABEL[p])}</span>"
+            for p in PURPOSES
+        )
+        + "</div>",
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        f"<span class='muted'>Classified <b>{html.escape(classification)}</b>, which "
+        f"caps autonomy on this data at <b>{html.escape(ceiling)}</b> however "
+        "trusted the requester is. A refused purpose is refused at Access before "
+        "any code is generated: same person, same role, different reason, "
+        "different answer.</span>",
+        unsafe_allow_html=True,
+    )
+
+    if len(sch.tables) > 1:
+        st.markdown("**Tables**")
+        st.markdown(
+            "<table class='dict'><thead><tr><th>table</th><th>rows</th>"
+            "<th>columns</th><th>description</th></tr></thead><tbody>"
+            + "".join(
+                f"<tr><td class='cn'>{html.escape(t.name)}</td>"
+                f"<td class='ty'>{t.rows:,}</td>"
+                f"<td class='ty'>{len(t.columns)}</td>"
+                f"<td>{html.escape(t.description) or _UNDOC}</td></tr>"
+                for t in sch.tables
+            )
+            + "</tbody></table>",
+            unsafe_allow_html=True,
+        )
+
+    if sch.relationships:
+        st.markdown("**Relationships**")
+        st.markdown(
+            "".join(
+                f"<div class='fk'><span class='e'>"
+                f"{html.escape(r.from_table)}.{html.escape(r.from_column)}"
+                f"<span class='ar'>-&gt;</span>"
+                f"{html.escape(r.to_table)}.{html.escape(r.to_column)}</span>"
+                f"<span class='c'>{html.escape(r.cardinality)}</span>"
+                + (f"<span class='n'>{html.escape(r.note)}</span>" if r.note else "")
+                + "</div>"
+                for r in sch.relationships
+            ),
+            unsafe_allow_html=True,
+        )
+        st.caption(
+            "Foreign keys as the catalogue publishes them. A join is where "
+            "minimisation leaks: two individually harmless tables can re-identify "
+            "a person once joined, which is why the relationship map is metadata "
+            "an analyst should see before requesting either side."
+        )
+
+    st.markdown("**Column dictionary**")
+    st.markdown(_role_legend(sch), unsafe_allow_html=True)
+    if len(sch.tables) > 1:
+        for t in sch.tables:
+            with st.expander(f"{t.name} · {len(t.columns)} columns · {t.rows:,} rows"):
+                st.markdown(_dict_table(t), unsafe_allow_html=True)
+    else:
+        st.markdown(_dict_table(sch.tables[0]), unsafe_allow_html=True)
+
+    # Table-qualified, because on a relational dataset a bare `account` or
+    # `birth_number` does not say which table it is a risk in.
+    qualified = [
+        f"{t.name}.{c.name}" if len(sch.tables) > 1 else c.name
+        for t in sch.tables
+        for c in t.columns
+        if c.role in ("pii", "protected")
+    ]
+    if qualified:
+        n = len(qualified)
+        st.caption(
+            f"{n} column{'' if n == 1 else 's'} carr{'ies' if n == 1 else 'y'} a "
+            "PII or protected role: "
+            + ", ".join(f"`{q}`" for q in qualified)
+            + ". PII is never granted and is redacted before any text reaches a "
+            "model; a protected attribute is granted only to the purpose whose "
+            "axis it is, and is excluded from model features."
+        )
+
+    st.divider()
+    st.markdown("**To see values, take this dataset through a control**")
+    a, b = st.columns(2)
+    # Imperative rather than on_click: _nav_to reruns, and a rerun belongs in
+    # the script body, not in a widget callback.
+    if a.button(
+        "Declare a purpose in Run",
+        key="ds_contract_to_run",
+        icon=":material/play_arrow:",
+        use_container_width=True,
+        help="The governed route: declare a purpose, resolve a tier, take the "
+        "column grant, and let the disclosure screen run on the output.",
+    ):
+        _close_contract()
+        _nav_to("Run")
+    if b.button(
+        "Profile it under governance",
+        key="ds_contract_to_analyses",
+        icon=":material/query_stats:",
+        use_container_width=True,
+        help="The data_profiling analysis computes distributions, missingness "
+        "and cardinality as a certified analysis, audited and gated.",
+    ):
+        _close_contract()
+        _nav_to("Analyses")
+    st.caption(
+        "Missingness, cardinality and distributions look like metadata but are "
+        "computed from values, so they are profile outputs rather than catalogue "
+        "entries. The catalogue knows the shape; the profile knows the contents; "
+        "only the profile is data access."
     )
 
 
