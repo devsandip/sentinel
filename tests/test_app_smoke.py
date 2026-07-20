@@ -172,6 +172,62 @@ def test_adoption_section_renders_seeded_history():
     # layer in test_adoption.py::test_per_dataset_matches_the_store.
 
 
+def test_audit_log_section_renders_the_cross_run_ledger():
+    at = _boot()
+    at.button(key="nav_auditlog").click().run()
+    assert not at.exception
+    body = " ".join(m.value for m in at.markdown)
+    assert "Every run the platform has executed" in body
+    # The four KPI tiles, by their exact labels.
+    labels = {m.label for m in at.metric}
+    assert {"Runs logged", "Runs with a refusal", "Four-eyes coverage",
+            "Controls fired"} <= labels
+
+
+def test_audit_log_opens_a_run_and_shows_its_decision_summary():
+    """The five things the feature exists to answer, on one screen."""
+    at = _boot()
+    at.button(key="nav_auditlog").click().run()
+    # Open the run seeded to hit CTL-SOD-01: it is the only row that exercises
+    # every part of the detail block at once.
+    from sentinel.platform.audit_store import audit_runs
+
+    target = next(
+        r
+        for r in audit_runs()
+        if any(
+            (e.get("extra") or {}).get("control") == "CTL-SOD-01" for e in r.events
+        )
+    )
+    at.button(key=f"audopen_{target.run_id}").click().run()
+    assert not at.exception
+    # The decision summary spans markdown and the semantic callouts: the
+    # "Caught" line is an st.warning, "nothing refused" an st.success.
+    body = " ".join(
+        [m.value for m in at.markdown]
+        + [w.value for w in at.warning]
+        + [e.value for e in at.success]
+        + [e.value for e in at.error]
+    )
+    assert target.run_id in body
+    assert "stopped the run" in body  # allowed vs caught, counted
+    assert "CTL-SOD-01" in body  # who else had to sign, and what refused
+    assert "MRM Approver" in body  # who ran it
+
+
+def test_audit_log_never_shows_a_refused_run_with_an_empty_caught_cell():
+    """The screen-level counterpart to the store-level test.
+
+    A run refused at Ask carries an empty controls_fired, so this would render
+    a visibly-refused row with nothing explaining it.
+    """
+    at = _boot()
+    at.button(key="nav_auditlog").click().run()
+    body = " ".join(m.value for m in at.markdown)
+    # The tier-block run is the case: its only refusal lives in the events.
+    assert "tier_block" in body or "CTL-TIER-01" in body
+
+
 def _popover_labels(at) -> list[str]:  # noqa: ANN001
     """Every popover trigger label on the current screen. A control chip that
     explains itself is a popover, so this is how the tests below tell a wired

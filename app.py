@@ -9,6 +9,9 @@ a real model behind a cost cap.
 
 from __future__ import annotations
 
+import html
+import json
+
 import pandas as pd
 import streamlit as st
 
@@ -23,9 +26,14 @@ from sentinel.analyses.spec import (
 )
 from sentinel.datasets import all_datasets
 from sentinel.datasets import available as dataset_available
-from sentinel.govflow.controls_info import control_info
+from sentinel.govflow.controls_info import control_info, implemented_ids
 from sentinel.harness.controls import CONTROL_CATALOG, ControlSettings, from_disabled
-from sentinel.harness.identity import all_personas, default_persona, get_persona
+from sentinel.harness.identity import (
+    all_personas,
+    default_persona,
+    get_persona,
+    policy_version,
+)
 from sentinel.harness.model_card import ModelCard, render_markdown, render_pdf
 from sentinel.orchestrator import (
     STATUS_AWAITING,
@@ -43,10 +51,18 @@ from sentinel.platform import (
     model_versions,
     reuse_metrics,
 )
+from sentinel.platform.audit_store import (
+    OUTCOME_AWAITING,
+    OUTCOME_OK,
+    OUTCOME_REFUSED,
+    audit_runs,
+)
+from sentinel.platform.audit_store import summary as audit_summary
 from sentinel.platform.certification import CertificationError, assign_validator
 from sentinel.platform.certification import all_entries as cert_entries
 from sentinel.platform.certification import evaluate as evaluate_cert
 from sentinel.platform.patterns import AVOIDED, IN_USE, PLANNED
+from sentinel.platform.run_history import KIND_CREDIT_RISK
 from sentinel.platform.templates import AVAILABLE, LIVE
 from sentinel.rag import corpus_summary
 from sentinel.ui.govflow import (
@@ -1062,6 +1078,22 @@ def tab_results(pub: dict) -> None:
         st.line_chart(pd.DataFrame({"TPR": roc["tpr"]}, index=roc["fpr"]))
 
 
+# Row tint by audit level, shared by the Pipeline audit tab and the Audit Log's
+# event stream so the two surfaces converge rather than drift. These are the
+# ui-spec 1.2 semantic soft tokens verbatim; the three hexes previously inlined
+# here (#fde7e6 / #fff4e0 / #eef2fb) were near-misses on them, and an audit
+# screen is a bad place to have two reds.
+_AUDIT_LEVEL_TINT = {
+    "blocked": "background-color:#fdeceb",  # --danger-soft
+    "redaction": "background-color:#fbf0dc",  # --warn-soft
+    "gate": "background-color:#e8eef9",  # --accent-soft
+}
+
+
+def _audit_level_style(row):  # noqa: ANN001, ANN201
+    return [_AUDIT_LEVEL_TINT.get(row["level"], "")] * len(row)
+
+
 def tab_audit(pub: dict) -> None:
     st.subheader("Audit log (append-only)")
     st.caption(
@@ -1083,15 +1115,9 @@ def tab_audit(pub: dict) -> None:
         )
     df = pd.DataFrame(rows)
 
-    def _style(row):
-        color = {
-            "blocked": "background-color:#fde7e6",
-            "redaction": "background-color:#fff4e0",
-            "gate": "background-color:#eef2fb",
-        }.get(row["level"], "")
-        return [color] * len(row)
-
-    st.dataframe(df.style.apply(_style, axis=1), width="stretch", height=460)
+    st.dataframe(
+        df.style.apply(_audit_level_style, axis=1), width="stretch", height=460
+    )
 
 
 def tab_fairness(pub: dict) -> None:
@@ -1775,6 +1801,400 @@ def render_adoption() -> None:
     )
 
 
+# --------------------------------------------------------------------------
+# Audit log (docs/features/audit-log.md): the one cross-run surface.
+# --------------------------------------------------------------------------
+# Harness actions are not catalogue ids, and minting CTL- ids to give a chip
+# something to open is the governance theatre ui-spec 4.3 refuses. So the
+# actions that DO have an explanation map onto the catalogue entry that holds
+# it; anything unmapped renders as an inert chip rather than a popover
+# claiming "not implemented" beside a control that demonstrably fired.
+_AUDIT_CTL_ALIAS = {
+    "rbac_access_denied": "rbac",
+    "pii_redacted": "pii",
+    "eval_gate": "eval_gate",
+    "approval_requested": "human_gate",
+    "approval_decision": "human_gate",
+    "approval_auto": "human_gate",
+    "tier_block": "CTL-TIER-01",
+}
+# approval_denied is deliberately absent. Two different refusals write it and
+# only one stamps a control id, so the run detail explains it in prose where
+# it can say which one fired; a single chip would have to pick one and be
+# wrong half the time.
+
+_AUD_HEAD = ("when", "run / analysis", "kind", "dataset", "ran by", "second signature",
+             "outcome", "caught")
+_AUD_COLS = (0.95, 1.45, 1.15, 1.4, 1.3, 1.5, 1.15, 2.15)
+
+# The store's kind constants are snake_case; a pill is easier to read, and
+# harder to wrap mid-word, with a space.
+_AUD_KIND_LABEL = {"credit_risk": "credit risk", "l3": "L3"}
+
+_OUTCOME_BADGE = {
+    OUTCOME_OK: ("ok", "completed"),
+    OUTCOME_REFUSED: ("danger", "refused"),
+    OUTCOME_AWAITING: ("warn", "awaiting"),
+}
+
+
+def _audit_ctl_chip(cid: str, col, key: str) -> None:  # noqa: ANN001
+    """One fired control, explained through the catalogue where it can be."""
+    target = _AUDIT_CTL_ALIAS.get(cid, cid)
+    info = control_info(target)
+    if info.implemented:
+        control_popover(target, label=cid, key=key, container=col)
+    else:
+        col.markdown(
+            f"<span class='ctlchip'><span class='st'></span>{html.escape(cid)}</span>",
+            unsafe_allow_html=True,
+        )
+
+
+def _audit_second_signature(r, col) -> None:  # noqa: ANN001
+    """The four-eyes cell. Five states, and two of them are not the same.
+
+    approve() tests promotion authority before segregation of duties, so an
+    author without authority is refused before CTL-SOD-01 is ever reached.
+    Collapsing the two into one "refused" badge would credit CTL-SOD-01 with a
+    refusal it did not make.
+    """
+    denial = next((e for e in r.events if e.get("action") == "approval_denied"), None)
+    if r.four_eyes:
+        who = get_persona(r.approver)
+        col.markdown(
+            f"<span class='badge ok'>signed</span><br>"
+            f"<span class='muted' style='font-size:11px'>"
+            f"{html.escape(who.name if who else r.approver)}</span>",
+            unsafe_allow_html=True,
+        )
+    elif denial and (denial.get("extra") or {}).get("control") == "CTL-SOD-01":
+        control_popover(
+            "CTL-SOD-01",
+            label="self-approval refused",
+            key=f"aud4e_{r.run_id}",
+            container=col,
+        )
+    elif denial:
+        col.markdown(
+            "<span class='badge danger'>no authority</span><br>"
+            "<span class='muted' style='font-size:11px'>role check</span>",
+            unsafe_allow_html=True,
+        )
+    elif r.run_kind == KIND_CREDIT_RISK:
+        col.markdown("<span class='badge neutral'>not reached</span>", unsafe_allow_html=True)
+    else:
+        col.markdown("<span class='badge neutral'>not required</span>", unsafe_allow_html=True)
+
+
+def _audit_detail(r) -> None:  # noqa: ANN001
+    """One run opened: what it was allowed, what was caught, who signed."""
+    st.markdown(f"#### Run `{r.run_id}`")
+    tier = r.metrics.get("tier")
+    st.markdown(
+        f"<span class='muted'>analysis <b>{html.escape(r.ref_id)}</b> &middot; "
+        f"dataset <b>{html.escape(r.dataset_id)}</b> &middot; tier "
+        + (f"<b>{html.escape(str(tier))}</b>" if tier else
+           "<i>n/a, this run kind predates the autonomy ladder</i>")
+        + f" &middot; origin <b>{html.escape(r.origin)}</b> &middot; policy "
+        f"<b>{html.escape(policy_version())}</b></span>",
+        unsafe_allow_html=True,
+    )
+
+    st.markdown("**Decision summary**")
+    caught = r.refusal_controls
+    stopped = 1 if r.stopped_at else 0
+    if not r.has_events:
+        # Not the same statement as "nothing was refused", and the difference
+        # is the whole credibility of the screen.
+        st.error(
+            "No event trail was persisted for this run. This is not the same "
+            "as nothing having been refused: the record is absent, not clean."
+        )
+    elif caught:
+        st.warning(
+            f"**Caught.** {len(caught)} refusal{'s' if len(caught) != 1 else ''}. "
+            f"**{stopped} stopped the run"
+            + (f" (at {r.stopped_at})" if r.stopped_at else "")
+            + f".** **{len(caught) - stopped} "
+            f"{'was' if len(caught) - stopped == 1 else 'were'} recorded and the "
+            "run continued.**"
+        )
+        cols = st.columns(min(len(caught), 5) or 1)
+        for i, c in enumerate(caught):
+            _audit_ctl_chip(c, cols[i % len(cols)], f"audd_{r.run_id}_{i}")
+    else:
+        st.success("Nothing was refused, suppressed or flagged on this run.")
+
+    actor = get_persona(r.actor)
+    st.markdown(
+        f"**Approvals.** Ran by **{html.escape(actor.name if actor else r.actor)}**"
+        + (f", {html.escape(actor.role)}" if actor else "")
+        + ". "
+        + _audit_approval_prose(r)
+    )
+    st.caption(
+        "Persona selection is a demo sign-in with no credential, so this "
+        "identity is self-asserted. Sentinel has no dual-control path: no "
+        "quorum, no second-signature state. Four-eyes here means the approver "
+        "is not the author, and that is all it means."
+    )
+
+    st.markdown("**Steps**")
+    if r.steps:
+        for s in r.steps:
+            mark = {"blocked": "✕", "error": "✕", "rejected": "✕",
+                    "skipped": "—", "awaiting_approval": "●"}.get(s.get("status"), "✓")
+            name = s.get("name", "")
+            # Skipped stages are struck, not hidden: the run reached them and
+            # declined to execute (ui-spec 4.4, suppressed not deleted).
+            label = f"~~{name}~~" if s.get("status") == "skipped" else f"**{name}**"
+            st.markdown(
+                f"{mark} {label} &nbsp;<span class='muted' style='font-size:12px'>"
+                f"{html.escape(str(s.get('agent', '')))} &middot; "
+                f"{html.escape(str(s.get('status', '')))}</span>",
+                unsafe_allow_html=True,
+            )
+    else:
+        st.info("No step records for this run in the seeded store.")
+
+    st.markdown("**Event stream**")
+    if r.events:
+        gaps = r.seq_gaps
+        st.caption(
+            (f"seq 0-{len(r.events) - 1}, no gaps."
+             if not gaps else f"GAP: sequence numbers {gaps} are missing.")
+            + " Sequence is monotonic within a run and resets per run. There is "
+            "no global ordering and no hash chain: this record is immutable by "
+            "convention, not by cryptography."
+        )
+        events_df = pd.DataFrame(
+            [
+                {
+                    "seq": e["seq"], "ts": e["ts"][11:19], "agent": e["agent"],
+                    "actor": e["actor"], "action": e["action"], "level": e["level"],
+                    "data touched": ", ".join(e.get("data_touched") or []),
+                    "summary": e["output_summary"],
+                }
+                for e in r.events
+            ]
+        )
+        st.dataframe(
+            events_df.style.apply(_audit_level_style, axis=1),
+            hide_index=True,
+            width="stretch",
+            height=320,
+        )
+        st.download_button(
+            "Events (JSONL)",
+            "\n".join(json.dumps(e) for e in r.events),
+            file_name=f"audit_{r.run_id}.jsonl",
+            key=f"auddl_{r.run_id}",
+        )
+    st.caption(
+        "tokens and cost are omitted deliberately: no call site populates them, "
+        "so they are always 0. Not captured at all: a written rationale on "
+        "approve or reject (the gate takes two buttons and no text), and an "
+        "authenticated principal."
+    )
+
+
+def _audit_approval_prose(r) -> str:  # noqa: ANN001
+    denial = next((e for e in r.events if e.get("action") == "approval_denied"), None)
+    if r.four_eyes:
+        who = get_persona(r.approver)
+        verb = "rejected" if r.status == STATUS_REJECTED else "approved"
+        return (
+            f"**{who.name if who else r.approver}** {verb} at the model gate. "
+            "Author and approver are different identities, which is what "
+            "CTL-SOD-01 requires."
+        )
+    if denial and (denial.get("extra") or {}).get("control") == "CTL-SOD-01":
+        return (
+            "The author tried to approve their own run and was refused by "
+            "**CTL-SOD-01**, the four-eyes control, enforced by identity "
+            "comparison rather than by role. The run is still awaiting an "
+            "independent approver."
+        )
+    if denial:
+        return (
+            "The author tried to promote their own model and was refused for "
+            "**lacking promotion authority**. Note this is not CTL-SOD-01: "
+            "approve() tests authority first, so the four-eyes check was never "
+            "reached."
+        )
+    if r.run_kind == KIND_CREDIT_RISK:
+        return "No approval decision was reached before the run ended."
+    return (
+        "Not required: this run kind has no human promotion gate. The govflow "
+        "and L3 routes produce an evidence pack instead, and it ships pending "
+        "because sign_evidence_pack is never called from app code."
+    )
+
+
+def render_audit_log() -> None:
+    st.subheader("Audit log")
+    st.markdown(
+        "<span class='muted'>Every run the platform has executed, every step "
+        "inside it, everything a control refused, and who signed off. "
+        "Append-only; nothing here is editable from the app.</span>",
+        unsafe_allow_html=True,
+    )
+    runs = audit_runs()
+    m = audit_summary(runs)
+    st.caption(
+        f"{m['runs']} runs on file, {m['events']} committed events. Seeded runs "
+        "were executed by scripts/seed_runs.py and ship with the build; refusal "
+        "density among them is a seeding choice, stated so the ledger is not "
+        "read as a natural rate. Live runs write to runtime/, which is "
+        "gitignored and excluded from the deploy bundle, so they do not survive "
+        "a restart."
+    )
+
+    a, b, c, d = st.columns(4)
+    a.metric("Runs logged", m["runs"], f"{m['live_runs']} this session")
+    b.metric(
+        "Runs with a refusal",
+        f"{m['refused']} of {m['runs']}",
+        help=f"{m['stopped']} stopped outright (the run ended at a control); "
+        f"{m['withheld']} completed with something withheld (a column denied, a "
+        "cell suppressed, a value redacted). A gate that fired and passed is "
+        "not counted.",
+    )
+    c.metric(
+        "Four-eyes coverage",
+        f"{m['four_eyes']} of {m['gated']}",
+        help="Of runs that reached a human gate, those signed by someone other "
+        "than the author. A refused self-approval counts as a refusal, not as "
+        "coverage.",
+    )
+    d.metric(
+        "Controls fired",
+        f"{len(m['controls_fired'])} of {len(implemented_ids())}",
+        help="Distinct controls that have actually fired, over the implemented "
+        "catalogue. This is coverage, not refusal: an eval gate that fired and "
+        "passed counts here.",
+    )
+
+    posture = st.segmented_control(
+        "Show",
+        ["All runs", "Refusals only", "Approval decisions"],
+        default="All runs",
+        key="aud_posture",
+    )
+    f1, f2, f3 = st.columns(3)
+    kinds = sorted({r.run_kind for r in runs})
+    kind = f1.selectbox(
+        "Kind",
+        ["All kinds", *kinds],
+        format_func=lambda k: _AUD_KIND_LABEL.get(k, k),
+        key="aud_kind",
+    )
+    people = sorted({r.actor for r in runs})
+    who = f2.selectbox(
+        "Ran by",
+        ["Anyone", *people],
+        format_func=lambda x: (get_persona(x).name if get_persona(x) else x)
+        if x != "Anyone"
+        else x,
+        key="aud_who",
+    )
+    ctls = sorted({c for r in runs for c in r.refusal_controls})
+    ctl = f3.selectbox("Control", ["Any control", *ctls], key="aud_ctl")
+
+    shown = [
+        r
+        for r in runs
+        if (posture != "Refusals only" or r.has_refusal)
+        and (posture != "Approval decisions" or r.reached_gate)
+        and (kind == "All kinds" or r.run_kind == kind)
+        and (who == "Anyone" or r.actor == who)
+        and (ctl == "Any control" or ctl in r.refusal_controls)
+    ]
+    st.caption(f"showing {len(shown)} of {len(runs)} runs, newest first")
+
+    if not shown:
+        st.info(
+            "No runs match these filters. Clear them, or run an analysis from "
+            "the Run or Analyses screen to add a live one."
+        )
+        return
+
+    table_head(_AUD_HEAD, _AUD_COLS, "aud")
+    # Row containers are keyed by POSITION, not by run id. Streamlit reconciles
+    # keyed containers across reruns by key, so run-id keys leave orphaned rows
+    # in the DOM the moment a filter changes the set: 9 visible rows rendered as
+    # 12 containers, 3 of them stale copies from the previous render. Positional
+    # keys shrink cleanly from the tail. Nothing is lost, because the CSS hooks
+    # off the key prefix rather than the id.
+    for i, r in enumerate(shown):
+        sel = st.session_state.get("aud_sel") == r.run_id
+        cols = table_row(_AUD_COLS, f"aud_{'sel_' if sel else ''}{i}")
+        td(cols[0], r.when[:16].replace("T", " "), mono=True)
+        with cols[1]:
+            if st.button(r.run_id, key=f"audopen_{r.run_id}", type="tertiary"):
+                st.session_state["aud_sel"] = None if sel else r.run_id
+                st.rerun()
+            st.markdown(
+                f"<span class='muted' style='font-size:11px'>{html.escape(r.ref_id)}</span>",
+                unsafe_allow_html=True,
+            )
+        cols[2].markdown(
+            "<span class='badge neutral'>"
+            f"{html.escape(_AUD_KIND_LABEL.get(r.run_kind, r.run_kind))}</span>",
+            unsafe_allow_html=True,
+        )
+        with cols[3]:
+            st.markdown(
+                f"<span class='td mono'>{html.escape(r.dataset_id)}</span>",
+                unsafe_allow_html=True,
+            )
+            classification = _classification_of(r.dataset_id)
+            if classification:
+                control_popover(
+                    "CTL-PURP-01",
+                    label=cls_label(classification),
+                    key=f"audds_{r.run_id}",
+                    extra=purpose_extra(r.dataset_id),
+                )
+        actor = get_persona(r.actor)
+        td(cols[4], actor.name if actor else r.actor)
+        _audit_second_signature(r, cols[5])
+        badge, label = _OUTCOME_BADGE[r.outcome]
+        cols[6].markdown(
+            f"<span class='badge {badge}'>{label}</span>"
+            + (f"<br><span class='muted' style='font-size:11px'>at {html.escape(r.stopped_at)}"
+               "</span>" if r.stopped_at else ""),
+            unsafe_allow_html=True,
+        )
+        with cols[7]:
+            caught = r.refusal_controls
+            if not caught:
+                st.markdown(
+                    "<span class='muted' style='font-size:12px'>nothing refused</span>",
+                    unsafe_allow_html=True,
+                )
+            else:
+                for i, c in enumerate(caught[:2]):
+                    _audit_ctl_chip(c, st, f"audc_{r.run_id}_{i}")
+                if len(caught) > 2:
+                    st.markdown(
+                        f"<span class='muted' style='font-size:11px'>"
+                        f"+{len(caught) - 2} more</span>",
+                        unsafe_allow_html=True,
+                    )
+
+    st.caption(
+        "Newest first, fixed sort. Seeded rows carry the demo-timeline date; "
+        "live rows carry real execution time. Click a run id to open it."
+    )
+
+    selected = next((r for r in shown if r.run_id == st.session_state.get("aud_sel")), None)
+    if selected:
+        st.divider()
+        _audit_detail(selected)
+
+
 def _param_widget(spec_id: str, p):  # noqa: ANN001
     """Render the right input widget for a ParamSpec and return the value."""
     key = f"ap_{spec_id}_{p.name}"
@@ -2165,7 +2585,7 @@ _NAV_GROUPS: list[tuple[str | None, list[str]]] = [
     (None, ["Overview"]),
     ("Workspace", ["Run", "Pipeline", "Analyses"]),
     ("Governance", ["Datasets", "Registry"]),
-    ("Platform", ["Platform", "Adoption"]),
+    ("Platform", ["Platform", "Adoption", "Audit Log"]),
 ]
 _NAV_KEYS = {
     "Overview": "nav_home",
@@ -2176,6 +2596,7 @@ _NAV_KEYS = {
     "Registry": "nav_registry",
     "Platform": "nav_platform",
     "Adoption": "nav_adoption",
+    "Audit Log": "nav_auditlog",
 }
 # Nav icons (ui-spec 2.2, sentinel-stepper-mockup.html sidenav). Material
 # Symbols, rounded/outline style, matching the mockup's stroked SVG set:
@@ -2191,6 +2612,7 @@ _NAV_ICONS = {
     "Registry": ":material/verified:",
     "Platform": ":material/grid_view:",
     "Adoption": ":material/bar_chart:",
+    "Audit Log": ":material/gavel:",
 }
 
 section = st.session_state.setdefault("section", "Overview")
@@ -2253,6 +2675,10 @@ if section == "Registry":
 
 if section == "Adoption":
     render_adoption()
+    st.stop()
+
+if section == "Audit Log":
+    render_audit_log()
     st.stop()
 
 # Fall-through: the credit-pipeline hero ("Pipeline" in the sidebar).
