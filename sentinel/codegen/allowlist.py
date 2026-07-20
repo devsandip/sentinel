@@ -34,6 +34,16 @@ CTL_COMPLEX_01 = "CTL-COMPLEX-01"  # Cartesian join, or join count over the ceil
 # (e.g. "sklearn.metrics.pairwise" under "sklearn.metrics"). A bare parent whose
 # only allowed children are listed (e.g. `import scipy`, `import sklearn`) is NOT
 # allowed: the grant is per-submodule on purpose.
+#
+# Every name here must be installed in the environment that has to honour it.
+# This list is fed verbatim to the model in the codegen system prompt, so a name
+# on it is an instruction to use that package; if the sandbox cannot import it,
+# the gate stamps "imports on the tier's allowlist, clear" and Execute then dies
+# with ModuleNotFoundError. That is not a control that held, it is a control
+# that guessed. `tests/test_allowlist_env.py` reconciles this list against
+# `requirements.txt` (the artifact prod installs) and fails on any drift.
+# lifelines, shap, dowhy and econml were removed on 2026-07-20 for exactly that
+# reason: advertised here, installed nowhere, used by nothing.
 ALLOWED_IMPORTS: frozenset[str] = frozenset(
     {
         "pandas",
@@ -46,10 +56,6 @@ ALLOWED_IMPORTS: frozenset[str] = frozenset(
         "sklearn.model_selection",
         "fairlearn.metrics",
         "fairlearn.reductions",
-        "lifelines",
-        "shap",
-        "dowhy",
-        "econml",
     }
 )
 

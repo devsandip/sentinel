@@ -244,6 +244,17 @@ def test_architecture_stop_wires_its_controls_and_import_rows():
     # One popover per deny/allow row: allowlist, egress, filesystem, dyncode.
     for cid in ("CTL-CODE-01", "CTL-EGRESS-01", "CTL-CODE-02", "CTL-CODE-03"):
         assert cid in labels, cid
+    # The permitted column is the real allowlist, so it may only name libraries
+    # the sandbox can import. Until 2026-07-20 it advertised four that were
+    # installed nowhere; this screen is where a visitor reads the claim.
+    # Word-bounded: the page's CSS carries 'shape', which naive substring
+    # matching reads as 'shap'.
+    body = " ".join(m.value for m in at.markdown)
+    assert re.search(r"\bstatsmodels\b", body)
+    for gone in ("lifelines", "shap", "dowhy", "econml"):
+        assert not re.search(rf"\b{gone}\b", body), (
+            f"{gone} is advertised at L2 but is not installed"
+        )
 
 
 def test_certification_gates_explain_their_control():

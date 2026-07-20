@@ -9,6 +9,10 @@ dependencies = [
     "numpy>=1.26",
     "scikit-learn>=1.5",
     "fairlearn>=0.10",
+    # On the L2 allowlist, so the sandbox must be able to honour it. See
+    # tests/test_allowlist_env.py: a grant the environment cannot run is a
+    # control that guessed.
+    "statsmodels>=0.14",
     "sqlglot>=25.0",
     "duckdb>=1.0",
     "openlineage-python>=1.0",

@@ -621,8 +621,22 @@ ctx.emit(obj)    -> None           # the only way to return a result
 ```
 pandas, numpy, scipy.stats, statsmodels.api, statsmodels.formula.api,
 sklearn.metrics, sklearn.linear_model, sklearn.model_selection,
-fairlearn.metrics, fairlearn.reductions, lifelines, shap, dowhy, econml
+fairlearn.metrics, fairlearn.reductions
 ```
+
+**Every name on that list must be installed in the environment that runs the
+code.** The list is interpolated into the codegen system prompt verbatim, so a
+name on it is an instruction to the model to use that package. If the sandbox
+cannot import it, the gate stamps "imports on the tier's allowlist, clear" and
+Execute dies with `ModuleNotFoundError`: the control approved something the
+environment refuses. `lifelines`, `shap`, `dowhy` and `econml` were on this list
+from v1 to v10 and installed nowhere; they were removed on 2026-07-20 rather
+than installed, because nothing in the build used them and a grant should
+describe the environment, not an aspiration for it. `statsmodels` stayed and
+became a real dependency, since the benign sample corpus uses it. Reconciled by
+`tests/test_allowlist_env.py` against `requirements.txt`, which is what the
+instance pip-installs. Widening the list is therefore a two-part change: the
+grant here and the dependency that honours it.
 
 **Denied, always:**
 
