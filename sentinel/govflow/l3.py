@@ -220,6 +220,7 @@ def run_l3_analysis(
     audit.record(
         agent="l3",
         action="ask",
+        stage="Ask",
         actor=persona.id,
         inputs_summary=f"purpose={L3_PURPOSE}, dataset={L3_DATASET}",
         output_summary=f"tier resolved {tier}: {tier_decision.rationale}",
@@ -233,6 +234,7 @@ def run_l3_analysis(
         audit.record(
             agent="l3",
             action="tier_block",
+            stage="Ask",
             actor=persona.id,
             level=LEVEL_BLOCKED,
             output_summary=detail,
@@ -268,6 +270,7 @@ def run_l3_analysis(
     audit.record(
         agent="l3",
         action="access",
+        stage="Access",
         actor=persona.id,
         data_touched=L3_GRANT,
         output_summary=f"Public dataset; {len(L3_GRANT)} columns granted",
@@ -284,6 +287,7 @@ def run_l3_analysis(
         audit.record(
             agent="l3",
             action="repair_requested",
+            stage="Generate",
             actor=persona.id,
             output_summary=(
                 f"Fix it: repair of gate-blocked run {repair_of}; seeded repaired "
@@ -301,6 +305,7 @@ def run_l3_analysis(
             audit.record(
                 agent="gate",
                 action="gate_block",
+                stage="Gate",
                 level=LEVEL_BLOCKED,
                 actor=persona.id,
                 output_summary=v.message,
@@ -317,6 +322,7 @@ def run_l3_analysis(
     audit.record(
         agent="gate",
         action="gate_pass",
+        stage="Gate",
         actor=persona.id,
         level=LEVEL_GATE,
         output_summary="L3 gate passed",
@@ -340,6 +346,7 @@ def run_l3_analysis(
         audit.record(
             agent="sandbox",
             action="execute_error",
+            stage="Execute",
             actor=persona.id,
             level=LEVEL_BLOCKED,
             output_summary=execution.error or "execution failed",
@@ -417,6 +424,7 @@ def run_l3_analysis(
     audit.record(
         agent="attest",
         action="evidence_pack",
+        stage="Attest",
         actor=persona.id,
         output_summary=f"L3 evidence pack assembled (pending); {len(lineage)} lineage event(s)",
     )

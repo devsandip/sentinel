@@ -359,7 +359,7 @@ def test_adoption_section_renders_seeded_history():
 
 
 def test_audit_log_section_renders_the_cross_run_ledger():
-    at = _boot()
+    at = _boot("auditor")
     at.button(key="nav_auditlog").click().run()
     assert not at.exception
     body = " ".join(m.value for m in at.markdown)
@@ -372,7 +372,9 @@ def test_audit_log_section_renders_the_cross_run_ledger():
 
 def test_audit_log_opens_a_run_and_shows_its_decision_summary():
     """The five things the feature exists to answer, on one screen."""
-    at = _boot()
+    # As the Auditor: the ledger is scoped by role, and the run this exercises
+    # was authored by the MRM Approver, so the first line cannot open it.
+    at = _boot("auditor")
     at.button(key="nav_auditlog").click().run()
     # Open the run seeded to hit CTL-SOD-01: it is the only row that exercises
     # every part of the detail block at once.
@@ -429,7 +431,7 @@ def test_audit_run_opens_as_its_own_screen_and_back_returns():
     from sentinel.platform.audit_store import audit_runs
 
     target = audit_runs()[0]
-    at = _boot()
+    at = _boot("auditor")
     at.button(key="nav_auditlog").click().run()
     at.button(key=f"audopen_{target.run_id}").click().run()
     assert not at.exception
@@ -452,7 +454,7 @@ def test_every_audit_row_has_two_ways_into_the_run():
     """
     from sentinel.platform.audit_store import audit_runs
 
-    at = _boot()
+    at = _boot("auditor")
     at.button(key="nav_auditlog").click().run()
     keys = {b.key for b in at.button}
     for r in audit_runs()[:5]:
@@ -464,7 +466,7 @@ def test_the_row_open_button_reaches_the_same_run_as_the_id():
     from sentinel.platform.audit_store import audit_runs
 
     target = audit_runs()[1]
-    at = _boot()
+    at = _boot("auditor")
     at.button(key="nav_auditlog").click().run()
     at.button(key=f"audopen2_{target.run_id}").click().run()
     assert not at.exception
@@ -501,7 +503,7 @@ def test_audit_log_never_shows_a_refused_run_with_an_empty_caught_cell():
     A run refused at Ask carries an empty controls_fired, so this would render
     a visibly-refused row with nothing explaining it.
     """
-    at = _boot()
+    at = _boot("auditor")
     at.button(key="nav_auditlog").click().run()
     body = " ".join(m.value for m in at.markdown)
     # The tier-block run is the case: its only refusal lives in the events.
@@ -898,3 +900,92 @@ def test_admin_header_chip_toggle_degrades_and_recovers():
     # their runs or their banner. The switcher now lives in the header popover.
     at.selectbox(key="persona_switch").set_value("analyst").run()
     assert not any("UNGOVERNED" in e.value for e in at.error)
+
+
+# -- who may read the audit log (role scoping) -------------------------------
+
+
+def test_the_ledger_is_scoped_to_the_role_reading_it():
+    """A first-line analyst reads its own runs; an auditor reads all of them."""
+    from sentinel.platform.audit_store import audit_runs
+
+    runs = audit_runs()
+    mine = [r for r in runs if r.actor == "analyst"]
+    assert len(mine) < len(runs), "corpus needs runs by someone else"
+
+    at = _boot()
+    at.button(key="nav_auditlog").click().run()
+    assert not at.exception
+    keys = {b.key for b in at.button}
+    for r in runs:
+        assert (f"audopen_{r.run_id}" in keys) == (r.actor == "analyst"), r.run_id
+    # And it says so, rather than filtering silently.
+    assert any("Scoped to your runs" in i.value for i in at.info)
+
+    at = _boot("auditor")
+    at.button(key="nav_auditlog").click().run()
+    keys = {b.key for b in at.button}
+    assert all(f"audopen_{r.run_id}" in keys for r in runs)
+    assert not any("Scoped to your runs" in i.value for i in at.info)
+
+
+def test_the_run_deep_link_is_not_a_way_around_the_scope():
+    """?run=<id> re-checks the entitlement, or the address is the bypass."""
+    from sentinel.platform.audit_store import audit_runs
+
+    other = next(r for r in audit_runs() if r.actor != "analyst")
+    at = AppTest(script_path=APP, default_timeout=60)
+    at.session_state["persona_id"] = "analyst"
+    at.query_params["run"] = other.run_id
+    at.run()
+    assert not at.exception
+    body = " ".join(m.value for m in at.markdown)
+    assert other.run_id not in body, "the withheld run rendered anyway"
+    assert any("reads only its own runs" in w.value for w in at.warning)
+
+
+def test_the_ran_by_filter_offers_nobody_the_reader_cannot_already_see():
+    """The filter narrows a view; it must never widen one."""
+    from sentinel.platform.audit_store import audit_runs
+
+    at = _boot()
+    at.button(key="nav_auditlog").click().run()
+    assert at.selectbox(key="aud_who").disabled, (
+        "a role scoped to itself has nobody to filter by, so the control must "
+        "say so rather than look like a choice"
+    )
+    # AppTest reports the formatted labels, which is what a reader sees.
+    from sentinel.harness.identity import get_persona
+
+    assert set(at.selectbox(key="aud_who").options) == {
+        "Anyone", get_persona("analyst").name
+    }
+
+    at = _boot("auditor")
+    at.button(key="nav_auditlog").click().run()
+    assert not at.selectbox(key="aud_who").disabled
+    assert set(at.selectbox(key="aud_who").options) == {
+        "Anyone", *{get_persona(r.actor).name for r in audit_runs()}
+    }
+
+
+def test_the_stage_events_render_under_their_stage_not_in_a_caveat():
+    """The nine-stage routes file every event under the stage that emitted it.
+
+    Before events carried a stage, this screen printed an apology saying the
+    emitting agent could not identify one. That caption must not come back for
+    a govflow run, and the events must actually appear at their stages.
+    """
+    from sentinel.platform.audit_store import audit_runs
+
+    gov = next(r for r in audit_runs() if r.run_kind == "govflow" and r.events)
+    at = _boot("auditor")
+    at.button(key="nav_auditlog").click().run()
+    at.button(key=f"audopen_{gov.run_id}").click().run()
+    assert not at.exception
+    labels = {e.label for e in at.get("expander")}
+    for stage in sorted({e["stage"] for e in gov.events}):
+        assert any(f"recorded at {stage}" in x for x in labels), stage
+    captions = " ".join(c.value for c in at.caption)
+    assert "not shown under a stage" not in captions
+    assert "does not identify which stage" not in captions

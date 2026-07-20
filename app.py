@@ -53,12 +53,17 @@ from sentinel.platform import (
     model_versions,
     reuse_metrics,
 )
-from sentinel.platform.audit_stages import NOT_IN_ROUTE, canonical_steps
+from sentinel.platform.audit_stages import (
+    CANONICAL_STAGES,
+    NOT_IN_ROUTE,
+    canonical_steps,
+)
 from sentinel.platform.audit_store import (
     OUTCOME_AWAITING,
     OUTCOME_OK,
     OUTCOME_REFUSED,
     audit_runs,
+    visible_runs,
 )
 from sentinel.platform.audit_store import summary as audit_summary
 from sentinel.platform.certification import CertificationError, assign_validator
@@ -2369,6 +2374,34 @@ _STEP_BADGE = {
 }
 
 
+def _plural(n: int, noun: str) -> str:
+    return f"{n} {noun}" if n == 1 else f"{n} {noun}s"
+
+
+def _audit_event_row(e: dict) -> dict:
+    return {
+        "seq": e["seq"],
+        "ts": e["ts"][11:19],
+        "agent": e["agent"],
+        "action": e["action"],
+        "level": e["level"],
+        "data touched": ", ".join(e.get("data_touched") or []),
+        "summary": e["output_summary"],
+    }
+
+
+def _audit_stage_events(events: list[dict], label: str) -> None:
+    """The events belonging to one stage, folded away until asked for."""
+    with st.expander(label):
+        st.dataframe(
+            pd.DataFrame([_audit_event_row(e) for e in events]).style.apply(
+                _audit_level_style, axis=1
+            ),
+            hide_index=True,
+            width="stretch",
+        )
+
+
 def _audit_steps(r) -> None:  # noqa: ANN001
     """The run, read as the nine governance stages the Run screen teaches.
 
@@ -2392,12 +2425,27 @@ def _audit_steps(r) -> None:  # noqa: ANN001
     st.caption(
         "The nine governance stages, the same spine the Run screen walks. "
         "Every run kind is read in this shape; each stage names the steps it "
-        "actually ran, what it was built with, and what governed it."
+        "actually ran, the events it recorded, what it was built with, and "
+        "what governed it."
     )
 
+    # Two attribution paths, and the first one wins where it exists.
+    #
+    # An event that carries its own `stage` is filed there, full stop: the
+    # emitting call site is the only thing that knows which stage it ran in,
+    # and now it says so. The nine-stage routes (govflow, L3) stamp all of it.
+    #
+    # Everything else falls back to matching the event's agent against a native
+    # step's agent, which is exact for the analysis and credit-risk routes
+    # because there one agent runs one step. It is not exact for the nine-stage
+    # routes, which is why they stamp the stage instead.
+    by_stage: dict[str, list[dict]] = {}
     by_agent: dict[str, list[dict]] = {}
     for e in r.events:
-        by_agent.setdefault(e["agent"], []).append(e)
+        if e.get("stage"):
+            by_stage.setdefault(str(e["stage"]), []).append(e)
+        else:
+            by_agent.setdefault(e["agent"], []).append(e)
 
     for i, c in enumerate(canonical_steps(r)):
         status = c["status"]
@@ -2431,22 +2479,17 @@ def _audit_steps(r) -> None:  # noqa: ANN001
                 unsafe_allow_html=True,
             )
             if events:
-                with st.expander(f"{len(events)} events at {s.get('name', 'this step')}"):
-                    st.dataframe(
-                        pd.DataFrame(
-                            [
-                                {
-                                    "seq": e["seq"], "ts": e["ts"][11:19],
-                                    "action": e["action"], "level": e["level"],
-                                    "data touched": ", ".join(e.get("data_touched") or []),
-                                    "summary": e["output_summary"],
-                                }
-                                for e in events
-                            ]
-                        ).style.apply(_audit_level_style, axis=1),
-                        hide_index=True,
-                        width="stretch",
-                    )
+                _audit_stage_events(
+                    events,
+                    f"{_plural(len(events), 'event')} at {s.get('name', 'this step')}",
+                )
+
+        stage_events = by_stage.get(c["stage"], [])
+        if stage_events:
+            _audit_stage_events(
+                stage_events,
+                f"{_plural(len(stage_events), 'event')} recorded at {c['stage']}",
+            )
 
         if c["libraries"]:
             st.markdown(
@@ -2473,20 +2516,25 @@ def _audit_steps(r) -> None:  # noqa: ANN001
                     fired=ctl in c["fired"],
                 )
 
-    placed = {s.get("agent") for s in r.steps if s.get("attributable")}
-    unplaced = [e for e in r.events if e["agent"] not in placed]
-    if unplaced:
-        why = (
-            "the emitting agent does not identify which stage it came from "
-            "(flow.py records agent=\"govflow\" from Ask, Plan and Access "
-            "alike), so filing them under a stage would place them wrongly"
-            if not placed
-            else "they are run-level: the run starting and ending, and the "
-            "model being registered"
+    # What is left over after both attribution paths. An event with a stage
+    # this route does not render is counted here too rather than dropped: a
+    # stage string the screen cannot place is a mismatch worth showing, not a
+    # line to swallow.
+    placed_agents = {s.get("agent") for s in r.steps if s.get("attributable")}
+    unplaced = [
+        e
+        for e in r.events
+        if (
+            str(e.get("stage") or "") not in CANONICAL_STAGES
+            and e["agent"] not in placed_agents
         )
+    ]
+    if unplaced:
         st.caption(
-            f"{len(unplaced)} of {len(r.events)} events are not shown under a "
-            f"stage, because {why}. All of them are in the stream below."
+            f"{len(unplaced)} of {len(r.events)} events are run-level rather "
+            "than stage-level: the run starting and ending, and the model "
+            "being registered. They carry no stage because they belong to "
+            "none. All of them are in the stream below."
         )
 
 
@@ -2559,7 +2607,11 @@ def _audit_detail(r) -> None:  # noqa: ANN001
             [
                 {
                     "seq": e["seq"], "ts": e["ts"][11:19], "agent": e["agent"],
-                    "actor": e["actor"], "action": e["action"], "level": e["level"],
+                    "actor": e["actor"],
+                    # Blank where the route has no stage spine, which is a fact
+                    # about the route and not a hole in the record.
+                    "stage": e.get("stage", ""),
+                    "action": e["action"], "level": e["level"],
                     "data touched": ", ".join(e.get("data_touched") or []),
                     "summary": e["output_summary"],
                 }
@@ -2634,15 +2686,35 @@ def _audit_open(run_id: str) -> None:
     _nav_to(_SECTION_AUDIT_RUN)
 
 
-def render_audit_run() -> None:
+def render_audit_run(persona) -> None:  # noqa: ANN001
     """One run, full screen: the evidence for a single execution."""
     run_id = st.session_state.get("aud_sel") or st.query_params.get("run", "")
-    run = next((r for r in audit_runs() if r.run_id == run_id), None)
+    all_runs = audit_runs()
+    run = next((r for r in all_runs if r.run_id == run_id), None)
+    # The same entitlement the ledger applies, applied again here. This screen
+    # is reachable by typing ?run=<id>, so checking only on the ledger would
+    # make the deep link a way around the check rather than a link to a run.
+    permitted = {r.run_id for r in visible_runs(all_runs, persona)}
 
     back, _ = st.columns([1, 5])
     if back.button("Back to audit log", icon=":material/arrow_back:", key="audrun_back"):
         st.query_params.pop("run", None)
         _nav_to("Audit Log")
+
+    if run is not None and run.run_id not in permitted:
+        # Says the run exists and is withheld, rather than claiming it does not
+        # exist. Hiding existence would be the stronger control, and on an
+        # external surface it is the right one; here the reader is an employee
+        # holding a link a colleague sent them, and "no such run" would send
+        # them chasing a bug instead of asking for access.
+        who = get_persona(run.actor)
+        st.warning(
+            f"Run `{run_id}` was executed by "
+            f"**{html.escape(who.name if who else run.actor)}**, and "
+            f"**{html.escape(persona.name)}** reads only its own runs. "
+            "The record exists and is unchanged; it is not shown to this role."
+        )
+        return
 
     if run is None:
         # Reachable by editing the URL, so it says which id failed rather than
@@ -2656,7 +2728,7 @@ def render_audit_run() -> None:
     _audit_detail(run)
 
 
-def render_audit_log() -> None:
+def render_audit_log(persona) -> None:  # noqa: ANN001
     st.subheader("Audit log")
     st.markdown(
         "<span class='muted'>Every run the platform has executed, every step "
@@ -2664,7 +2736,12 @@ def render_audit_log() -> None:
         "Append-only; nothing here is editable from the app.</span>",
         unsafe_allow_html=True,
     )
-    runs = audit_runs()
+    # The ledger is scoped to what this role may read before anything is
+    # counted, so the tiles below describe the reader's own view and not the
+    # platform. Every number on this screen is derived from `runs`.
+    all_runs = audit_runs()
+    runs = visible_runs(all_runs, persona)
+    hidden = len(all_runs) - len(runs)
     m = audit_summary(runs)
     st.caption(
         f"{m['runs']} runs on file, {m['events']} committed events. Seeded runs "
@@ -2674,6 +2751,21 @@ def render_audit_log() -> None:
         "gitignored and excluded from the deploy bundle, so they do not survive "
         "a restart."
     )
+    if hidden:
+        # Named, not silently applied. A filtered ledger that does not say it
+        # is filtered reads as the whole record, and every tile under it would
+        # then be a quiet understatement.
+        st.info(
+            f"**Scoped to your runs.** {hidden} further "
+            f"run{'s' if hidden != 1 else ''} on this platform "
+            f"{'are' if hidden != 1 else 'is'} not shown: "
+            f"**{html.escape(persona.name)}** reads its own runs only. The "
+            "counts and filters below describe this scoped view. Oversight "
+            "roles (Internal Auditor, Model Validator, MRM Approver, Platform "
+            "Admin) read the whole ledger; switch to one from the identity "
+            "chip above to see it, which is possible at all because that chip "
+            "is a demo sign-in with no credential behind it."
+        )
 
     a, b, c, d = st.columns(4)
     a.metric("Runs logged", m["runs"], f"{m['live_runs']} this session")
@@ -2739,7 +2831,12 @@ def render_audit_log() -> None:
         format_func=lambda k: _AUD_KIND_LABEL.get(k, k),
         key="aud_kind",
     )
+    # Built from the scoped set, so it can only ever offer people whose runs
+    # this role may already read: the filter narrows a view, it never widens
+    # one. For a role scoped to itself that leaves a single option, and the
+    # control is disabled and says why rather than pretending to be a choice.
     people = sorted({r.actor for r in runs})
+    scoped_to_self = not persona.can_view_all_runs
     who = f2.selectbox(
         "Ran by",
         ["Anyone", *people],
@@ -2747,6 +2844,9 @@ def render_audit_log() -> None:
         if x != "Anyone"
         else x,
         key="aud_who",
+        disabled=scoped_to_self,
+        help="Your role reads its own runs only, so there is nobody else to "
+        "filter by." if scoped_to_self else None,
     )
     ctls = sorted({c for r in runs for c in r.refusal_controls})
     ctl = f3.selectbox("Control", ["Any control", *ctls], key="aud_ctl")
@@ -2768,8 +2868,11 @@ def render_audit_log() -> None:
 
     if not shown:
         st.info(
-            "No runs match these filters. Clear them, or run an analysis from "
-            "the Run or Analyses screen to add a live one."
+            "You have not run anything yet, and your role reads only its own "
+            "runs. Run an analysis from the Run or Analyses screen to add one."
+            if not runs and hidden
+            else "No runs match these filters. Clear them, or run an analysis "
+            "from the Run or Analyses screen to add a live one."
         )
         return
 
@@ -3371,7 +3474,7 @@ if section == "Adoption":
     st.stop()
 
 if section == "Audit Log":
-    render_audit_log()
+    render_audit_log(persona)
     st.stop()
 
 if section == "User Manual":
@@ -3381,7 +3484,7 @@ if section == "User Manual":
     st.stop()
 
 if section == _SECTION_AUDIT_RUN:
-    render_audit_run()
+    render_audit_run(persona)
     st.stop()
 
 # Fall-through: the credit-pipeline hero ("Pipeline" in the sidebar).
