@@ -333,6 +333,48 @@ name, a row count, a license), it stays inert.** Every disclosure calls
   certification section header) stay plain text. They are sentences, not chips,
   and turning every mention into a button would make the prose unreadable.
 
+## 4d. Landed (2026-07-19, the Ask-step branch)
+
+The gap: the Ask stage showed a dataset table and then, separately, a radio to
+choose between two modes. The table was decoration; the radio was the control,
+and it did not name a dataset, it named an analysis. Steps 2 and 3 offered
+dropdowns whose options the user had to already understand: six purpose labels
+in lowercase with no account of what each one covers, and six prebuilt requests
+with no account of what any of them computes.
+
+### Decisions
+
+| # | Surface | Options | Call |
+|---|---|---|---|
+| 1 | Dataset selection | Keep the mode radio below the table / `st.dataframe` with `selection_mode="single-row"` / a radio in each hand-laid row | **A radio in each row.** `st.dataframe` row selection is the only *real* row click Streamlit offers, but it renders every cell as plain text, so the classification chip (a governance decision, clickable per 4.3) would have been lost to get it. The hand-laid table from 4c already puts a popover in a cell; adding a one-option radio per row keeps the chip and makes the row the control. The trade is that exclusivity is code, not a widget: `_pick_dataset` clears the other rows' keys. It has a test. |
+| 2 | Where the radio sits in the row | Its own narrow column / merged into the dataset cell | **Merged.** A radio with a blank option label is unreadable to a screen reader and takes a column for nothing. The option label *is* the dataset id (markdown, so it keeps the mono `code` styling), with the widget label collapsed to `Select <id>`. |
+| 3 | Selected-row state | A "selected" badge in the cell / the mockup's `.row-sel` tint | **The tint**, plus the `.rowgood` left accent bar. Both are in ui-spec 4.4 and neither had ever been built. The row container's key carries the state (`tblrow_sel_*`), because a container key is the only hook CSS has on a Streamlit block. |
+| 4 | What Confirm does | Cosmetic acknowledgement / gate steps 2 and 3 | **A real gate.** Steps 2 and 3 do not render until the dataset is confirmed, and changing the pick drops the confirmation and clears the drafted question, so Plan sends the user back. A purpose and an analysis are declared *against* a dataset; letting them survive a dataset swap would be a lie about what was reviewed. Cost: the "just click Run" path is one click longer, and four AppTest tests gained a `gv_ds_confirm` click. |
+| 5 | "What purposes are allowed for this dataset" | A popover per row / a panel under the table | **Both, and they are not duplicates.** The classification chip already carries the permitted list (`purpose_extra`, shared with the topbar). The panel under the table is the mockup's `.pmatrix`, built for the first time: all six purposes as permit/refuse chips, read off `PURPOSE_MATRIX`. The chip explains the *control*; the panel shows the *set*. |
+| 6 | Where purpose descriptions live | UI copy in `govflow.py` / the policy module | **`PURPOSE_SCOPE` in `govflow/purpose_matrix.py`**, next to the matrix it describes. A purpose's edges are policy, not presentation, and copy that lives away from the rule it describes drifts away from it. |
+| 7 | Where analysis descriptions live | The policy modules / the UI module | **`_ANALYSIS_NOTE` in `sentinel/ui/govflow.py`**, keyed by the prebuilt request name, which is a UI string. The honesty problem this creates is solved by a test rather than by placement: `tests/test_govflow_ask.py` re-runs the real gate over every scripted sample and fails if a note names a control the gate does not fire, or claims a clean pass the gate refuses. |
+| 8 | Shared table helpers | Duplicate `_table_head` / `_table_row` / `_td` into `govflow.py` / extract them | **Extracted** to `sentinel/ui/tables.py`. `app.py` cannot be imported from `sentinel/ui`, and a table renderer copied into two files drifts. `cls_label` and `purpose_extra` moved to `sentinel/ui/govflow.py` for the same reason: the Ask picker and the dataset registry now render one classification chip, not two that look alike. |
+
+### Deviations and costs, recorded honestly
+
+- **Two strings are in title case against the rest of the app.** "Confirm
+  Dataset" and "Select the Analysis" were specified verbatim. Every other
+  header and button here is sentence case ("Import a dataset", "Declare the
+  purpose"). Flagged, not silently normalised.
+- **Exclusivity is enforced in a callback, not by a widget.** Streamlit has no
+  radio group that spans containers. `_pick_dataset` writes `None` into the
+  other rows' widget keys. It works, and `test_dataset_table_is_a_single_select`
+  holds it, but a third dataset row would need nothing new and a fortieth would
+  need a different pattern.
+- **The `govflow_mode` radio is gone.** The L3 route is now chosen by picking
+  the `synthetic_its` row, which is what the choice always actually was: the
+  only Public dataset is the only L3 home. Any test or bookmark referencing
+  `govflow_mode` is stale.
+- **The purpose grid renders all six purposes, always.** For `synthetic_its`
+  every one is permitted, so the grid is six green chips and teaches nothing on
+  that row. Left as is: an asymmetric grid would be harder to read against
+  german_credit, which is the row that matters.
+
 ## 5. Out of scope (recorded so nobody re-litigates)
 
 - RBAC-gated navigation (all sidebar items always shown, for now).

@@ -16,6 +16,7 @@ from __future__ import annotations
 import html
 import re
 import time
+from dataclasses import dataclass
 
 import pandas as pd
 import streamlit as st
@@ -43,7 +44,12 @@ from ..govflow import (
 from ..govflow.controls_info import control_info
 from ..govflow.l1 import L1_PARAMS
 from ..govflow.l3 import has_l3_repair
-from ..govflow.purpose_matrix import PURPOSE_LABEL, PURPOSES, SHOWPIECE
+from ..govflow.purpose_matrix import (
+    PURPOSE_LABEL,
+    PURPOSE_SCOPE,
+    PURPOSES,
+    SHOWPIECE,
+)
 from ..govflow.tiers import (
     ATT_CERTIFIED,
     ATT_SANDBOX_WAIVER,
@@ -53,6 +59,7 @@ from ..govflow.tiers import (
     ROLE_EXECUTIVE,
     ROLE_MODEL_VALIDATOR,
 )
+from .tables import table_head, table_row, td
 
 STAGES = [
     "Ask", "Plan", "Access", "Generate", "Gate", "Execute", "Screen", "Interpret", "Attest",
@@ -213,6 +220,165 @@ _L3_STYLES = {
     ),
 }
 
+
+# The two datasets the Ask step offers, in table order: (id, mode label, the
+# analysis that dataset is here for). german_credit is the fair-lending route,
+# synthetic_its is the only Public dataset and therefore the only L3 home.
+_ASK_DATASETS = [
+    ("german_credit", _MODE_FAIR, "fair lending: selection rate by age band"),
+    ("synthetic_its", _MODE_L3, "causal impact: difference-in-differences (L3 home)"),
+]
+_ASK_DS_HEAD = ("dataset", "classification", "rows", "analysis", "tier ceiling")
+_ASK_DS_COLS = (2.4, 1.6, 0.9, 4.0, 1.3)
+
+
+@dataclass(frozen=True)
+class AnalysisNote:
+    """What a prebuilt analysis is, how it computes, and what actually runs.
+
+    Descriptions of code, so they have to match the code. The source of truth is
+    the scripted sample in codegen/generate.py (L2) or govflow/l3.py (L3);
+    `control` is the control the gate genuinely returns on that sample, and
+    tests/test_govflow_ask.py re-derives it from the gate rather than trusting
+    this table. Empty `control` means the sample passes the gate.
+    """
+
+    what: str
+    method: str
+    libraries: str
+    control: str = ""
+
+
+_NO_LIBS = "None execute. Static analysis only: Python's ast walks the tree."
+
+_ANALYSIS_NOTE: dict[str, AnalysisNote] = {
+    "Fair lending: selection rate by age band (benign)": AnalysisNote(
+        what=(
+            "The share of applicants the model approves in each age band, with the "
+            "group size beside it. The gap between bands is the disparity a "
+            "fair-lending reviewer reads."
+        ),
+        method=(
+            "No model is fitted. Descriptive group statistics: one selection rate and "
+            "one count per band, which are the primitives a disparate-impact test is "
+            "built from."
+        ),
+        libraries=(
+            "fairlearn.metrics (MetricFrame, selection_rate, count) over a pandas "
+            "frame. Screen then uses pandas and numpy for cell suppression and the "
+            "proxy-association check."
+        ),
+    ),
+    "Adversarial: exfiltrate results to a webhook": AnalysisNote(
+        what=(
+            "The same fair-lending table, then a POST of it to an external webhook. "
+            "It is here to show the gate reads the code rather than trusting the "
+            "request."
+        ),
+        method=(
+            "The fair-lending half is real code, but nothing is fitted and nothing "
+            "runs: the gate refuses before Execute, so no row is ever read."
+        ),
+        libraries=_NO_LIBS,
+        control="CTL-EGRESS-01",
+    ),
+    "Adversarial: write results to a file": AnalysisNote(
+        what=(
+            "The same fair-lending table, then a write of it to /tmp. A result that "
+            "leaves the governed boundary stops being a governed result."
+        ),
+        method=(
+            "Nothing is fitted and nothing runs. The open() in write mode is the "
+            "violation, and the gate refuses before Execute."
+        ),
+        libraries=_NO_LIBS,
+        control="CTL-CODE-02",
+    ),
+    "Adversarial: eval an untrusted metric spec": AnalysisNote(
+        what=(
+            "The same fair-lending table, with the metric definition passed in as a "
+            "string and eval'd. Code the platform cannot read before it runs is code "
+            "it cannot govern."
+        ),
+        method=(
+            "Nothing is fitted and nothing runs. The eval() call is the violation, "
+            "and the gate refuses before Execute."
+        ),
+        libraries=_NO_LIBS,
+        control="CTL-CODE-03",
+    ),
+    "Fair lending via SQL: ctx.sql grouped selection rate (benign)": AnalysisNote(
+        what=(
+            "The selection-rate-by-band question again, written as SQL against the "
+            "policy-scoped view instead of a dataframe."
+        ),
+        method=(
+            "A grouped aggregate: AVG(pred) as the selection rate and COUNT(*) as the "
+            "group size. Still no model."
+        ),
+        libraries=(
+            "duckdb runs the query inside the sandbox. sqlglot parses the same string "
+            "at the gate first: that is the half of the gate which reads SQL."
+        ),
+    ),
+    "Adversarial (SQL): SELECT * refused by the SQL gate": AnalysisNote(
+        what=(
+            "SELECT * against the same table. Columns the purpose does not grant must "
+            "not come back merely because a wildcard asked for them."
+        ),
+        method=(
+            "Nothing runs. sqlglot parses the query and the gate refuses the wildcard, "
+            "because a wildcard cannot be checked against a column grant."
+        ),
+        libraries="None execute. Static analysis only: sqlglot parses the query.",
+        control="CTL-COL-01",
+    ),
+    "Causal impact: difference-in-differences (benign)": AnalysisNote(
+        what=(
+            "What the intervention did to the metric, using the control series to "
+            "absorb the trend and seasonality the two series share."
+        ),
+        method=(
+            "Difference-in-differences: the mean metric-minus-control gap after the "
+            "intervention, minus the same gap before. The interval is a normal "
+            "approximation off the post-period residual spread, not a fitted "
+            "regression."
+        ),
+        libraries=(
+            "pandas for the frame, numpy and the stdlib statistics module for the "
+            "spread. statistics is on the L3 allowlist and refused at L2, which is "
+            "what the wider rope looks like in practice."
+        ),
+    ),
+    "Adversarial (L3): exfiltrate the series to a collector": AnalysisNote(
+        what=(
+            "The series, POSTed to an external collector. L3 widens the analytical "
+            "allowlist; it does not widen the hard deny lists, and this is the proof."
+        ),
+        method="Nothing runs. The gate refuses at L3 exactly as it does at L2.",
+        libraries=_NO_LIBS,
+        control="CTL-EGRESS-01",
+    ),
+    "Adversarial (L3): dump the series to a file": AnalysisNote(
+        what=(
+            "The full series written to /tmp. The broad sandbox still has no "
+            "filesystem to write to."
+        ),
+        method="Nothing runs. The open() in write mode is refused at L3 as at L2.",
+        libraries=_NO_LIBS,
+        control="CTL-CODE-02",
+    ),
+    "Adversarial (L3): eval an untrusted metric spec": AnalysisNote(
+        what=(
+            "The effect computed through an eval'd metric string. A wide allowlist "
+            "still does not admit code that writes itself at runtime."
+        ),
+        method="Nothing runs. The eval() call is refused at L3 as at L2.",
+        libraries=_NO_LIBS,
+        control="CTL-CODE-03",
+    ),
+}
+
 # Stage explainers: PRD language (docs/features/governed-codegen.md section 5),
 # shown at the top of each panel so every stage tells the viewer what it is for.
 _STAGE_EXPLAINER = {
@@ -366,6 +532,53 @@ def _chip(text: str, kind: str = "info") -> str:
         kind, "ctrl-chip"
     )
     return f"<span class='{cls}'>{html.escape(text)}</span>"
+
+
+def _sentence(text: str) -> str:
+    """Sentence case for a policy label. The labels in PURPOSE_LABEL are written
+    lowercase because they are dropped into the middle of a refusal sentence;
+    a dropdown option is the start of one."""
+    return text[:1].upper() + text[1:]
+
+
+# The .cls classification palette as Streamlit markdown colours: a popover
+# trigger's label is markdown, so the mockup's styled .cls span cannot be used.
+_CLS_MD = {
+    "public": "green",
+    "internal": "blue",
+    "confidential": "orange",
+    "restricted": "red",
+}
+
+
+def cls_label(classification: str) -> str:
+    """A classification as a markdown badge, for the popover trigger that
+    explains it. Shared so the chip reads the same in the dataset registry and
+    in the Ask stage's dataset picker."""
+    kind = _CLS_MD.get(classification.lower(), "gray")
+    return f":{kind}-background[{classification.upper()}]"
+
+
+def purpose_extra(dataset: str) -> str:
+    """One factual line about a dataset: its classification, the tier ceiling
+    that classification alone imposes, and the purposes the matrix permits on
+    it. Read off the real policy, not written by hand, and shared by every
+    surface that shows a classification chip (topbar, dataset registry, the Ask
+    stage's dataset picker)."""
+    row = next((r for r in matrix_rows() if r["dataset"] == dataset), None)
+    classification = row["classification"] if row else ""
+    permitted = [PURPOSE_LABEL.get(p, p) for p in PURPOSES if row and row.get(p)]
+    ceiling = CLASSIFICATION_CEILING.get(classification, "")
+    return (
+        f"This dataset is classified {classification or 'n/a'}"
+        + (f", which alone caps the run at {ceiling}" if ceiling else "")
+        + ". The tier is the lower of that ceiling and the person's. "
+        + (
+            f"Purposes permitted on {dataset}: {', '.join(permitted)}."
+            if permitted
+            else f"No purpose is permitted on {dataset}."
+        )
+    )
 
 
 def _stage_rec(pub: dict | None, stage: str) -> dict | None:
@@ -618,44 +831,142 @@ def _html_table(header: list[str], rows: list[str], caption: str = "") -> None:
 # --------------------------------------------------------------------------
 # Config (Ask + Plan, pre-run)
 # --------------------------------------------------------------------------
-def _cfg_dataset() -> tuple[str, str, str]:
-    """Step 1: import a dataset. Returns (mode_label, dataset, classification)."""
+def _scope_block(rows: list[tuple[str, str]]) -> None:
+    """A labelled definition block: what a thing is, and what it is not. Used
+    for a purpose's scope (step 2) and an analysis's method (step 3), because
+    both answer the same shape of question and should look the same."""
+    body = "".join(
+        f"<div class='r'><span class='k'>{html.escape(k)}</span>"
+        f"<span class='v'>{html.escape(v)}</span></div>"
+        for k, v in rows
+        if v
+    )
+    st.markdown(f"<div class='scope'>{body}</div>", unsafe_allow_html=True)
+
+
+def _purpose_grid(dataset: str) -> None:
+    """Every purpose in the matrix for one dataset, permitted or refused.
+
+    The mockup's `.pmatrix` (ui-spec 3.3): what picking a dataset row tells you
+    before you commit to it. Read straight off PURPOSE_MATRIX, so it cannot
+    disagree with what CTL-PURP-01 will actually do at Access.
+    """
+    row = next((r for r in matrix_rows() if r["dataset"] == dataset), {})
+    chips = "".join(
+        f"<span class='pcell {'allow' if row.get(p) else 'deny'}'>"
+        f"<span class='mk'>{'✓' if row.get(p) else '✕'}</span>"
+        f"{html.escape(PURPOSE_LABEL[p])}</span>"
+        for p in PURPOSES
+    )
+    st.markdown(f"<div class='pgrid'>{chips}</div>", unsafe_allow_html=True)
+
+
+def _pick_dataset(ds_id: str) -> None:
+    """Radio semantics across per-row widgets.
+
+    Streamlit has no radio group that spans containers, so a table row cannot
+    hold one member of a shared group; each row owns a one-option radio and
+    exclusivity is enforced here. Changing the pick also drops the confirmation:
+    the purpose and the analysis both hang off the dataset, so they have to be
+    declared again against the new one.
+    """
+    draft = _draft()
+    draft["dataset_pick"] = ds_id
+    for other, _, _ in _ASK_DATASETS:
+        if other != ds_id:
+            st.session_state[f"gv_dspick_{other}"] = None
+    if draft.get("dataset_confirmed") != ds_id:
+        draft["dataset_confirmed"] = ""
+
+
+def _confirm_dataset() -> None:
+    _draft()["dataset_confirmed"] = _draft().get("dataset_pick", "")
+
+
+def _cfg_dataset() -> tuple[str, str, str, bool]:
+    """Step 1: import a dataset.
+
+    The row is the control: one radio per row, exclusive, and picking a row
+    shows the purposes the matrix permits on that dataset before the choice is
+    committed. Nothing downstream renders until Confirm is pressed, so the
+    button is load-bearing rather than decorative.
+
+    Returns (mode_label, dataset, classification, confirmed).
+    """
     draft = _draft()
     st.markdown("**Step 1 of 3 · Import a dataset**")
     reg = {d.id: d for d in all_datasets()}
     cls = {r["dataset"]: r["classification"] for r in matrix_rows()}
-    rows = []
-    for ds_id, analysis in [
-        ("german_credit", "fair lending: selection rate by age band"),
-        ("synthetic_its", "causal impact: difference-in-differences (L3 home)"),
-    ]:
+    pick = draft.setdefault(
+        "dataset_pick", draft.get("dataset") or _ASK_DATASETS[0][0]
+    )
+    table_head(_ASK_DS_HEAD, _ASK_DS_COLS, "gvds")
+    for ds_id, _mode, analysis in _ASK_DATASETS:
         d = reg.get(ds_id)
-        rows.append(
-            f"<tr><td><code>{ds_id}</code></td>"
-            f"<td>{_esc(cls.get(ds_id, ''))}</td>"
-            f"<td>{_esc(f'{d.rows:,}' if d else '')}</td>"
-            f"<td>{_esc(analysis)}</td>"
-            f"<td>{_esc(CLASSIFICATION_CEILING.get(cls.get(ds_id, ''), ''))}</td></tr>"
+        classification = cls.get(ds_id, "")
+        # The key carries the selected state because it is the only hook CSS has
+        # on a Streamlit container (see the .row-sel skin in app.py).
+        cols = table_row(_ASK_DS_COLS, f"{'sel_' if ds_id == pick else ''}gvds_{ds_id}")
+        cols[0].radio(
+            f"Select {ds_id}",
+            [ds_id],
+            index=0 if ds_id == pick else None,
+            format_func=lambda x: f"`{x}`",
+            label_visibility="collapsed",
+            key=f"gv_dspick_{ds_id}",
+            on_change=_pick_dataset,
+            args=(ds_id,),
         )
-    _html_table(
-        ["dataset", "classification", "rows", "analysis", "tier ceiling"],
-        rows,
+        with cols[1]:
+            # ui-spec 4.3: the classification is the one cell here that is a
+            # governance decision rather than a fact, so it is the cell that
+            # explains itself, through the same catalogue entry everywhere else
+            # uses.
+            _control_popover(
+                "CTL-PURP-01",
+                None,
+                container=st,
+                label=cls_label(classification) if classification else "n/a",
+                key=f"gvdscls_{ds_id}",
+                extra=purpose_extra(ds_id),
+            )
+        td(cols[2], f"{d.rows:,}" if d else "", num=True)
+        td(cols[3], analysis)
+        td(cols[4], CLASSIFICATION_CEILING.get(classification, ""), mono=True)
+    st.caption(
         "The classification is simulated (both datasets are genuinely public) and the "
-        "UI says so. The tier ceiling is what the classification alone would allow.",
+        "UI says so. The tier ceiling is what the classification alone would allow."
     )
-    options = [_MODE_FAIR, _MODE_L3]
-    default = draft.get("mode", _MODE_FAIR)
-    mode = st.radio(
-        "Analysis",
-        options,
-        index=options.index(default) if default in options else 0,
-        horizontal=True,
-        key="govflow_mode",
+
+    st.markdown(
+        f"<span class='muted'>Purposes the matrix permits on <code>{_esc(pick)}</code>. "
+        "A dataset is not a blank cheque: a refused purpose is stopped at Access by "
+        "CTL-PURP-01, whoever is asking.</span>",
+        unsafe_allow_html=True,
     )
+    _purpose_grid(pick)
+
+    confirmed = bool(draft.get("dataset_confirmed")) and draft["dataset_confirmed"] == pick
+    if confirmed:
+        st.markdown(
+            f"<span class='badge ok'>✓ confirmed</span> <span class='muted'>"
+            f"<code>{_esc(pick)}</code> is bound to this request. Pick another row to "
+            "change it; the purpose and the analysis are declared against it.</span>",
+            unsafe_allow_html=True,
+        )
+    else:
+        st.button(
+            "Confirm Dataset",
+            type="primary",
+            key="gv_ds_confirm",
+            on_click=_confirm_dataset,
+        )
+    mode = next(m for ds, m, _ in _ASK_DATASETS if ds == pick)
     draft["mode"] = mode
-    is_l3 = mode == _MODE_L3
-    dataset = "synthetic_its" if is_l3 else "german_credit"
-    return mode, dataset, cls.get(dataset, "")
+    # The picked dataset is what the topbar Data chip describes, confirmed or
+    # not: it is the dataset this request is being built against.
+    draft["dataset"] = pick
+    return mode, pick, cls.get(pick, ""), confirmed
 
 
 def _cfg_purpose(dataset: str, is_l3: bool) -> str:
@@ -668,13 +979,14 @@ def _cfg_purpose(dataset: str, is_l3: bool) -> str:
             "L3 route in this build.</span>",
             unsafe_allow_html=True,
         )
+        _purpose_scope("causal_impact")
         return "causal_impact"
     default = draft.get("purpose", "fair_lending")
     purpose = st.selectbox(
         "Purpose",
         PURPOSES,
         index=PURPOSES.index(default) if default in PURPOSES else 0,
-        format_func=lambda p: PURPOSE_LABEL[p],
+        format_func=lambda p: _sentence(PURPOSE_LABEL[p]),
         key="govflow_purpose",
         help=(
             "Purpose limitation is the one governance idea a banker recognises "
@@ -696,18 +1008,28 @@ def _cfg_purpose(dataset: str, is_l3: bool) -> str:
             f"<span class='muted'>{html.escape(decision.reason)}</span>",
             unsafe_allow_html=True,
         )
+    _purpose_scope(purpose)
     return purpose
 
 
+def _purpose_scope(purpose: str) -> None:
+    """What the selected purpose covers and what it does not. The copy is the
+    policy module's (govflow/purpose_matrix.py), not the UI's, so a purpose
+    reads the same wherever it is explained."""
+    scope = PURPOSE_SCOPE.get(purpose)
+    if scope:
+        _scope_block([("Is", scope.covers), ("Is not", scope.excludes)])
+
+
 def _cfg_question(is_l3: bool) -> tuple[str, str, str]:
-    """Step 3: pick a prebuilt question. Returns (style, intent, question)."""
+    """Step 3: select a prebuilt analysis. Returns (style, intent, question)."""
     draft = _draft()
-    st.markdown("**Step 3 of 3 · Pick the question**")
+    st.markdown("**Step 3 of 3 · Select the Analysis**")
     styles = _L3_STYLES if is_l3 else _GOVFLOW_STYLES
     names = list(styles)
     default = draft.get("style_l3" if is_l3 else "style", names[0])
     style = st.selectbox(
-        "Request",
+        "Analysis",
         names,
         index=names.index(default) if default in names else 0,
         key="govflow_style_l3" if is_l3 else "govflow_style",
@@ -720,6 +1042,21 @@ def _cfg_question(is_l3: bool) -> tuple[str, str, str]:
         f"<span class='muted'>Question sent to the flow:</span> “{html.escape(question)}”",
         unsafe_allow_html=True,
     )
+    note = _ANALYSIS_NOTE.get(style)
+    if note:
+        _scope_block(
+            [
+                ("What it is", note.what),
+                ("Method", note.method),
+                ("Libraries", note.libraries),
+            ]
+        )
+        if note.control:
+            st.markdown(
+                "<span class='muted'>The control that refuses it:</span>",
+                unsafe_allow_html=True,
+            )
+            _control_popover(note.control, None, key=f"gv_anote_{note.control}")
     return style, intent, question
 
 
@@ -862,8 +1199,20 @@ def _panel_ask(pub: dict | None, cfg: dict | None, persona) -> None:  # noqa: AN
         )
         return
 
-    mode, dataset, dclass = _cfg_dataset()
+    mode, dataset, dclass, confirmed = _cfg_dataset()
     is_l3 = mode == _MODE_L3
+    if not confirmed:
+        # The purpose and the analysis are both declared against a dataset, so
+        # neither can be asked for before one is bound. Clearing the question is
+        # what keeps a stale request from being run against a newly picked
+        # dataset: Plan reads it and sends the user back here.
+        _draft()["question"] = ""
+        st.markdown(
+            "<span class='muted'>Confirm the dataset to declare a purpose and select "
+            "an analysis.</span>",
+            unsafe_allow_html=True,
+        )
+        return
     st.divider()
     purpose = _cfg_purpose(dataset, is_l3)
     st.divider()

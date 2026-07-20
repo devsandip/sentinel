@@ -71,6 +71,108 @@ PURPOSE_LABEL: dict[str, str] = {
     "causal": "causal inference",
 }
 
+
+@dataclass(frozen=True)
+class PurposeScope:
+    """What a declared purpose covers, and what it does not.
+
+    Purpose limitation only means something if a purpose has edges. A user
+    picking one off a dropdown cannot see those edges, so they are written down
+    here, in the same module as the matrix that enforces them, rather than in
+    the UI where they would drift away from the policy they describe.
+    """
+
+    covers: str
+    excludes: str
+
+
+PURPOSE_SCOPE: dict[str, PurposeScope] = {
+    "fair_lending": PurposeScope(
+        covers=(
+            "Testing whether a lending decision falls differently on a protected "
+            "group. Selection rates, approval gaps and disparity ratios, measured "
+            "on the decision the model already makes."
+        ),
+        excludes=(
+            "Not a licence to build or tune the model, and not a route to an "
+            "individual applicant. It measures outcomes across groups; it does "
+            "not score a person."
+        ),
+    ),
+    "credit_risk": PurposeScope(
+        covers=(
+            "Developing, validating or monitoring a model that estimates whether a "
+            "borrower defaults. Development samples, discrimination and calibration "
+            "metrics, drift against a benchmark."
+        ),
+        excludes=(
+            "Not fairness testing, which is its own purpose and its own review. A "
+            "risk score produced here may not be turned around and used to pick who "
+            "gets an offer."
+        ),
+    ),
+    "fraud": PurposeScope(
+        covers=(
+            "Detecting or investigating fraudulent transactions and accounts: "
+            "anomaly rates, rule and model performance, case triage."
+        ),
+        excludes=(
+            "Not general behavioural profiling, and refused on credit-decision "
+            "data, where a fraud purpose would be a pretext for looking at "
+            "applicants."
+        ),
+    ),
+    "marketing": PurposeScope(
+        covers=(
+            "Campaign design, targeting, uplift measurement and channel attribution, "
+            "on data that was collected for marketing in the first place."
+        ),
+        excludes=(
+            "Refused on credit-decision data. Credit data is collected to decide "
+            "credit; reusing it to sell is the textbook purpose-limitation breach, "
+            "and CTL-PURP-01 stops it at Access before any code is generated."
+        ),
+    ),
+    "quality": PurposeScope(
+        covers=(
+            "Profiling the data itself: completeness, ranges, duplicate and null "
+            "rates, drift against the data contract."
+        ),
+        excludes=(
+            "Not an analysis of people. It looks at columns and distributions, not "
+            "at what a decision does to a group, which is why it is permitted on "
+            "every dataset here."
+        ),
+    ),
+    "causal": PurposeScope(
+        covers=(
+            "Estimating what an intervention caused: difference-in-differences, "
+            "interrupted time series, and the like, where the question is the "
+            "effect of a change rather than an association."
+        ),
+        excludes=(
+            "Not correlational reporting relabelled. Refused on credit-decision "
+            "data in this build, where a causal claim about applicants would need "
+            "a model review this platform does not pretend to model."
+        ),
+    ),
+    # The L3 route declares its purpose as `causal_impact` rather than `causal`
+    # (govflow/l3.py). It never reaches the matrix, but it does reach the UI, so
+    # it needs an entry here or the L3 user is told nothing.
+    "causal_impact": PurposeScope(
+        covers=(
+            "The L3 route's fixed purpose: estimating the effect of one "
+            "intervention on one metric, on Public synthetic data with a known "
+            "injected effect to check the answer against."
+        ),
+        excludes=(
+            "Not a general licence that comes with the L3 tier. L3 widens what "
+            "code may be written, not what the data may be used for; the purpose "
+            "is pinned to the route and cannot be switched here."
+        ),
+    ),
+}
+
 # The matrix (PRD 4.4). True = permitted, False = refused at Access (CTL-PURP-01).
 # Transcribed cell for cell from the PRD; the bolded marketing column is the demo.
 _Y, _X = True, False
