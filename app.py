@@ -81,6 +81,7 @@ from sentinel.ui.govflow import (
     purpose_extra,
     render_govflow,
 )
+from sentinel.ui.help import render_ask, render_faq
 from sentinel.ui.manual import render_manual
 from sentinel.ui.tables import table_head, table_row, td
 
@@ -3446,7 +3447,7 @@ _NAV_GROUPS: list[tuple[str | None, list[str]]] = [
     ("Workspace", ["Run", "Pipeline", "Analyses"]),
     ("Governance", ["Datasets", "Registry"]),
     ("Platform", ["Platform", "Adoption", "Audit Log"]),
-    ("Help", ["User Manual"]),
+    ("Help", ["User Manual", "FAQ", "Ask me"]),
 ]
 _NAV_KEYS = {
     "Overview": "nav_home",
@@ -3459,6 +3460,8 @@ _NAV_KEYS = {
     "Adoption": "nav_adoption",
     "Audit Log": "nav_auditlog",
     "User Manual": "nav_manual",
+    "FAQ": "nav_faq",
+    "Ask me": "nav_ask",
 }
 # Nav icons (ui-spec 2.2, sentinel-stepper-mockup.html sidenav). Material
 # Symbols, rounded/outline style, matching the mockup's stroked SVG set:
@@ -3476,6 +3479,8 @@ _NAV_ICONS = {
     "Adoption": ":material/bar_chart:",
     "Audit Log": ":material/gavel:",
     "User Manual": ":material/menu_book:",
+    "FAQ": ":material/quiz:",
+    "Ask me": ":material/forum:",
 }
 
 # Deep link. ?run=<id> lands directly on that run's evidence, so an audit-log
@@ -3565,6 +3570,16 @@ if section == "User Manual":
     # _nav_to is passed in rather than imported by the manual: app.py imports
     # sentinel.ui.manual, so the manual importing back would be a cycle.
     render_manual(_nav_to)
+    st.stop()
+
+if section == "FAQ":
+    # Same injection as the manual: these screens jump into a chapter, so they
+    # need _nav_to, and importing it back would be a cycle.
+    render_faq(_nav_to)
+    st.stop()
+
+if section == "Ask me":
+    render_ask(_nav_to)
     st.stop()
 
 if section == _SECTION_AUDIT_RUN:
