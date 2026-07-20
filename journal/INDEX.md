@@ -1,10 +1,69 @@
 # Sentinel — Journal Index
 
-Last refreshed: 2026-07-19 15:22
+Last refreshed: 2026-07-20 10:55
 
-Latest entry: [2026-07-19-1522-chips-that-explain-themselves-v8.md](entries/2026-07-19-1522-chips-that-explain-themselves-v8.md)
+Latest entry: [2026-07-20-1055-the-row-becomes-the-control-v9.md](entries/2026-07-20-1055-the-row-becomes-the-control-v9.md)
 
 ## Where we are now
+
+**v9 is merged and LIVE in prod. The Ask stage's dataset table is now the
+control rather than decoration beside one, and every dropdown in the stage
+explains what it is offering.**
+
+The fault v9 fixed: step 1 showed a two-row dataset table and, underneath it, a
+radio that chose between two *analyses*. The table was decoration; to pick
+`german_credit` you selected "Fair lending (german_credit)" from a list sitting
+below the row describing `german_credit`.
+
+Now each row carries a one-option radio labelled with the dataset id, so the row
+is the select control. Exclusivity across rows is a callback (Streamlit has no
+radio group spanning containers), so it has a test. The chosen row wears the
+`.row-sel` tint and `.rowgood` left bar, both in ui-spec 4.4 and neither ever
+built. Under the table, the mockup's `.pmatrix`: all six purposes for the picked
+dataset, permit or refuse, read off `PURPOSE_MATRIX`. **Confirm Dataset** is
+load-bearing, not cosmetic: steps 2 and 3 do not render until it is pressed, and
+changing the pick drops the confirmation and clears the drafted question, because
+a purpose and an analysis are declared *against* a dataset.
+
+Step 2's options are sentence case (the policy module keeps its lowercase labels,
+which get dropped mid-sentence into refusals; the UI capitalises for a dropdown),
+with a block stating what the purpose covers and what it does not, from
+`PURPOSE_SCOPE` in `purpose_matrix.py`. Step 3 is renamed "Select the Analysis"
+and states the method and the libraries that genuinely run: `fairlearn.metrics`
+for the benign L2 case, duckdb + sqlglot for the SQL route, pandas/numpy/
+`statistics` for the L3 difference-in-differences. Adversarial requests say
+nothing runs and name the control that refuses them. Those control ids are not
+asserted: a test re-runs the real gate over every scripted sample and fails if a
+note names a control the gate does not fire.
+
+Rejected deliberately: `st.dataframe` with `selection_mode="single-row"`. It is
+the only real row click Streamlit offers, but a dataframe cell is plain text, so
+taking it would have cost the classification popover that 4.3 requires. One day
+after settling that rule, deleting a chip to get a nicer click was not on.
+
+PR #13 merged (`c0b8655`). Deployed bundle `sentinel-20260720-104529.zip`, EB
+Green, live-LLM on, verified by walking the live step and running
+`e168559a3501` through all nine stages at tier L2 with 3 controls fired. 392
+tests, ruff clean.
+
+Two operational traps found. **The deploy folder was three days stale:**
+`~/Developer/sentinel` sat on `docs/v6-deploy-record`, 16 commits and ~400 lines
+of `app.py` behind main, and a deploy from it would have shipped v6 while
+reporting success. It cannot simply hold `main` either, because another worktree
+has `main` checked out and git refuses the same branch twice. It is detached at
+the deployed commit now. The structural trap remains: the folder holding the only
+copy of the live-LLM key is the folder nothing keeps current. **And the
+permission classifier blocked `gh pr merge` and `gh api` on the merge endpoint**
+(yesterday it blocked only `--delete-branch`), so a ready PR could not be landed
+until Sandip enabled it.
+
+Deferred still, all by choice: dark mode, RBAC-gated navigation, B-style
+contextual drawers. Drift monitoring still has no stage in the lifecycle and is
+the largest genuine hole. `app.py` is past 2,300 lines with a hand-rolled router.
+
+Everything below is the prior state: v8 in prod.
+
+---
 
 **v8 is merged and LIVE in prod. Every control chip in the app now explains
 itself through one mechanism, and OPA externalisation is out of scope for the
@@ -356,6 +415,7 @@ out).
 
 ## Recent entries
 
+- [2026-07-20-1055-the-row-becomes-the-control-v9.md](entries/2026-07-20-1055-the-row-becomes-the-control-v9.md) : the Ask stage stopped showing information beside a control that ignored it. Step 1's dataset table is now the control: a one-option radio per row labelled with the dataset id, exclusivity enforced in a callback (and tested, since Streamlit has no radio group spanning containers), the `.row-sel` tint and `.rowgood` bar built for the first time, and the mockup's `.pmatrix` showing all six purposes for the picked dataset off the real matrix. **Confirm Dataset gates steps 2 and 3** and changing the pick clears the drafted question, because a purpose and an analysis are declared against a dataset. Step 2 sentence-cased with a covers/excludes block from a new `PURPOSE_SCOPE` in the policy module; step 3 renamed "Select the Analysis" and stating method + libraries that genuinely run, with the refusing control named. Those ids are re-derived from the real gate by test rather than asserted. Rejected: `st.dataframe` single-row selection, which is a real row click but would have cost the classification popover 4.3 requires. Table helpers extracted to `sentinel/ui/tables.py`; `govflow_mode` deleted (the L3 route is now the synthetic_its row). PR #13, bundle `sentinel-20260720-104529.zip`, EB Green, verified live by run `e168559a3501`. 392 tests. Found: the deploy folder was 3 days stale, and the permission classifier now blocks `gh pr merge` outright. prod is v9.
 - [2026-07-19-1522-chips-that-explain-themselves-v8.md](entries/2026-07-19-1522-chips-that-explain-themselves-v8.md) : closed the control-chip gap and got a decision on OPA. The rule, now in ui-spec 4.3: a chip is clickable when it names a governance decision, inert when it names a fact. `_control_popover` was already the right mechanism and already proven at three sites while the engine bar built dead spans thirty lines below it. Wired: engine bar (all nine stages), Architecture stop, import allowlist (grouped by the control that denies each row, four popovers not thirty-six), topbar Data/Purpose chips (both onto CTL-PURP-01, whose two axes they name), certification gate rows, the Screen PII finding. Not wired, deliberately: the chips inside the Controls popover, since popovers should not nest. Datasets and both Registry tables rebuilt off `st.dataframe` into hand-laid tables so cells can carry chips; cost is lost sorting. Found on the way: the dataset registry had no classification column at all, and CTL-CODE-00 / CTL-DISC-03 were missing from their engine lists. PR #11, bundle `sentinel-20260719-151623.zip`, EB Green, verified live. 382 tests. **OPA externalisation ruled out by Sandip: not in scope for the foreseeable future.** prod is v8.
 - [2026-07-19-1354-chrome-that-tells-the-truth-v7.md](entries/2026-07-19-1354-chrome-that-tells-the-truth-v7.md) : a chrome pass, all of it the same theme: the shell claiming what the page could not back. PR #8 (identity in one place, the header popover; tier off the global bar; the green governed badge becomes a warning that only warns; nav icons + in-app Back). PR #9 (Data/Purpose chips scoped to screens with a run, no more hardcoded german_credit/fair-lending on the dashboard and catalogs; sidebar rhythm matched to the mockup, 590px rail to 410px by zeroing Streamlit's 16px block gap). Deployed bundle `sentinel-20260719-133917.zip`, EB Green, live-LLM on, verified by clicking through the live site. 371 tests. ui-spec 2.1/2.2 updated. Also corrects my own earlier claim that OPA externalisation was killed: it was not, it still waits on Sandip. prod is v7.
 - [2026-07-19-1030-v6-deployed-to-prod.md](entries/2026-07-19-1030-v6-deployed-to-prod.md) : Sandip said merge and deploy. PR #5 merged to main (`2e47fce`); deployed bundle `sentinel-20260719-101916.zip`, CFN changeset applied, EB green, live-LLM on. Prod moved v5 to v6. Verified the right way: the login gate renders (absent in v5), the command center shows live tiles (Datasets 8, Registry 3, Adoption 19) and a grouped sidebar with live counts, and run `7d306d5dfb64` completed all nine stages at tier L2 with 3 controls fired. `describe-application-versions` returned null for the bundle key (CFN manages the version label); the deploy upload log is the provenance. prod is v6.
@@ -406,6 +466,8 @@ out).
 - Where does drift monitoring live? Evidently is on the dependency map with no stage in the lifecycle.
 - ~~Should linear analysis runs feed the adoption metrics and model registry?~~ Resolved 2026-07-19 (H phase). Linear analysis, govflow, and L3 runs now feed the adoption totals and the weekly/per-dataset cuts via the seeded run-history store. The model registry stays scoped to credit_risk runs only, since it is a model inventory and only that path promotes a model. Per-agent invocation counts are likewise scoped to the credit pipeline.
 - Retrieval ranking: the SR 11-7 query ranks the internal modeling standard above the SR 11-7 document itself (SR 11-7 chunks still return at ranks 2-3). Worth a later look at chunking or reranking.
+- Should `deploy.sh` refuse when `HEAD` is not an ancestor of `origin/main`? Opened 2026-07-20: the primary checkout had been parked on `docs/v6-deploy-record` since Sunday, 16 commits behind, and a deploy from it would have shipped v6 while reporting success. Nothing keeps that folder current, and it is the only place the gitignored live-LLM key exists, so it cannot simply be abandoned for a worktree. A one-line guard in the script would have caught it. The related structural question is whether the primary checkout should hold `main` at all, given another worktree currently does and git refuses the same branch twice.
+- How should concurrent sessions on this repo be handled? Opened 2026-07-20: a second session pushed `claude/demo-prep-hiring-manager-5c0866` (a real nav-bar paint fix) mid-conversation, while I was reporting the branch list as settled. Sandip chose to deploy without it. There is no convention yet for noticing another live session, and the branch list is not a reliable signal because it changes underneath you.
 - ~~`synthetic_its` is registered but has no onboarder~~ Resolved: onboarded in v4 (generated with a known +12 effect), and in v6 (2026-07-19) it gained CAP_TABULAR so profiling is legal on it too. It is the Public-class L3 home.
 - Demo GIF/Loom for the README: dropped for now per Sandip (2026-07-14).
 
