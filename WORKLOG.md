@@ -776,3 +776,28 @@ Append-only session handoff log. Newest entries at the bottom.
 
 **Decisions:**
 - Deploy on merge rather than batching against the worktrees. The deploy is not incremental (the script zips the repo root and ships a fresh bundle), so batching is free in effort and costs bisection. The previous deploy carried four changes after three stale sessions; this one carried one tested change. The argument holds only while merges stay small, which is another reason to split `app.py`.
+
+## 2026-07-20 (evening, cont.) — the Gate stage shows what it read
+
+**Did:**
+- Rebuilt the Gate stage's show-and-tell after Sandip said it does not really say anything. The fault was in `gate_code`, not the screen: it recorded only refusals, so a cleared run produced no evidence and nine ticks was all there was to print.
+- Added a `CheckReading` per check: constructs judged, the rule judged against, and one of four verdicts (`cleared`, `refused`, `no_subject`, `not_armed`). Additive; `passed`/`controls_fired`/`violations` unchanged.
+- Rewrote `_panel_gate` as four blocks: the verdict with its reason in both directions, what the gate was given (grant, allowlist, table scope, printed not counted), nine cells carrying each check's count, and the read drawn on the code as a per-line construct count in the gutter.
+- Armed `CTL-PURP-01` on the L3 route. `l3.py` called `gate_code` without `allowed_tables`, so it could not fire on any L3 run while the old screen ticked it.
+- Deleted the screen's own copy of the nine checks; it renders the catalogue in `gate.py`.
+- Merged `origin/main` (audit-log role scoping landed mid-session), resolved an append-vs-append conflict in `test_app_smoke.py`, merged PR #29 to `main`.
+
+**State now:**
+- `main` at `9818c64`. No PRs open. 525 passed, 2 skipped, ruff clean.
+- **Prod does not carry PR #29.** It still serves the PR #25 bundle `sentinel-20260720-180457.zip`.
+- Verified in the browser on both paths: the benign L2 run reads 7 cleared / 2 nothing-to-read; the webhook adversarial run reads 1 refused / 6 cleared with `CTL-EGRESS-01` named on line 10.
+
+**Next:**
+- Deploy PR #29 from `~/Developer/sentinel` with `AWS_PROFILE=admin ./deploy/aws/deploy.sh`. Verify by the Gate panel itself: the nine-cell strip with two dashed grey cells on the benign run is a thing that cannot render on the old bundle.
+- Then split `app.py` into `sentinel/ui/screens/*.py`. Still the deferred item.
+
+**Decisions:**
+- Four verdicts, not two. Judged-and-permitted, nothing-here-to-judge, and rule-never-supplied are three different facts and only the first is an assurance about the code. Collapsing them is what let the L3 hole sit behind a tick.
+- Deny-list sweeps report the size of the sweep and name only their hits; allow-list checks name every construct. Naming all of the former means printing the file back.
+- The check catalogue lives in `gate.py`, not the screen. A screen holding its own list of what the enforcement does is a claim nothing holds the code to, which is the fourth instance of that fault in this build.
+- Stated judgements and constructs as two numbers. The verdict said "judged 61 constructs" while the gutter under it summed to 27; on the one screen whose argument is that its numbers can be checked, that would have been the feature undone by its own headline.
