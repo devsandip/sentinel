@@ -2,9 +2,12 @@
 
 Ten chapters behind a rail, the first of which is a presentation deck. The deck
 exists because the product is wide enough that a new visitor cannot infer it
-from any single screen: nine governance stages, four autonomy tiers, twenty-six
-named controls, ten screens, three registries. The other nine chapters are the
-reference the deck points at.
+from any single screen: the governance stages, the autonomy tiers, the named
+controls, the screens, the registries. Those counts are not written here,
+because this docstring cannot read them and a sentence that names one goes
+stale silently, which is what happened to the screens chapter's opening line
+the first time a nav item was added. The other nine chapters are the reference
+the deck points at.
 
 The rule this module follows, which is the rule the rest of the build follows:
 **every number here reads from the thing that enforces it.** The stage list
@@ -77,6 +80,7 @@ from sentinel.sandbox.execute import (
     GOVFLOW_WALL_CLOCK_S,
 )
 from sentinel.ui.brand import SHIELD_SVG
+from sentinel.ui.nav import DRILL_DOWNS, SECTION_TEMPLATES, screen_count
 
 # --------------------------------------------------------------------------
 # Chapters
@@ -281,11 +285,16 @@ _SCREEN_MAP: list[tuple[str, str, str]] = [
     ),
     ("Datasets", "Datasets", "Eight datasets under classification, each with a data contract."),
     (
+        SECTION_TEMPLATES,
+        SECTION_TEMPLATES,
+        "Governed blueprints. Edit the spec, watch the checks, deploy a draft.",
+    ),
+    (
         "Registry",
         "Registry",
         "Three registries: models, agents, and analysis-agents under certification.",
     ),
-    ("Platform", "Platform", "Playbooks, reusable agent templates, and the pattern catalogue."),
+    ("Platform", "Platform", "Playbooks, template reuse metrics, and the pattern catalogue."),
     ("Adoption", "Adoption", "Runs, promotion rate, override rate, template coverage."),
     ("Audit Log", "Audit Log", "The cross-run ledger. Every run replayed as the same nine stages."),
 ]
@@ -1003,7 +1012,7 @@ def _deck(nav_to) -> None:  # noqa: ANN001, C901
     _slide(
         8,
         "The map",
-        "Nine screens, and which question each one answers.",
+        f"{screen_count()} screens, and which question each one answers.",
         "Start at Run if you want to see the product work. Start at Audit Log if "
         "you want to see whether it worked before.",
     )
@@ -1567,10 +1576,10 @@ def _regulation_chapter() -> None:
 # --------------------------------------------------------------------------
 def _screens_chapter(nav_to) -> None:  # noqa: ANN001
     st.markdown(
-        "<span class='muted'>Nine screens in the sidebar, plus two drill-downs "
-        "that are deliberately not nav items: a dataset's contract, and a single "
-        "run's audit detail. You reach those by opening a row, and the sidebar "
-        "Back button returns you.</span>",
+        f"<span class='muted'>{screen_count()} screens in the sidebar, plus "
+        f"{len(DRILL_DOWNS)} drill-downs that are deliberately not nav items: "
+        f"{', '.join(DRILL_DOWNS[:-1])} and {DRILL_DOWNS[-1]}. You reach those by "
+        "opening a row, and the sidebar Back button returns you.</span>",
         unsafe_allow_html=True,
     )
     st.write("")
@@ -1701,6 +1710,40 @@ def _screens_chapter(nav_to) -> None:  # noqa: ANN001
         ],
     )
     _screen(
+        SECTION_TEMPLATES,
+        SECTION_TEMPLATES,
+        "Governed blueprints, and the only screen where you author policy rather than read it.",
+        [
+            (
+                "The list",
+                "Five shipped templates with the pattern, tier ceiling and scope each declares, "
+                "and whether its policy checks are clear. Open one to edit it.",
+            ),
+            (
+                "The spec",
+                "One YAML document, the same format `sentinel new-agent` writes. Every field names "
+                "a value some other module owns, so the legal values beside the editor are read "
+                "from those modules rather than typed here. Edits live in your session; the "
+                "shipped blueprint is never changed, and Download gives you the file.",
+            ),
+            (
+                "The checks",
+                "The same four verdicts the Gate stage uses, over eleven checks. Policy checks are "
+                "the fence: a refusal disables the deploy, because an illegal blueprint should not "
+                "reach the registry. Certification gates are not: they block certified, which is "
+                "why every shipped template reads clear on policy and still fails two gates.",
+            ),
+            (
+                "Deploy",
+                "Registers the spec as a draft analysis-agent with the dataset's content SHA "
+                "computed now, exactly as the scaffolding CLI does. It appears on Registry under "
+                "Analysis-agents and the four gates decide what it may become. Nothing is "
+                "written to disk and no process starts; the governance outcome is real, the "
+                "rollout is not.",
+            ),
+        ],
+    )
+    _screen(
         "Registry",
         "Registry",
         "Three different inventories that are easy to confuse, so the screen separates them.",
@@ -1739,8 +1782,8 @@ def _screens_chapter(nav_to) -> None:  # noqa: ANN001
             ),
             (
                 "Templates",
-                "Reusable agent templates, with coverage measured against the "
-                "agents actually in use.",
+                "The coverage metric only: how many live agents realize a template. The "
+                "catalogue itself, and the editor, are on Agent Templates under Governance.",
             ),
             (
                 "Patterns",

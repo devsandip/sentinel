@@ -43,7 +43,6 @@ from sentinel.platform import (
     adoption_metrics,
     agent_registry,
     all_patterns,
-    all_templates,
     load_playbooks,
     model_versions,
     reuse_metrics,
@@ -68,6 +67,8 @@ from sentinel.platform.patterns import AVOIDED, IN_USE, PLANNED
 from sentinel.platform.run_history import KIND_CREDIT_RISK
 from sentinel.platform.templates import AVAILABLE, LIVE
 from sentinel.sandbox.warmup import start_background_warmup
+from sentinel.ui.agent_templates import SECTION as _SECTION_TEMPLATES
+from sentinel.ui.agent_templates import render_agent_templates
 from sentinel.ui.brand import SHIELD_SVG
 from sentinel.ui.govflow import (
     cls_label,
@@ -78,6 +79,7 @@ from sentinel.ui.govflow import (
 )
 from sentinel.ui.help import render_ask, render_faq
 from sentinel.ui.manual import render_manual
+from sentinel.ui.nav import NAV_GROUPS, NAV_ICONS, NAV_KEYS
 from sentinel.ui.tables import table_head, table_row, td
 
 st.set_page_config(page_title="Sentinel — Governed Agentic Analysis", layout="wide")
@@ -1259,8 +1261,9 @@ def render_platform() -> None:
     st.markdown("### Reusable agent templates")
     st.markdown(
         "<span class='muted'>Parameterized starter agents with the harness "
-        "pre-wired: tool allow-list, RBAC scope, and evals. New agents start from a "
-        "governed blueprint, not a blank file.</span>",
+        "pre-wired: tool allow-list, column grant, purposes, tier ceiling and "
+        "evals. New agents start from a governed blueprint, not a blank file."
+        "</span>",
         unsafe_allow_html=True,
     )
     m = reuse_metrics()
@@ -1273,18 +1276,18 @@ def render_platform() -> None:
         "Coverage = live pipeline agents that realize a template. Hours saved is an "
         "illustrative estimate of harness wiring avoided per reuse."
     )
-    for t in all_templates():
-        realized = (
-            f" · realized by: {', '.join(t.realized_by)}" if t.realized_by else ""
-        )
-        st.markdown(
-            f"**{t.name}** {_pill(t.status)}<br>"
-            f"<span class='muted'>{t.purpose}</span><br>"
-            f"<span class='muted'>pattern: {t.pattern} · tools: "
-            f"{', '.join(t.tools)} · RBAC: {t.rbac_scope}{realized}</span>",
-            unsafe_allow_html=True,
-        )
-        st.write("")
+    # The list itself lives on Governance > Agent Templates, where each one can
+    # be opened, checked and deployed. Printing the five here as well would be
+    # two screens claiming to be the catalogue, which is the confusion the
+    # Registry screen already had to unpick once.
+    if st.button(
+        "Open agent templates", icon=":material/dashboard_customize:", key="plat_tpl"
+    ):
+        _nav_to(_SECTION_TEMPLATES)
+    st.caption(
+        "The catalogue, the editor and the deploy path are on the Agent Templates "
+        "screen under Governance."
+    )
 
     st.divider()
     st.markdown("### Agentic architecture pattern catalog")
@@ -2013,7 +2016,7 @@ _AUDIT_CTL_ALIAS = {
 # it can say which one fired; a single chip would have to pick one and be
 # wrong half the time.
 
-# A drill-down screen, deliberately NOT in _NAV_GROUPS: you reach it by opening
+# A drill-down screen, deliberately NOT in NAV_GROUPS: you reach it by opening
 # a run, not from the rail. It still participates in the nav stack, so the
 # sidebar Back button returns to the ledger like any other screen.
 _SECTION_AUDIT_RUN = "Audit Run"
@@ -3080,50 +3083,9 @@ def render_home(persona) -> None:  # noqa: ANN001
 # --------------------------------------------------------------------------
 # Layout
 # --------------------------------------------------------------------------
-# The grouped sidebar (ui-spec 2.2): Overview, then Workspace / Governance /
-# Platform groups, and Help last. Buttons write st.session_state.section; the
-# active item renders as the primary variant (styled as the nav active state).
-# Help sits at the bottom because it is a reference surface, not a step in any
-# workflow: nothing in the product routes through it, and putting it above
-# Platform would imply otherwise.
-_NAV_GROUPS: list[tuple[str | None, list[str]]] = [
-    (None, ["Overview"]),
-    ("Workspace", ["Run", "Analyses"]),
-    ("Governance", ["Datasets", "Registry"]),
-    ("Platform", ["Platform", "Adoption", "Audit Log"]),
-    ("Help", ["User Manual", "FAQ", "Ask me"]),
-]
-_NAV_KEYS = {
-    "Overview": "nav_home",
-    "Run": "nav_run",
-    "Analyses": "nav_analyses",
-    "Datasets": "nav_datasets",
-    "Registry": "nav_registry",
-    "Platform": "nav_platform",
-    "Adoption": "nav_adoption",
-    "Audit Log": "nav_auditlog",
-    "User Manual": "nav_manual",
-    "FAQ": "nav_faq",
-    "Ask me": "nav_ask",
-}
-# Nav icons (ui-spec 2.2, sentinel-stepper-mockup.html sidenav). Material
-# Symbols, rounded/outline style, matching the mockup's stroked SVG set:
-# home, play, database, verified-check, grid, bar-chart. Analyses is an
-# app-only item not in the mockup; it gets the nearest matching glyph (a stats
-# magnifier).
-_NAV_ICONS = {
-    "Overview": ":material/home:",
-    "Run": ":material/play_arrow:",
-    "Analyses": ":material/query_stats:",
-    "Datasets": ":material/database:",
-    "Registry": ":material/verified:",
-    "Platform": ":material/grid_view:",
-    "Adoption": ":material/bar_chart:",
-    "Audit Log": ":material/gavel:",
-    "User Manual": ":material/menu_book:",
-    "FAQ": ":material/quiz:",
-    "Ask me": ":material/forum:",
-}
+# The nav's definition moved to sentinel/ui/nav.py when the manual had to
+# describe it: the screens chapter opened with a hand-typed count that a new nav
+# item silently falsified. Both read the one list now.
 
 # Deep link. ?run=<id> lands directly on that run's evidence, so an audit-log
 # URL opened in a new tab or pasted to a colleague resolves to the run rather
@@ -3155,7 +3117,7 @@ if st.sidebar.button(
 ):
     _nav_back()
 
-for _glabel, _items in _NAV_GROUPS:
+for _glabel, _items in NAV_GROUPS:
     if _glabel:
         st.sidebar.markdown(f"<div class='gl'>{_glabel}</div>", unsafe_allow_html=True)
     for _item in _items:
@@ -3164,9 +3126,9 @@ for _glabel, _items in _NAV_GROUPS:
         # rerun that would cull the visible section's widgets.
         if st.sidebar.button(
             _item,
-            key=_NAV_KEYS[_item],
+            key=NAV_KEYS[_item],
             type="primary" if _item == section else "secondary",
-            icon=_NAV_ICONS.get(_item),
+            icon=NAV_ICONS.get(_item),
             use_container_width=True,
         ):
             _nav_to(_item)
@@ -3200,6 +3162,10 @@ if section == "Platform":
 
 if section == "Datasets":
     render_datasets()
+    st.stop()
+
+if section == _SECTION_TEMPLATES:
+    render_agent_templates(persona)
     st.stop()
 
 if section == "Registry":
