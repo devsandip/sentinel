@@ -1,17 +1,51 @@
 # Sentinel — Journal Index
 
-Last refreshed: 2026-07-20 18:13
+Last refreshed: 2026-07-20 18:40
 
-Latest entry: [2026-07-20-1813-prod-carries-the-scope.md](entries/2026-07-20-1813-prod-carries-the-scope.md)
+Latest entry: [2026-07-20-1840-a-live-count-is-not-a-live-claim.md](entries/2026-07-20-1840-a-live-count-is-not-a-live-claim.md)
 
 ## Where we are now
 
-**Prod is in sync with `main` at `174df5e`. PR #25 deployed as bundle
-`sentinel-20260720-180457.zip`, EB Health Green, health 200, root 200 in
-0.66s, WebSocket 101, live-LLM key present. No PRs open.** Verified by the
-behaviour that only exists in this build, not by health: the Data Scientist
-sees 20 runs with the scope banner and a disabled "Ran by", and a completed
-govflow run files its events under all eight stages that emitted one.
+**Prod runs PR #28 at `3e15f84`, EB Ready and Green, application version
+`sentinel-eb-applicationversion-4dgkmqial0qf`. Health 200, static assets
+gzipped, no console errors. `main` has since moved to `9818c64`: PR #29 is
+merged and not deployed.**
+
+**Sentinel has a User Manual, under a new Help group in the sidebar.** It opens
+on a nine-slide presentation and runs ten chapters behind it: quick start, the
+nine stages, autonomy levels, controls, screens, roles, data, architecture,
+glossary. It is a screen rather than a file in `docs/` because it describes 26
+controls, 14 allowed imports, 8 datasets, 4 tiers, 6 personas and 9 stages, and
+every one of those numbers is something the code already knows. The module
+imports the enforcing modules and computes the cover stats at render time;
+prose is owned by the manual, numbers are borrowed. `render_manual` takes
+`nav_to` as an argument because `app.py` imports the manual and the cycle would
+be immediate.
+
+**Building it found the gap in that rule.** Merging main into the branch before
+merging the PR surfaced it: PR #25 had added `can_view_all_runs` to `Persona`,
+the manual rendered six personas with the right count, and the new entitlement
+was invisible. Reading a collection live keeps the *count* honest for free and
+says nothing about a *field*. Fixed in three places and pinned with a test that
+counts rendered entitlement verdicts against the persona set, because a test is
+the only thing that makes a live read a live claim. Two smaller finds: the
+sandbox default wall clock is 30s while both governed routes passed a literal
+15, now named `GOVFLOW_WALL_CLOCK_S` and pinned; and the guard test that bans a
+hardcoded wall clock in `sentinel/ui/` fired on my own docstring quoting the
+morning's finding, which I fixed by rewriting the prose rather than teaching
+the guard to parse English. Prod also confirmed something local could not: zero
+"not installed here" rows in the Bought table, so the manual is a second check
+that the allowlist matches the instance. 509 tests, 2 skipped, ruff clean.
+
+Everything below is the prior state.
+
+---
+
+**PR #25 deployed as bundle `sentinel-20260720-180457.zip`, EB Health Green,
+health 200, root 200 in 0.66s, WebSocket 101, live-LLM key present.** Verified
+by the behaviour that only exists in this build, not by health: the Data
+Scientist sees 20 runs with the scope banner and a disabled "Ran by", and a
+completed govflow run files its events under all eight stages that emitted one.
 
 **Audit events now carry the stage that emitted them, and the Audit Log obeys
 the access control it is about.** The screen used to print a caption on every
@@ -636,6 +670,7 @@ out).
 
 ## Recent entries
 
+- [2026-07-20-1840-a-live-count-is-not-a-live-claim.md](entries/2026-07-20-1840-a-live-count-is-not-a-live-claim.md) — the User Manual shipped as a screen under Help, opening on a nine-slide deck, ten chapters behind it, PR #28 merged as `3e15f84` and deployed. It is a screen because it describes numbers the code already knows, so it imports the enforcing modules instead of restating them. **The lesson is where that rule leaks.** PR #25 had added `can_view_all_runs` to `Persona`; the manual read personas live, kept the count right, and rendered the new entitlement nowhere. A live read keeps a *count* honest for free and says nothing about a *field*, so the fix is a test that counts rendered entitlement verdicts against the persona set. Found by merging main into the branch before merging the PR, which is the argument for doing that. Also named `GOVFLOW_WALL_CLOCK_S` (the sandbox default is 30s, both governed routes passed a literal 15, every surface printed 30), and rewrote a docstring that tripped the hardcoded-wall-clock guard, because a blunt guard firing on a false positive costs one edit and a clever one missing a real caption costs the claim.
 - [2026-07-20-1813-prod-carries-the-scope.md](entries/2026-07-20-1813-prod-carries-the-scope.md) — deployed PR #25, bundle `sentinel-20260720-180457.zip`, EB Green, prod in sync with `main` at `174df5e`. Two things worth keeping. **The deploy is not incremental**, so batching merges into one deploy is free in effort and costs bisection: the previous deploy carried four changes after three stale sessions, this one carried a single tested change. That is the argument for deploying on merge, and it holds only while merges stay small, which is the same reason the `app.py` split matters. And **verification used the behaviour that only exists in the new build**, because health 200 passes on the old bundle: Streamlit answers that endpoint before `app.py` runs, which is how the first prod deploy returned 200 with every page broken. Checked the scope banner, the disabled "Ran by", and events filed under all eight stages. A deploy is verified when the change is visible, not when the instance is up.
 - [2026-07-20-1758-the-caption-was-the-bug.md](entries/2026-07-20-1758-the-caption-was-the-bug.md) — the two Audit Log follow-ups, merged as PR #25. **An honest caption is still a gap:** the screen admitted it could not file govflow/L3 events under a stage, and that admission made the gap tolerable enough that I stopped looking at it. Inferring the stage from the action string was rejected because it needs a second table kept in step with 30 call sites and misfiles silently, which on an audit surface beats an admitted absence. So `AuditEvent` carries a `stage` written by the call site: 22 edits in `flow.py`, 8 in `l3.py`, empty on routes with no stage spine and a test asserting they leave it empty. Considered a context manager on the log (9 edits not 30) and rejected it: flow.py's stages are sequential top-level code with early returns, and explicit-per-site reads better in a governance file. Second: **the screen about access control had none**, so `can_view_all_runs` now lives in `personas.yaml` defaulting to deny, one `visible_runs()` predicate scopes the rows, the filter options and the drill-down, and the drill-down is the one that matters because `?run=` would otherwise be the bypass. The scope is announced rather than silently applied, and a withheld run says it exists. Re-seeding preserved all 24 run ids by plan slot, five lines that saved every bookmarked link. 494 tests. Also checked the other ten worktrees expecting to sequence around parallel work: there is none, nine are idle and two branches are dead. **Long-lived worktrees over a 3,400 line `app.py` do not produce parallel work, they produce abandoned branches.**
 - [2026-07-20-1655-what-counts-as-a-refusal.md](entries/2026-07-20-1655-what-counts-as-a-refusal.md) — the Audit Log ships; what counts as a refusal, and no dual control anywhere.
@@ -679,6 +714,7 @@ out).
 
 ## Working hypotheses
 
+- **Reading a collection live keeps the count honest and says nothing about a field.** Found 2026-07-20 building the User Manual. The manual imports every enforcing module rather than restating its numbers, which is the right rule and covers exactly one axis of drift: add a persona and the page notices, add a *property* to every persona and it does not, because nothing in the render enumerates properties. `can_view_all_runs` landed in `Persona` on PR #25 and the manual went on describing five entitlements. The fix is not more live reading, it is a test that counts what the page rendered against the shape of the source. Any surface derived from a collection needs one test for the count and one for the fields, and the second is the one nobody writes. The general form: **deriving text from code protects you from the edits you make to the code you are looking at, not from the edits someone makes to its shape.**
 - **An honest caption about a gap is a way of living with the gap.** Found 2026-07-20. The Audit Log admitted, on every govflow and L3 run, that it could not file events under a stage. The admission was accurate and I felt fine about it for a whole session, which is exactly the problem: saying what you cannot do buys enough credibility to stop working on it. Worth re-reading every "we cannot do X because Y" caption in this build and asking whether Y is a fact about the world or a thing nobody has fixed yet. The related rule, for audit surfaces specifically: **prefer an admitted absence to a silent inference**, because an inference table drifts from its 30 call sites and misfiles quietly, and a governance record that is quietly wrong is worse than one that is loudly incomplete. Both halves of that matter. The first says fix the gap; the second says do not fix it by guessing.
 - **A claim stated in prose is not a control; it drifts the moment nothing enforces it.** Found three times in one session (2026-07-20): the L2 allowlist named five packages that were installed nowhere, the Execute panel's caption claimed a 15s wall clock while the code enforced 10, and the stepper doc listed DoWhy/lifelines/SHAP as permitted directly beneath its own rule to claim only libraries that actually run. Each was written once and true once. The fix in each case was the same shape: make the claim read from the thing that enforces it, and add a test that fails when the two diverge. The allowlist reconciles against `requirements.txt`, the caption interpolates `DEFAULT_WALL_CLOCK_S`, the permitted column renders from `ALLOWED_IMPORTS`. Worth applying to any number or list this build shows a visitor.
 - **An import grant is also a time budget, and a version ceiling.** Adding shap/dowhy/econml to the allowlist (2026-07-20) pinned the whole numerical stack down a major version, because econml and numba cap it, and charged 4.2-4.6s of warm import to every sandbox run against what was a 10s wall clock. Widening an allowlist is never only a policy change.
