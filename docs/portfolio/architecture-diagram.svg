@@ -1,0 +1,226 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 872" width="1200" height="872" role="img" aria-labelledby="sn-diagram-title sn-diagram-desc">
+<title id="sn-diagram-title">Sentinel system architecture</title>
+<desc id="sn-diagram-desc">A request enters through a nine-stage governed pipeline (Ask, Plan, Access, Generate, Gate, Execute, Screen, Interpret, Attest). Generation runs through a model gateway; containment is a static code gate plus a subprocess sandbox. Every stage emits into a control plane and reads through a policy-scoped data plane. The run emits an evidence pack. The whole app runs on a single Elastic Beanstalk instance behind CloudFront.</desc>
+
+<style>
+  .sn-band   { fill: var(--paper-2, #EFEFF1); stroke: var(--rule, #E2E2E5); stroke-width: 1; }
+  .sn-box    { fill: var(--paper, #F6F6F7); stroke: var(--rule, #E2E2E5); stroke-width: 1; }
+  .sn-stage  { fill: var(--paper, #F6F6F7); stroke: var(--ink, #0A0A0B); stroke-width: 1.2; }
+  .sn-accent { fill: var(--accent-soft, rgba(31,77,218,0.08)); stroke: var(--accent, #1F4DDA); stroke-width: 1; }
+  .sn-dash   { fill: none; stroke: var(--rule, #E2E2E5); stroke-width: 1; stroke-dasharray: 3 3; }
+  .sn-lbl    { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 10.5px; letter-spacing: 0.09em; fill: var(--ink-softer, #8A8A92); text-transform: uppercase; }
+  .sn-h      { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12px; font-weight: 600; fill: var(--ink, #0A0A0B); }
+  .sn-t      { font-family: 'Inter', -apple-system, sans-serif; font-size: 10px; fill: var(--ink-soft, #4A4A52); }
+  .sn-tt     { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 9px; fill: var(--accent, #1F4DDA); letter-spacing: 0.02em; }
+  .sn-note   { font-family: 'Inter', -apple-system, sans-serif; font-size: 10.5px; fill: var(--ink-softer, #8A8A92); font-style: italic; }
+  .sn-arrow  { fill: none; stroke: var(--ink-softer, #8A8A92); stroke-width: 1.2; }
+  .sn-flow   { fill: none; stroke: var(--accent, #1F4DDA); stroke-width: 1.2; }
+</style>
+
+<defs>
+  <marker id="sn-ah" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto">
+    <path d="M0 0 L8 4 L0 8 z" fill="var(--ink-softer, #8A8A92)"/>
+  </marker>
+  <marker id="sn-ah-a" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto">
+    <path d="M0 0 L8 4 L0 8 z" fill="var(--accent, #1F4DDA)"/>
+  </marker>
+</defs>
+
+<!-- ══ 1 · REQUEST ══ -->
+<text class="sn-lbl" x="40" y="26">1 · request plane</text>
+<rect class="sn-band" x="40" y="36" width="1120" height="46" rx="3"/>
+<text class="sn-h" x="58" y="56">Prebuilt request</text>
+<text class="sn-t" x="58" y="72">no free-text prompt box on the public link</text>
+<text class="sn-t" x="300" y="56">6 personas</text>
+<text class="sn-t" x="300" y="72">role + identity, not role alone</text>
+<text class="sn-t" x="500" y="56">8 datasets</text>
+<text class="sn-t" x="500" y="72">registry + data contract per table</text>
+<text class="sn-t" x="740" y="56">declared purpose</text>
+<text class="sn-t" x="740" y="72">checked against the purpose matrix</text>
+<text class="sn-t" x="980" y="56">4 autonomy tiers</text>
+<text class="sn-t" x="980" y="72">L0 read-only through L3 open codegen</text>
+
+<path class="sn-flow" d="M600 82 L600 108" marker-end="url(#sn-ah-a)"/>
+
+<!-- ══ 2 · THE NINE STAGES ══ -->
+<text class="sn-lbl" x="40" y="128">2 · the nine-stage governed run</text>
+
+<!-- stage 1 -->
+<rect class="sn-stage" x="43" y="140" width="114" height="104" rx="3"/>
+<text class="sn-h" x="55" y="160">Ask</text>
+<text class="sn-t" x="55" y="178">persona, dataset,</text>
+<text class="sn-t" x="55" y="191">purpose, request</text>
+<text class="sn-tt" x="55" y="232">CTL-PURP-01</text>
+<!-- stage 2 -->
+<rect class="sn-stage" x="168" y="140" width="114" height="104" rx="3"/>
+<text class="sn-h" x="180" y="160">Plan</text>
+<text class="sn-t" x="180" y="178">binds a certified</text>
+<text class="sn-t" x="180" y="191">analysis agent</text>
+<text class="sn-tt" x="180" y="232">4 cert gates</text>
+<!-- stage 3 -->
+<rect class="sn-stage" x="293" y="140" width="114" height="104" rx="3"/>
+<text class="sn-h" x="305" y="160">Access</text>
+<text class="sn-t" x="305" y="178">column grants,</text>
+<text class="sn-t" x="305" y="191">dataset SHA pinned</text>
+<text class="sn-t" x="305" y="207">denied columns</text>
+<text class="sn-t" x="305" y="219">never exist</text>
+<text class="sn-tt" x="305" y="234">CTL-CONTRACT-01</text>
+<!-- stage 4 -->
+<rect class="sn-stage" x="418" y="140" width="114" height="104" rx="3"/>
+<text class="sn-h" x="430" y="160">Generate</text>
+<text class="sn-t" x="430" y="178">the model writes</text>
+<text class="sn-t" x="430" y="191">the analysis code</text>
+<text class="sn-tt" x="430" y="232">spend cap</text>
+<!-- stage 5 -->
+<rect class="sn-stage" x="543" y="140" width="114" height="104" rx="3"/>
+<text class="sn-h" x="555" y="160">Gate</text>
+<text class="sn-t" x="555" y="178">static read before</text>
+<text class="sn-t" x="555" y="191">the machine reads</text>
+<text class="sn-t" x="555" y="207">9 checks,</text>
+<text class="sn-t" x="555" y="219">4 verdicts each</text>
+<text class="sn-tt" x="555" y="234">regenerate loop</text>
+<!-- stage 6 -->
+<rect class="sn-stage" x="668" y="140" width="114" height="104" rx="3"/>
+<text class="sn-h" x="680" y="160">Execute</text>
+<text class="sn-t" x="680" y="178">fresh subprocess,</text>
+<text class="sn-t" x="680" y="191">15s, 1024MB, no net</text>
+<text class="sn-tt" x="680" y="232">CTL-TIME-01</text>
+<!-- stage 7 -->
+<rect class="sn-stage" x="793" y="140" width="114" height="104" rx="3"/>
+<text class="sn-h" x="805" y="160">Screen</text>
+<text class="sn-t" x="805" y="178">small cells removed</text>
+<text class="sn-t" x="805" y="191">not masked (n &lt; 10)</text>
+<text class="sn-t" x="805" y="207">proxy discovery</text>
+<text class="sn-t" x="805" y="219">flags, never refuses</text>
+<text class="sn-tt" x="805" y="234">disclosure floor</text>
+<!-- stage 8 -->
+<rect class="sn-stage" x="918" y="140" width="114" height="104" rx="3"/>
+<text class="sn-h" x="930" y="160">Interpret</text>
+<text class="sn-t" x="930" y="178">narration uses only</text>
+<text class="sn-t" x="930" y="191">the screened numbers</text>
+<text class="sn-tt" x="930" y="232">faithfulness &#8805; 0.9</text>
+<!-- stage 9 -->
+<rect class="sn-stage" x="1043" y="140" width="114" height="104" rx="3"/>
+<text class="sn-h" x="1055" y="160">Attest</text>
+<text class="sn-t" x="1055" y="178">evidence pack,</text>
+<text class="sn-t" x="1055" y="191">human signature</text>
+<text class="sn-t" x="1055" y="207">approver cannot</text>
+<text class="sn-t" x="1055" y="219">be the author</text>
+<text class="sn-tt" x="1055" y="234">CTL-SOD-01</text>
+
+<path class="sn-arrow" d="M158 192 L166 192" marker-end="url(#sn-ah)"/>
+<path class="sn-arrow" d="M283 192 L291 192" marker-end="url(#sn-ah)"/>
+<path class="sn-arrow" d="M408 192 L416 192" marker-end="url(#sn-ah)"/>
+<path class="sn-arrow" d="M533 192 L541 192" marker-end="url(#sn-ah)"/>
+<path class="sn-arrow" d="M658 192 L666 192" marker-end="url(#sn-ah)"/>
+<path class="sn-arrow" d="M783 192 L791 192" marker-end="url(#sn-ah)"/>
+<path class="sn-arrow" d="M908 192 L916 192" marker-end="url(#sn-ah)"/>
+<path class="sn-arrow" d="M1033 192 L1041 192" marker-end="url(#sn-ah)"/>
+
+<!-- refuse / regenerate loop -->
+<path class="sn-flow" d="M600 244 L600 262 L475 262 L475 246" marker-end="url(#sn-ah-a)"/>
+<text class="sn-tt" x="612" y="266">a refusal at Gate regenerates, up to a cap, then hands to a human</text>
+
+<!-- ══ 3 · GENERATION + CONTAINMENT ══ -->
+<text class="sn-lbl" x="40" y="300">3 · generation and containment</text>
+<rect class="sn-box" x="40" y="310" width="360" height="104" rx="3"/>
+<text class="sn-h" x="58" y="332">Model gateway</text>
+<text class="sn-t" x="58" y="350">templated | anthropic | openai, behind one interface</text>
+<text class="sn-t" x="58" y="366">two routing tiers, response cache, per-call ledger</text>
+<text class="sn-t" x="58" y="382">process-global cumulative spend cap ($50/mo in prod)</text>
+<text class="sn-t" x="58" y="400">default is scripted: 0 tokens, $0.0000, labelled honestly</text>
+
+<rect class="sn-box" x="416" y="310" width="360" height="104" rx="3"/>
+<text class="sn-h" x="434" y="332">Static code gate</text>
+<text class="sn-t" x="434" y="350">stdlib ast walk: never imports, evals or runs the code</text>
+<text class="sn-t" x="434" y="366">sqlglot parses any SQL literal and rewrites row filters</text>
+<text class="sn-t" x="434" y="382">import allowlist: 14 at L2, 29 at L3; egress denied at all tiers</text>
+<text class="sn-t" x="434" y="400">no eval, no exec, no dunder escapes, must parse</text>
+
+<rect class="sn-box" x="792" y="310" width="368" height="104" rx="3"/>
+<text class="sn-h" x="810" y="332">Sandbox</text>
+<text class="sn-t" x="810" y="350">a fresh subprocess per run, spawned by the parent</text>
+<text class="sn-t" x="810" y="366">wall clock 15s, RLIMIT_AS 1024MB, RLIMIT_CPU backstop</text>
+<text class="sn-t" x="810" y="382">no network, no filesystem, no process control</text>
+<text class="sn-t" x="810" y="400">warmed bytecode caches at boot so the cap is honest</text>
+
+<path class="sn-dash" d="M475 246 L475 310"/>
+<path class="sn-dash" d="M600 246 L600 310"/>
+<path class="sn-dash" d="M725 246 L725 296 L976 296 L976 310"/>
+
+<!-- ══ 4 · CONTROL PLANE ══ -->
+<text class="sn-lbl" x="40" y="450">4 · control plane &#183; every stage emits here, and every control can refuse</text>
+<rect class="sn-accent" x="40" y="460" width="1120" height="96" rx="3"/>
+<text class="sn-h" x="58" y="482">Audit log</text>
+<text class="sn-t" x="58" y="498">append-only, one</text>
+<text class="sn-t" x="58" y="511">JSONL per run</text>
+<text class="sn-h" x="212" y="482">RBAC</text>
+<text class="sn-t" x="212" y="498">column grants from</text>
+<text class="sn-t" x="212" y="511">rbac.yaml</text>
+<text class="sn-h" x="366" y="482">PII</text>
+<text class="sn-t" x="366" y="498">redaction before</text>
+<text class="sn-t" x="366" y="511">any model sees text</text>
+<text class="sn-h" x="520" y="482">Guardrails</text>
+<text class="sn-t" x="520" y="498">tool allowlist,</text>
+<text class="sn-t" x="520" y="511">query ceiling</text>
+<text class="sn-h" x="674" y="482">Eval gate</text>
+<text class="sn-t" x="674" y="498">golden checks as a</text>
+<text class="sn-t" x="674" y="511">promotion gate</text>
+<text class="sn-h" x="828" y="482">Cost</text>
+<text class="sn-t" x="828" y="498">tokens, dollars,</text>
+<text class="sn-t" x="828" y="511">cycle time per run</text>
+<text class="sn-h" x="982" y="482">Identity</text>
+<text class="sn-t" x="982" y="498">segregation of duties</text>
+<text class="sn-t" x="982" y="511">by identity, not role</text>
+<text class="sn-note" x="58" y="540">26 controls in one catalogue &#183; 23 enforced, 3 declared and drawn dashed &#183; each names the regime it answers to (SR 11-7, ECOA/Reg B, GDPR Art. 5, GLBA, BCBS 239, SOX change control)</text>
+
+<path class="sn-dash" d="M600 414 L600 460"/>
+
+<!-- ══ 5 · DATA PLANE ══ -->
+<text class="sn-lbl" x="40" y="592">5 · data plane</text>
+<rect class="sn-band" x="40" y="602" width="550" height="98" rx="3"/>
+<text class="sn-h" x="58" y="624">Policy-scoped frame</text>
+<text class="sn-t" x="58" y="642">Access builds the table from granted columns only, so a denied</text>
+<text class="sn-t" x="58" y="656">column is not on the object the generated code receives.</text>
+<text class="sn-t" x="58" y="670">Enforcement by construction, not by a runtime check.</text>
+<text class="sn-t" x="58" y="688">DuckDB runs gated SQL &#183; dataset SHA pinned &#183; 8 datasets, 1k to 1.1M rows</text>
+
+<!-- ══ 6 · EVIDENCE OUT ══ -->
+<text class="sn-lbl" x="610" y="592">6 · what a run leaves behind</text>
+<rect class="sn-band" x="610" y="602" width="550" height="98" rx="3"/>
+<text class="sn-h" x="628" y="624">Evidence pack</text>
+<text class="sn-t" x="628" y="642">the finding, its provenance chain, the controls attested, and an</text>
+<text class="sn-t" x="628" y="656">explicit statement of what the analysis does not say.</text>
+<text class="sn-t" x="628" y="674">Model card PDF (SR 11-7 shaped) &#183; OpenLineage START/COMPLETE</text>
+<text class="sn-t" x="628" y="688">marimo notebook &#183; Quarto document &#183; the cross-run audit ledger</text>
+
+<path class="sn-dash" d="M1100 244 L1180 244 L1180 580 L885 580 L885 602"/>
+
+<!-- ══ 7 · RUNTIME ══ -->
+<text class="sn-lbl" x="40" y="736">7 · runtime</text>
+<rect class="sn-box" x="40" y="746" width="150" height="72" rx="3"/>
+<text class="sn-h" x="56" y="770">Route 53</text>
+<text class="sn-t" x="56" y="788">A + AAAA alias</text>
+<text class="sn-t" x="56" y="802">sentinel.sandip.dev</text>
+
+<rect class="sn-box" x="226" y="746" width="330" height="72" rx="3"/>
+<text class="sn-h" x="242" y="770">CloudFront + ACM</text>
+<text class="sn-t" x="242" y="788">default behaviour: caching off, all headers forwarded (the</text>
+<text class="sn-t" x="242" y="802">WebSocket needs them) &#183; /static/*: cached and compressed</text>
+
+<rect class="sn-box" x="592" y="746" width="290" height="72" rx="3"/>
+<text class="sn-h" x="608" y="770">Elastic Beanstalk</text>
+<text class="sn-t" x="608" y="788">one t3.small, no load balancer</text>
+<text class="sn-t" x="608" y="802">nginx :80 &#8594; Streamlit :8501</text>
+
+<rect class="sn-box" x="918" y="746" width="242" height="72" rx="3"/>
+<text class="sn-h" x="934" y="770">Retrieval</text>
+<text class="sn-t" x="934" y="788">RDS pgvector + Bedrock Titan v2</text>
+<text class="sn-t" x="934" y="802">falls back to a local TF-IDF index</text>
+
+<path class="sn-arrow" d="M190 782 L222 782" marker-end="url(#sn-ah)"/>
+<path class="sn-arrow" d="M556 782 L588 782" marker-end="url(#sn-ah)"/>
+<path class="sn-arrow" d="M882 782 L914 782" marker-end="url(#sn-ah)"/>
+
+<text class="sn-note" x="40" y="846">Two idempotent CloudFormation stacks own the whole footprint. Scripted narration is the default, so the public link costs about zero and cannot be run up.</text>
+</svg>
