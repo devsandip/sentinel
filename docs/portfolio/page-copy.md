@@ -1,4 +1,4 @@
-# Sentinel — portfolio page copy
+# Sentinel portfolio page copy
 
 The source text for https://sandip.dev/portfolio/Sentinel/. The HTML is a
 rendering of this file. Edit here first.
@@ -160,22 +160,22 @@ The pipeline and the control plane are separable, which is the whole claim to
 being a platform rather than a demo. Roughly 27,000 lines under `sentinel/`, with
 8,000 more of tests.
 
-- **`govflow/`** — the nine stages end to end, the autonomy tiers, the purpose
+- **`govflow/`**: the nine stages end to end, the autonomy tiers, the purpose
   matrix, the policy-scoped access build, and the single control catalogue.
-- **`codegen/`** — the static gate (an `ast` walk), the SQL gate (sqlglot), the
+- **`codegen/`**: the static gate (an `ast` walk), the SQL gate (sqlglot), the
   import allowlist, the result contract that is interpolated into the prompt and
   then enforced after execution, and a seeded corpus of real violations to test
   the gate against.
-- **`sandbox/`** — parent-side spawn with a wall clock, a child entrypoint with
+- **`sandbox/`**: parent-side spawn with a wall clock, a child entrypoint with
   resource limits, and a boot-time warm-up so the time cap measures the analysis
   rather than a cold import.
-- **`harness/`** — the control plane: audit log, RBAC, PII, guardrails, eval
+- **`harness/`**: the control plane: audit log, RBAC, PII, guardrails, eval
   gate, cost, model card, identity, OpenTelemetry tracing.
-- **`platform/`** — certification, the model registry, the cross-run audit store,
+- **`platform/`**: certification, the model registry, the cross-run audit store,
   agent templates, playbooks, adoption metrics.
-- **`disclosure/`** — small-cell suppression and the association measure behind
+- **`disclosure/`**: small-cell suppression and the association measure behind
   proxy discovery.
-- **`evidence/`** — the evidence pack, and the marimo and Quarto renderings of it.
+- **`evidence/`**: the evidence pack, and the marimo and Quarto renderings of it.
 - **`gateway/`, `ml/`, `datasets/`, `rag/`, `lineage/`, `analyses/`, `ui/`.**
 
 ### 3.6 Runtime
@@ -215,18 +215,18 @@ in the repo with dates.
 
 | Decision | Call | Why |
 | --- | --- | --- |
-| Fairness metrics | **Buy** — fairlearn | Originally hand-rolled "for auditability". Reversed. If the pitch is that I govern off-the-shelf tools, hand-rolling the one metric a regulator cares most about undercuts it. Governing fairlearn is the stronger position. |
-| Orchestration | **Buy** — LangGraph | Originally a plain Python state machine, which was right for a single-pipeline demo and wrong for a platform. LangGraph's graph is static, so it stays inspectable, and `interrupt()` plus a checkpointer are exactly the human gate and its pause. |
-| The ML | **Buy** — scikit-learn | A logistic-regression baseline, on purpose. Reimplementing a classifier proves nothing relevant to the argument. |
-| The frontend | **Buy** — Streamlit, over Next.js | One runtime, and load-bearingly so: the gate parses Python, the sandbox runs Python, the allowlist is Python imports, and fairlearn, statsmodels, DoWhy, lifelines, SHAP and sqlglot are Python-only. "Node entirely" means reimplementing fairlearn in TypeScript, which is the exact thing the thesis says not to do. "Node plus FastAPI" is a prioritisation trap: nobody hires an AI product lead for frontend engineering. The honest cost is a single process, in-memory session state, and no real auth. |
+| Fairness metrics | **Buy**, fairlearn | Originally hand-rolled "for auditability". Reversed. If the pitch is that I govern off-the-shelf tools, hand-rolling the one metric a regulator cares most about undercuts it. Governing fairlearn is the stronger position. |
+| Orchestration | **Buy**, LangGraph | Originally a plain Python state machine, which was right for a single-pipeline demo and wrong for a platform. LangGraph's graph is static, so it stays inspectable, and `interrupt()` plus a checkpointer are exactly the human gate and its pause. |
+| The ML | **Buy**, scikit-learn | A logistic-regression baseline, on purpose. Reimplementing a classifier proves nothing relevant to the argument. |
+| The frontend | **Buy**, Streamlit, over Next.js | One runtime, and load-bearingly so: the gate parses Python, the sandbox runs Python, the allowlist is Python imports, and fairlearn, statsmodels, DoWhy, lifelines, SHAP and sqlglot are Python-only. "Node entirely" means reimplementing fairlearn in TypeScript, which is the exact thing the thesis says not to do. "Node plus FastAPI" is a prioritisation trap: nobody hires an AI product lead for frontend engineering. The honest cost is a single process, in-memory session state, and no real auth. |
 | The code gate | **Build** | Nothing off the shelf reads generated Python against a bank's policy and produces a per-check verdict a reviewer can read. It is 1,000 lines of stdlib `ast`. A gate tells you what was intended before it happens; a sandbox tells you what happened after. Both are needed, and this is the one that is demonstrable in a browser. |
-| The SQL half of the gate | **Buy** — sqlglot | The Python AST does not understand SQL. sqlglot parses it and rewrites row filters into it. It parses and never executes. |
-| The query engine | **Buy** — DuckDB | Replaced ad-hoc pandas so that generated SQL is a thing that can be gated and rewritten rather than string-matched. |
+| The SQL half of the gate | **Buy**, sqlglot | The Python AST does not understand SQL. sqlglot parses it and rewrites row filters into it. It parses and never executes. |
+| The query engine | **Buy**, DuckDB | Replaced ad-hoc pandas so that generated SQL is a thing that can be gated and rewritten rather than string-matched. |
 | Containment | **Build**, and stated as demo scope | A subprocess with resource limits. A serious sandbox needs gVisor or Firecracker. That is written down as a non-goal rather than glossed, because claiming a demo subprocess is production containment is the kind of thing a control surface should never do. |
-| Provenance and tracing | **Buy the standards** — OpenLineage, OpenTelemetry | Emitting a schema-valid lineage event and a real span is worth more than a bespoke table, because the receiving side already exists in a bank. Captured in-process here, with no backend attached. |
-| The document outputs | **Buy** — marimo, Quarto | Two audiences, two artifacts. A marimo notebook is plain `.py`, so a data scientist can review it in a pull request. The leadership view is a document that gets read once, forwarded, and filed, so Quarto serves it better than an app would. When the Quarto binary is absent, it writes the source and says so rather than faking a PDF. |
+| Provenance and tracing | **Buy the standards**, OpenLineage, OpenTelemetry | Emitting a schema-valid lineage event and a real span is worth more than a bespoke table, because the receiving side already exists in a bank. Captured in-process here, with no backend attached. |
+| The document outputs | **Buy**, marimo, Quarto | Two audiences, two artifacts. A marimo notebook is plain `.py`, so a data scientist can review it in a pull request. The leadership view is a document that gets read once, forwarded, and filed, so Quarto serves it better than an app would. When the Quarto binary is absent, it writes the source and says so rather than faking a PDF. |
 | Retrieval | **Both** | Locally a TF-IDF index, which is free, deterministic, and honestly labelled as lexical rather than dense. In production, RDS pgvector with Bedrock Titan embeddings behind the same interface, with a runtime fallback to the local one. |
-| Hosting | **Buy** — Elastic Beanstalk and CloudFront | Amplify Hosting only runs JavaScript front ends and cannot hold a persistent Python server. Render and Fly both work, and `render.yaml` is still in the repo as a one-click alternative. AWS won because the deploy story is the one a bank will ask about. |
+| Hosting | **Buy**, Elastic Beanstalk and CloudFront | Amplify Hosting only runs JavaScript front ends and cannot hold a persistent Python server. Render and Fly both work, and `render.yaml` is still in the repo as a one-click alternative. AWS won because the deploy story is the one a bank will ask about. |
 | Policy engine | **Not yet** | Policy is in-process. Externalising it to OPA needs a server and changes where the policy lives, not whether it exists. That is an architecture decision for a real deployment, not for a credibility artifact. It is on the dependency map, not claimed as built. |
 | PII detection | **Not yet** | Regex today. Presidio is the intended replacement and is labelled on screen as on the dependency map and not wired in this build. I would rather ship a small honest control than a big implied one. |
 

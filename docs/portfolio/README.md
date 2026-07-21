@@ -13,6 +13,7 @@ be edited and reviewed here rather than inside markup.
 
 | File | What it is |
 | --- | --- |
+| `CLAUDE.md` | Build instructions. Read it before creating or rebuilding the page: repo layout, the design system, the full-bleed maths, the video slot, the facts that are easy to get wrong, and the verification pass. |
 | `page-copy.md` | The full page copy: description, architecture, build vs buy, honest limits. The HTML is a rendering of this. |
 | `architecture-diagram.svg` | The system diagram. Inlined into the page (not linked) so it inherits the site's palette variables and re-themes with the palette switcher. |
 | `video-outline.md` | Shot list and script beats for the YouTube walkthrough that fills the reserved slot on the page. |
