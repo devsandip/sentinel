@@ -31,13 +31,19 @@ sentinel/docs/portfolio/
 
 sandip.dev/portfolio/Sentinel/
   index.html                 the page, diagram inlined at the figure
-  sentinel.css               ludllm.css plus a Sentinel block from line ~940
+  sentinel.css               ludllm.css plus a Sentinel block from line ~954
   sentinel.js                verbatim copy of ludllm.js
   assets/sentinel-architecture.svg   standalone copy for the "open full size" link
 ```
 
 If any of these are missing, rebuild them in that order. `page-copy.md` before
 `index.html`, always.
+
+Everything in `sentinel.css` above the Sentinel banner is a byte-identical copy
+of `ludllm.css`. Keep it that way. A shared-layer fix, the header nav one below
+for instance, goes into both files with the same text and in the same position,
+so `diff ludllm.css <(head -n $(wc -l < ludllm.css) sentinel.css)` stays empty.
+Sentinel-only rules go after the banner, never above it.
 
 ## Building the page from scratch
 
@@ -150,6 +156,22 @@ Use `var(--paper)` so it re-themes; never a hex literal. This only matters above
 and the collision cannot happen.
 
 Any future element that breaks the prose column needs the same two properties.
+
+### The header nav, which was never Sentinel's fault
+
+`.header-inner` was `auto 1fr`, the same `minmax(auto, 1fr)` trap as the article
+grid. The auto floor held the nav track open to its min-content, which for a
+flex row of five links is all five laid end to end. At 375px the nav wanted
+294px and the header could spare 202px, so every page on the site overflowed
+sideways by 73px, LudLLM and the homepage included. It predated Sentinel.
+
+Fixed site-wide: `auto minmax(0, 1fr)` in all four stylesheets, plus the logo
+dropping its wordmark and keeping its mark below 560px, and tighter link padding
+below 560 and 380. All five links stay visible down to 320px.
+
+This is why the verification below can now demand `scrollWidth` equal the
+viewport at 375px and actually get it. Before the header fix that check could
+not pass on any page, so do not treat a small residual overflow as normal.
 
 ## The video slot
 
