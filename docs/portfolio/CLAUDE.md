@@ -128,12 +128,37 @@ not "fix" this by removing the SVG's `min-width: 900px`. That min-width is what
 keeps the diagram legible and pannable on a phone. The floor is the bug, not the
 diagram.
 
+### The sticky rail versus anything full-bleed, the third one
+
+`.article-rail` is `position: sticky`, which makes it a positioned box, so it
+paints above in-flow content regardless of DOM order. Every element that breaks
+out of the 680px prose column runs underneath it: the bleed figure starts at the
+page edge and the three `.sn-wide` tables start at the rail's own left edge. The
+contents list floated on top of the diagram.
+
+The Sentinel block puts the breakout content back on top:
+
+```css
+.article-rail { z-index: 0; }
+figure.sn-figure, .prose .sn-wide { position: relative; z-index: 1; background: var(--paper); }
+```
+
+The opaque background is not decoration. Without it the rail's "Live:" and
+"Code:" lines read through the gaps between table rows and under the figcaption.
+Use `var(--paper)` so it re-themes; never a hex literal. This only matters above
+880px, where the rail is sticky. Below that the shared rule sets it to `static`
+and the collision cannot happen.
+
+Any future element that breaks the prose column needs the same two properties.
+
 ## The video slot
 
-The slot is reserved and empty on purpose until the walkthrough is recorded. The
-markup already holds a commented-out iframe next to the placeholder. To publish:
-delete the three placeholder `<span>` elements, uncomment the iframe, drop the
-YouTube id into the `src`. Nothing else on the page changes.
+Filled. The walkthrough is `c7pvcOekoXk`, "Sentinel - Governed Agentic Analysis",
+embedded through `youtube-nocookie.com`. The placeholder spans are gone and the
+slot carries `.sn-video.sn-video-live`, which swaps the dashed placeholder border
+for a solid one and drops the centring padding. The empty-state rules are still
+in the stylesheet, so removing the modifier class reverts the slot to a
+placeholder if the video ever needs pulling.
 
 Keep `youtube-nocookie.com`, `loading="lazy"`, and
 `referrerpolicy="strict-origin-when-cross-origin"`.

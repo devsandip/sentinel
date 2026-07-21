@@ -46,7 +46,10 @@ same pass.
 
 ## The video slot
 
-The page reserves a 16:9 slot immediately under the intro, marked up as
-`.sn-video` with a placeholder card. To fill it, replace the placeholder div
-with the commented-out `<iframe>` already sitting next to it in the markup and
-drop the YouTube video id into the `src`. Nothing else changes.
+Filled. The 16:9 slot under the intro holds the walkthrough,
+[c7pvcOekoXk](https://youtu.be/c7pvcOekoXk), "Sentinel - Governed Agentic
+Analysis", embedded through `youtube-nocookie.com` and lazy-loaded. The slot is
+marked up as `.sn-video.sn-video-live`; dropping the modifier class reverts it to
+the dashed placeholder card, whose styles are still in the stylesheet.
+
+`video-outline.md` is the outline the recording was made from.
