@@ -4,6 +4,8 @@ Description: >
   with an ACM cert for a custom domain and forwards to the single-instance EB
   environment over HTTP. WebSockets are supported (caching disabled, all viewer
   headers forwarded). A Route 53 alias points the custom domain at CloudFront.
+  Standard access logs land in an S3 bucket owned by this stack and expire after
+  90 days.
 
 Parameters:
   CertificateArn:
@@ -20,11 +22,55 @@ Parameters:
     Description: Route 53 hosted zone id for the parent domain.
 
 Resources:
+  # Standard access logs. Without this there is no per-request record anywhere:
+  # CloudWatch gives request counts and nothing else, the nginx log dies with
+  # the instance, and the app's own audit trail is wiped on every deploy. This
+  # is the only durable answer to "did anyone actually visit".
+  #
+  # Legacy standard logging writes with an ACL, so the bucket has to allow ACLs
+  # (BucketOwnerPreferred). CloudFront grants itself the delivery ACL when the
+  # Logging block below is applied; nothing else needs to be wired up.
+  LogsBucket:
+    Type: AWS::S3::Bucket
+    # Keep the logs if the stack is ever torn down. They are the record.
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Sub "sentinel-cf-logs-${AWS::AccountId}"
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerPreferred
+      PublicAccessBlockConfiguration:
+        BlockPublicPolicy: true
+        RestrictPublicBuckets: true
+        IgnorePublicAcls: true
+        # Stays false. BlockPublicAcls rejects the delivery ACL CloudFront sets
+        # on the bucket, and logging fails silently. The other three blocks are
+        # what keep the bucket private.
+        BlockPublicAcls: false
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      LifecycleConfiguration:
+        Rules:
+          - Id: expire-90d
+            Status: Enabled
+            ExpirationInDays: 90
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 7
+
   Distribution:
     Type: AWS::CloudFront::Distribution
     Properties:
       DistributionConfig:
         Enabled: true
+        Logging:
+          Bucket: !GetAtt LogsBucket.DomainName
+          Prefix: cloudfront/
+          # Streamlit sets no cookies worth logging, and leaving them out keeps
+          # the log free of session identifiers.
+          IncludeCookies: false
         Comment: !Sub "Sentinel HTTPS front for ${DomainName}"
         Aliases: [!Ref DomainName]
         HttpVersion: http2and3
@@ -115,3 +161,5 @@ Outputs:
     Value: !Sub "https://${DomainName}"
   CloudFrontDomain:
     Value: !GetAtt Distribution.DomainName
+  LogsBucketName:
+    Value: !Ref LogsBucket
