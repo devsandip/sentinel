@@ -107,6 +107,27 @@ unreadable. Do not "fix" mobile by letting the SVG scale to the viewport.
 Check `document.documentElement.scrollWidth` against the viewport width after any
 change to this figure. They must match.
 
+### The grid blowout at 880px, the other easy one to get wrong
+
+The shared rule collapses `.article` to `grid-template-columns: 1fr` under
+880px. `1fr` is `minmax(auto, 1fr)`, and the `auto` floor holds the track open
+to the widest child's min-content. LudLLM has nothing wide enough for that to
+surface. Sentinel does: the 900px diagram and the build versus buy tables. The
+track resolved to 680px inside a 335px container, so the whole prose column
+overflowed sideways instead of the diagram and tables scrolling inside their own
+boxes.
+
+The Sentinel block overrides it:
+
+```css
+@media (max-width: 880px) { .article { grid-template-columns: minmax(0, 1fr); } }
+```
+
+Override in the Sentinel block, do not edit the shared rule at line ~926, and do
+not "fix" this by removing the SVG's `min-width: 900px`. That min-width is what
+keeps the diagram legible and pannable on a phone. The floor is the bug, not the
+diagram.
+
 ## The video slot
 
 The slot is reserved and empty on purpose until the walkthrough is recorded. The
