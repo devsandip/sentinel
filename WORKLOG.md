@@ -906,3 +906,25 @@ Append-only session handoff log. Newest entries at the bottom.
 - The screen-coverage test checks the dispatch table, not filenames. Where a screen's code lives is a judgement (the Audit Log and its drill-down share one module because they share a tint map); whether it is routed is not.
 - Fixed the PDF path in `render_pdf` rather than at the call site, so `scripts/generate_model_card.py` cannot hit it either. The call site fix would have been smaller and would have left the CLI broken.
 - Kept absolute imports in the moved modules rather than converting to the package-relative style used elsewhere in `sentinel/ui/`. The move then changed no import line and could not silently repoint one, which mattered more than uniformity for a 2,500-line move.
+
+## 2026-07-21 (cont.) — the portfolio page verified, three layout traps recorded, the video published
+
+**Did:**
+- Ran the verification pass in `docs/portfolio/CLAUDE.md` against the live case study. The page was already built, committed and deployed, so this session was verification and repair rather than a rebuild.
+- Recorded three layout traps in the build doc, next to the full-bleed maths: the article grid blowout at the 880px collapse, the sticky rail painting over anything that breaks the prose column, and the header nav that had been overflowing every page on sandip.dev by 73px.
+- Marked the video slot filled. It holds `c7pvcOekoXk`, "Sentinel - Governed Agentic Analysis", confirmed public and embeddable through oEmbed. Updated `README.md` to match so neither file still calls the slot reserved.
+- Wrote down the invariant that `sentinel.css` above the banner is a byte-identical copy of `ludllm.css`, with the diff command that checks it, and corrected the banner line number from ~940 to ~954 after a shared-layer fix shifted it.
+
+**State now:**
+- `main` at `d996753`. Docs only this session, no application code touched, so prod is untouched and still carries `b810557`.
+- The case study is live and passes every check in its own build doc, including `scrollWidth` equal to the viewport at 375px, which no page on sandip.dev could satisfy before the header fix.
+- The fixes themselves live in the `sandip.dev` repo at `42fac4c`. This repo holds only the source copy and the build instructions.
+
+**Next:**
+- The walkthrough video, listed as the next thing in the previous entry, is recorded, published and linked. That item is closed.
+- The hiring-manager email from the previous entry is still open and now has a video to point at.
+- The test-fixture audit from the previous entry is still open. Nothing this session touched it.
+
+**Decisions:**
+- Put the three traps in `CLAUDE.md` rather than a feature doc. They are specifically the things a future rebuild gets wrong, which is what that file exists to prevent.
+- Kept the page copy in `page-copy.md` untouched. The session changed layout and the video slot, not the argument the page makes.
