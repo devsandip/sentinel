@@ -3,6 +3,7 @@
 <desc id="sn-diagram-desc">A request enters through a nine-stage governed pipeline (Ask, Plan, Access, Generate, Gate, Execute, Screen, Interpret, Attest). Generation runs through a model gateway; containment is a static code gate plus a subprocess sandbox. Every stage emits into a control plane and reads through a policy-scoped data plane. The run emits an evidence pack. The whole app runs on a single Elastic Beanstalk instance behind CloudFront.</desc>
 
 <style>
+  .sn-bg     { fill: var(--paper-2, #EFEFF1); }
   .sn-band   { fill: var(--paper-2, #EFEFF1); stroke: var(--rule, #E2E2E5); stroke-width: 1; }
   .sn-box    { fill: var(--paper, #F6F6F7); stroke: var(--rule, #E2E2E5); stroke-width: 1; }
   .sn-stage  { fill: var(--paper, #F6F6F7); stroke: var(--ink, #0A0A0B); stroke-width: 1.2; }
@@ -25,6 +26,8 @@
     <path d="M0 0 L8 4 L0 8 z" fill="var(--accent, #1F4DDA)"/>
   </marker>
 </defs>
+
+<rect class="sn-bg" x="0" y="0" width="1200" height="872"/>
 
 <!-- ══ 1 · REQUEST ══ -->
 <text class="sn-lbl" x="40" y="26">1 · request plane</text>
