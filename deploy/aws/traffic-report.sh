@@ -50,7 +50,10 @@ gunzip -c "${files[@]}" | grep -v '^#' > "$WORK/all.tsv"
 
 # Field map for the standard log format:
 #   1 date  2 time  3 edge-location  5 c-ip  8 uri-stem  10 referer  11 user-agent
-BOTS='bot|crawl|spider|zgrab|scan|curl|wget|python-requests|HeadlessChrome'
+# Matched against tolower() of the field, so these stay lowercase. Nearly every
+# real crawler capitalises its name (Googlebot, ClaudeBot, SemrushBot), so a
+# case-sensitive match here counts crawlers as browsers.
+BOTS='bot|crawl|spider|zgrab|scan|curl|wget|python-requests|headlesschrome'
 JUNK='/wp-|/cgi-bin|/geoserver|/actuator|/webui|/portal/|/license.txt|/\.env|/phpmyadmin|/admin'
 
 echo ""
@@ -72,17 +75,17 @@ awk -F'\t' '$8 == "/_stcore/stream" {print $5"\t"$1" "$2"\t"substr($3,1,3)}' "$W
 
 echo ""
 echo "=== where they came from (referrers, excluding self) ==="
-awk -F'\t' -v b="$BOTS" '$10 != "-" && $10 !~ /sentinel\.sandip\.dev/ && $11 !~ b {print $10}' "$WORK/all.tsv" \
+awk -F'\t' -v b="$BOTS" '$10 != "-" && $10 !~ /sentinel\.sandip\.dev/ && tolower($11) !~ b {print $10}' "$WORK/all.tsv" \
   | sed 's/%3A/:/g; s/%2F/\//g' | sort | uniq -c | sort -rn | head -15 | sed 's/^/  /'
 
 echo ""
 echo "=== browsers on the front page (bots and scanners stripped) ==="
-awk -F'\t' -v b="$BOTS" -v j="$JUNK" '$8 == "/" && $11 !~ b && $8 !~ j {print $11}' "$WORK/all.tsv" \
+awk -F'\t' -v b="$BOTS" '$8 == "/" && tolower($11) !~ b {print $11}' "$WORK/all.tsv" \
   | sed 's/%20/ /g; s/%2C/,/g; s/%28/(/g; s/%29/)/g; s/%3B/;/g' \
   | sed 's/^\(Mozilla\/5.0 ([^)]*)\).*/\1/' | sort | uniq -c | sort -rn | head -10 | sed 's/^/  /'
 
 echo ""
 echo "=== noise, for scale (requests that were never a visitor) ==="
 printf "  %s scanner/bot requests of %s total\n" \
-  "$(awk -F'\t' -v b="$BOTS" -v j="$JUNK" '$11 ~ b || $8 ~ j' "$WORK/all.tsv" | wc -l | tr -d ' ')" \
+  "$(awk -F'\t' -v b="$BOTS" -v j="$JUNK" 'tolower($11) ~ b || tolower($8) ~ j' "$WORK/all.tsv" | wc -l | tr -d ' ')" \
   "$(wc -l < "$WORK/all.tsv" | tr -d ' ')"
